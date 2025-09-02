@@ -7,8 +7,7 @@ import streamlit as st
 
 st.title("Hello, BharatGPT!") 
 
-st.write("This is your first Streamlit app 
-using BharatGPT Mini.")
+st.write("This is your first Streamlit app using BharatGPT Mini.")
 
 
 
