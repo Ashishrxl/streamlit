@@ -1,37 +1,52 @@
-import streamlit as st 
+import streamlit as st
+import requests
+import uuid
+from rjsmin import jsmin  # pip install rjsmin
 
-
-
-
-
-
-st.title("Hello, BharatGPT!") 
-
+st.title("Hello, BharatGPT!")
 st.write("This is your first Streamlit app using BharatGPT Mini.")
 
+# User input
+user_prompt = st.text_input(
+    "Enter your prompt:", 
+    "Explain generative AI in one sentence."
+)
 
+temperature = st.slider(
+    "Model temperature:",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.7,
+    step=0.01,
+    help="Controls randomness: 0 = deterministic, 1 = very creative"
+)
 
-user_prompt = st.text_input("Enter your prompt:", "Explain generative AI in one sentence.")
+with st.spinner("AI is working..."):
+    st.write("Hello")
 
+# Server-side secret
+app_id = st.secrets["corover"]["app_id"]
 
+# Generate a temporary token for this session
+session_token = str(uuid.uuid4())  # Unique token per user session
 
-temperature = st.slider( "Model temperature:", min_value=0.0, max_value=1.0, value=0.7, step=0.01, help="Controls randomness: 0 = deterministic, 1 = very creative" )
+# Fetch widget JS server-side
+def get_corover_widget(token):
+    url = f"https://builder.corover.ai/params/widget/corovercb.lib.min.js?appId={app_id}&token={token}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.text
+    else:
+        return f"// Failed to load widget: {response.status_code}"
 
-with st.spinner("AI is working..."):  st.write('Hello')
+widget_js = get_corover_widget(session_token)
 
+# Minify / obfuscate JS
+widget_js_min = jsmin(widget_js)
 
-
-tool_script = """
-
-<script type="text/javascript">
-    var s = document.createElement("script");
-    s.src = "https://builder.corover.ai/params/widget/corovercb.lib.min.js?appId=d977ea27-874f-411c-a08e-cc352dcdf0f2";
-    s.type = "text/javascript";
-    document.getElementsByTagName("body")[0].appendChild(s);
-</script>"""
-
-
-
-st.components.v1.html(tool_script, height=800, scrolling=True)
-
-
+# Serve the widget in the app
+st.components.v1.html(
+    f"<script>{widget_js_min}</script>",
+    height=800,
+    scrolling=True
+)
