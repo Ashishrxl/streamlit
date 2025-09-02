@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 import uuid
-from rjsmin import jsmin  # pip install rjsmin
+!pip install rjsmin
+from rjsmin import jsmin  
 
 st.title("Hello, BharatGPT!")
 st.write("This is your first Streamlit app using BharatGPT Mini.")
