@@ -53,6 +53,18 @@ hide_github_footer = """
     }
     </style>
 """
+
+
+
+# Hide the "Created with/Hosted by Streamlit" footer
+hide_streamlit_footer = """
+    <style>
+    div[data-testid="stFooter"] {
+        display: none;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_footer, unsafe_allow_html=True)
 st.markdown(hide_github_footer, unsafe_allow_html=True)
 st.markdown(hide_footer, unsafe_allow_html=True)
 st.markdown(hide_footer_style, unsafe_allow_html=True)
