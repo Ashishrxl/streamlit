@@ -42,6 +42,18 @@ hide_footer = """
     }
     </style>
 """
+
+
+
+# Hide ONLY the GitHub repo link in footer
+hide_github_footer = """
+    <style>
+    footer a {
+        display: none !important;
+    }
+    </style>
+"""
+st.markdown(hide_github_footer, unsafe_allow_html=True)
 st.markdown(hide_footer, unsafe_allow_html=True)
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
