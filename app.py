@@ -30,6 +30,19 @@ hide_footer_style = """
     }
     </style>
 """
+
+
+
+# Completely hide the Streamlit footer ("Made with Streamlit")
+hide_footer = """
+    <style>
+    /* Target the main footer container */
+    div[data-testid="stFooter"] {
+        display: none;
+    }
+    </style>
+"""
+st.markdown(hide_footer, unsafe_allow_html=True)
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
