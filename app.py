@@ -1,6 +1,8 @@
 import packages
 
-from dotenv import load_dotenv import streamlit as st import bharatgpt   # <-- Replaced OpenAI with BharatGPT package
+from dotenv import load_dotenv 
+import streamlit as st 
+import bharatgpt   # <-- Replaced OpenAI with BharatGPT package
 
 load environment variables from .env file
 
