@@ -3,6 +3,14 @@ import requests
 import uuid
 
 from rjsmin import jsmin  
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}      /* Hides the hamburger menu */
+    header {visibility: hidden;}         /* Hides GitHub/Share buttons */
+    footer {visibility: hidden;}         /* Hides "Made with Streamlit" footer */
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("Hello, BharatGPT!")
 st.write("This is your first Streamlit app using BharatGPT Mini.")
@@ -53,11 +61,3 @@ st.components.v1.html(
 )
 
 
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}      /* Hides the hamburger menu */
-    header {visibility: hidden;}         /* Hides GitHub/Share buttons */
-    footer {visibility: hidden;}         /* Hides "Made with Streamlit" footer */
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
