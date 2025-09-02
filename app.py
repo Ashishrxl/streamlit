@@ -51,3 +51,13 @@ st.components.v1.html(
     height=800,
     scrolling=True
 )
+
+
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}      /* Hides the hamburger menu */
+    header {visibility: hidden;}         /* Hides GitHub/Share buttons */
+    footer {visibility: hidden;}         /* Hides "Made with Streamlit" footer */
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
