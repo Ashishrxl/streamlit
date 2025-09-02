@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import uuid
-!pip install rjsmin
+
 from rjsmin import jsmin  
 
 st.title("Hello, BharatGPT!")
