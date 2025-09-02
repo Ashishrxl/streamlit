@@ -10,6 +10,27 @@ hide_streamlit_style = """
     footer {visibility: hidden;}         /* Hides "Made with Streamlit" footer */
     </style>
 """
+
+
+
+# CSS to hide the "Made with Streamlit" footer
+hide_footer_style = """
+    <style>
+    footer, footer:before {
+        visibility: hidden;
+    }
+    div[data-testid="stDecoration"] {
+        display: none;
+    }
+    div[data-testid="stStatusWidget"] {
+        display: none;
+    }
+    div[data-testid="stToolbar"] {
+        display: none;
+    }
+    </style>
+"""
+st.markdown(hide_footer_style, unsafe_allow_html=True)
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("Hello, BharatGPT!")
