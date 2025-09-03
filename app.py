@@ -15,12 +15,15 @@ hide_streamlit_style = """
 
 
 
+
+
 disable_footer_link = """
     <style>
-    footer a {
-        pointer-events: none;  /* Disable click */
-        cursor: default;       /* Change cursor to normal */
-        color: inherit !important;  /* Use normal text color */
+    /* Target the GitHub link in the footer specifically */
+    footer a[href*="github.com"] {
+        pointer-events: none !important;  /* Disable clicking */
+        cursor: default !important;       /* Normal cursor */
+        color: inherit !important;        /* Use normal text color */
         text-decoration: none !important; /* Remove underline */
     }
     </style>
