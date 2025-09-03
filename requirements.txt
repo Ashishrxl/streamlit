@@ -1,3 +1,6 @@
 streamlit
 rjsmin
 requests
+pandas
+matplotlib
+seaborn
