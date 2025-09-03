@@ -13,13 +13,15 @@ hide_streamlit_style = """
 
 
 
-# Disable clicks on GitHub link in footer
+
+
 disable_footer_link = """
     <style>
     footer a {
-        pointer-events: none;
-        color: gray !important; /* Optional: make it look disabled */
-        text-decoration: none;  /* Remove underline */
+        pointer-events: none;  /* Disable click */
+        cursor: default;       /* Change cursor to normal */
+        color: inherit !important;  /* Use normal text color */
+        text-decoration: none !important; /* Remove underline */
     }
     </style>
 """
