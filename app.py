@@ -13,6 +13,18 @@ hide_streamlit_style = """
 
 
 
+# Disable clicks on GitHub link in footer
+disable_footer_link = """
+    <style>
+    footer a {
+        pointer-events: none;
+        color: gray !important; /* Optional: make it look disabled */
+        text-decoration: none;  /* Remove underline */
+    }
+    </style>
+"""
+st.markdown(disable_footer_link, unsafe_allow_html=True)
+
 # CSS to hide the "Made with Streamlit" footer
 hide_footer_style = """
     <style>
