@@ -12,9 +12,14 @@ st.title("📊 CSV Data Visualizer with Forecasting")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is not None:
-    # Read CSV
-    df = pd.read_csv(uploaded_file)
-    st.success("✅ File uploaded successfully!")
+    # Read CSV without header
+    df = pd.read_csv(uploaded_file, header=None)
+    
+    # Rename columns
+    df.columns = ["id", "name", "indexid", "billindex", "item", "qty", "rate", 
+                  "less", "bill", "partyid", "date", "amount"]
+    
+    st.success("✅ File uploaded and columns renamed successfully!")
     
     # Data preview
     st.subheader("🔍 Data Preview")
@@ -30,7 +35,7 @@ if uploaded_file is not None:
     # Column selection
     st.subheader("📌 Column Selection")
     all_columns = df.columns.tolist()
-    selected_columns = st.multiselect("Select columns to include", all_columns, default=all_columns[:2])
+    selected_columns = st.multiselect("Select columns to include in visualization", all_columns, default=all_columns[:5])
 
     if selected_columns:
         st.write("Filtered Data:")
@@ -77,57 +82,52 @@ if uploaded_file is not None:
 
         # --- Forecasting Section ---
         st.subheader("🔮 Forecasting (Next 2 Months, Monthly Sum)")
-        date_cols = df.select_dtypes(include=["datetime64[ns]"]).columns.tolist()
 
-        # Try parsing object columns as dates
-        for col in df.select_dtypes(include=["object"]).columns:
-            try:
-                df[col] = pd.to_datetime(df[col])
-                date_cols.append(col)
-            except Exception:
-                continue
-        date_cols = list(set(date_cols))  # unique
+        # Ensure 'date' is datetime
+        try:
+            df['date'] = pd.to_datetime(df['date'])
+        except Exception as e:
+            st.error(f"❌ Cannot convert 'date' column to datetime: {e}")
 
-        if date_cols and numerical_cols:
-            time_col = st.selectbox("Select Date/Time column", date_cols)
-            target_col = st.selectbox("Select target column for forecasting", numerical_cols)
-
-            # Prepare data for Prophet (monthly aggregation with sum)
-            forecast_df = df[[time_col, target_col]].dropna()
-            forecast_df = forecast_df.rename(columns={time_col: "ds", target_col: "y"})
-            forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum().reset_index()
+        # Prepare data for Prophet (monthly aggregation with sum)
+        if 'date' in df.columns and 'amount' in df.columns:
+            forecast_df = df[['date', 'amount']].dropna()
+            forecast_df = forecast_df.rename(columns={'date': 'ds', 'amount': 'y'})
+            forecast_df = forecast_df.groupby(pd.Grouper(key='ds', freq='M')).sum().reset_index()
 
             if not forecast_df.empty:
                 model = Prophet()
                 model.fit(forecast_df)
 
                 # Forecast next 2 months
-                future = model.make_future_dataframe(periods=2, freq="M")
+                future = model.make_future_dataframe(periods=2, freq='M')
                 forecast = model.predict(future)
 
                 # Plot forecast
+                st.write("### Forecast Plot")
                 fig1 = model.plot(forecast)
                 st.pyplot(fig1)
 
+                st.write("### Forecast Components")
                 fig2 = model.plot_components(forecast)
                 st.pyplot(fig2)
 
                 # Show forecast table (last actual + 2 predicted months)
                 st.subheader("📅 Forecast Table")
-                forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(3)
+                forecast_table = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(3)
                 forecast_table = forecast_table.rename(columns={
-                    "ds": "Date",
-                    "yhat": "Predicted",
-                    "yhat_lower": "Lower Bound",
-                    "yhat_upper": "Upper Bound"
+                    'ds': 'Date',
+                    'yhat': 'Predicted',
+                    'yhat_lower': 'Lower Bound',
+                    'yhat_upper': 'Upper Bound'
                 })
                 st.dataframe(forecast_table)
             else:
                 st.warning("⚠️ Not enough data for forecasting.")
         else:
-            st.info("ℹ️ No valid date column detected for forecasting.")
+            st.info("ℹ️ 'date' or 'amount' column missing for forecasting.")
     else:
-        st.warning("⚠️ Please select at least one column.")
+        st.warning("⚠️ Please select at least one column for visualization.")
 
 else:
     st.info("📂 Please upload a CSV file to continue.")
