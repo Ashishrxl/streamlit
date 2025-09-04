@@ -97,8 +97,10 @@ if uploaded_file is not None:
                 st.write("### Forecast Plot")
                 fig_forecast = px.line(forecast, x='ds', y='yhat', title='Forecast of Amount',
                                        labels={'ds':'Date', 'yhat':'Predicted Amount'})
-                fig_forecast.add_scatter(x=forecast['ds'], y=forecast['yhat_upper'], mode='lines', name='Upper Bound', line=dict(dash='dot'))
-                fig_forecast.add_scatter(x=forecast['ds'], y=forecast['yhat_lower'], mode='lines', name='Lower Bound', line=dict(dash='dot'))
+                fig_forecast.add_scatter(x=forecast['ds'], y=forecast['yhat_upper'],
+                                         mode='lines', name='Upper Bound', line=dict(dash='dot'))
+                fig_forecast.add_scatter(x=forecast['ds'], y=forecast['yhat_lower'],
+                                         mode='lines', name='Lower Bound', line=dict(dash='dot'))
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
                 # Show forecast table (last actual + 2 predicted months)
@@ -116,3 +118,13 @@ if uploaded_file is not None:
 
 else:
     st.info("📂 Please upload a CSV file to continue.")
+
+# --- Hide Streamlit's default menu, footer, and header ---
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}     /* Hide hamburger menu */
+    footer {visibility: hidden;}        /* Hide footer */
+    header {visibility: hidden;}        /* Hide Streamlit header */
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
