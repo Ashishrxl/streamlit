@@ -12,21 +12,23 @@ uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["c
 
 if uploaded_file is not None:
     # Read CSV without header and rename columns
-    df = pd.read_csv(uploaded_file, header=None)
-    df.columns = [
+    uploaded_df = pd.read_csv(uploaded_file, header=None)
+    uploaded_df.columns = [
         "id", "name", "indexid", "billindex", "item", "qty", "rate",
         "less", "bill", "partyid", "date", "amount"
     ]
     st.success("✅ File uploaded and columns renamed successfully!")
 
-    # Data preview
-    st.subheader("🔍 Data Preview (First 20 Rows)")
-    st.dataframe(df.head(20))
+    # Show uploaded table
+    st.subheader("🔍 Uploaded Table Preview (First 20 Rows)")
+    st.dataframe(uploaded_df.head(20))
+    with st.expander("📖 Show full uploaded table"):
+        st.dataframe(uploaded_df)
 
     # --- Split into 3 original tables ---
-    party_df = df[["id", "name"]].drop_duplicates().reset_index(drop=True)
-    bill_df = df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
-    billdetails_df = df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
+    party_df = uploaded_df[["id", "name"]].drop_duplicates().reset_index(drop=True)
+    bill_df = uploaded_df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
+    billdetails_df = uploaded_df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
 
     # --- Additional joined tables ---
     party_bill_df = pd.merge(
@@ -44,9 +46,10 @@ if uploaded_file is not None:
     )
 
     # --- Show all tables with first 20 rows and expanders ---
-    st.subheader("🗂️ Tables")
+    st.subheader("🗂️ Tables Preview")
 
     tables_dict = {
+        "Uploaded Table": uploaded_df,
         "Party": party_df,
         "Bill": bill_df,
         "BillDetails": billdetails_df,
