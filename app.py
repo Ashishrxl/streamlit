@@ -1,10 +1,12 @@
-import streamlit as st import pandas as pd import plotly.express as px from prophet import Prophet
+import streamlit as st 
+import pandas as pd 
+import plotly.express as px from prophet import Prophet
 
-Streamlit page config
+
 
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide") st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 
-File uploader
+
 
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
