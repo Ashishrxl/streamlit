@@ -12,7 +12,7 @@ uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["c
 
 if uploaded_file is not None:
     # Read CSV without header and rename columns
-    uploaded_df = pd.read_csv(uploaded_file, header=True)
+    uploaded_df = pd.read_csv(uploaded_file)
     # uploaded_df.columns = ["id","name","indexid","billindex","item","qty","rate","less","bill","partyid","date","amount"]
     st.success("✅ File uploaded and columns renamed successfully!")
 
