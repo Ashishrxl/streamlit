@@ -175,10 +175,3 @@ hide_streamlit_style = """
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-
-✅ I cleaned up your script: imports are now on separate lines and formatting is fixed throughout.
-This should fully remove the SyntaxError issues.
-
-Do you also want me to add download buttons so users can export each of the split tables (party_df, billdetails_df, bill_df) as CSV?
-
