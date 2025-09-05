@@ -20,8 +20,8 @@ if uploaded_file is not None:
     st.success("✅ File uploaded and columns renamed successfully!")
 
     # Data preview
-    st.subheader("🔍 Data Preview")
-    st.dataframe(df.head())
+    st.subheader("🔍 Data Preview (First 20 Rows)")
+    st.dataframe(df.head(20))
 
     # --- Split into 3 tables ---
     st.subheader("🗂️ Split Tables")
@@ -30,14 +30,20 @@ if uploaded_file is not None:
     bill_df = df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
     billdetails_df = df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
 
-    st.write("### Party Table")
-    st.dataframe(party_df)
+    st.write("### Party Table (First 20 Rows)")
+    st.dataframe(party_df.head(20))
+    with st.expander("📖 Show full Party Table"):
+        st.dataframe(party_df)
 
-    st.write("### Bill Table")
-    st.dataframe(bill_df)
+    st.write("### Bill Table (First 20 Rows)")
+    st.dataframe(bill_df.head(20))
+    with st.expander("📖 Show full Bill Table"):
+        st.dataframe(bill_df)
 
-    st.write("### BillDetails Table")
-    st.dataframe(billdetails_df)
+    st.write("### BillDetails Table (First 20 Rows)")
+    st.dataframe(billdetails_df.head(20))
+    with st.expander("📖 Show full BillDetails Table"):
+        st.dataframe(billdetails_df)
 
     # Detect categorical vs numerical
     categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
@@ -55,8 +61,10 @@ if uploaded_file is not None:
     )
 
     if selected_columns:
-        st.write("Filtered Data:")
-        st.dataframe(df[selected_columns].head())
+        st.write("Filtered Data (First 20 Rows):")
+        st.dataframe(df[selected_columns].head(20))
+        with st.expander("📖 Show full filtered data"):
+            st.dataframe(df[selected_columns])
 
         # Visualization options
         st.subheader("📈 Interactive Visualization")
