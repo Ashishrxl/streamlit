@@ -1,14 +1,14 @@
 import streamlit as st import pandas as pd import plotly.express as px from prophet import Prophet
 
-
+Streamlit page config
 
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide") st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 
-
+File uploader
 
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-df = pd.read_csv(uploaded_file, header=None) df.columns = ["id", "name", "indexid", "billindex", "item", "qty", "rate", "less", "bill", "partyid", "date", "amount"] st.success("✅ File uploaded and columns renamed successfully!")
+if uploaded_file is not None: # Read CSV without header and rename columns df = pd.read_csv(uploaded_file, header=None) df.columns = ["id", "name", "indexid", "billindex", "item", "qty", "rate", "less", "bill", "partyid", "date", "amount"] st.success("✅ File uploaded and columns renamed successfully!")
 
 # Data preview
 st.subheader("🔍 Data Preview")
@@ -21,13 +21,13 @@ billdetails_df = df[["billindex", "partyid"]].drop_duplicates()
 bill_df = df[["bill", "amount"]].drop_duplicates()
 
 st.write("### Party Table")
-st.dataframe(party_df)
+st.dataframe(party_df.head())
 
 st.write("### Billdetails Table")
-st.dataframe(billdetails_df)
+st.dataframe(billdetails_df.head())
 
 st.write("### Bill Table")
-st.dataframe(bill_df)
+st.dataframe(bill_df.head())
 
 # Detect categorical vs numerical
 categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
@@ -126,7 +126,7 @@ else:
 
 else: st.info("📂 Please upload a CSV file to continue.")
 
-
+--- Hide Streamlit's default menu, footer, and header ---
 
 hide_streamlit_style = """ <style> #MainMenu {visibility: hidden;}     /* Hide hamburger menu / footer {visibility: hidden;}        / Hide footer / header {visibility: hidden;}        / Hide Streamlit header */ </style> """ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
