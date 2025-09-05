@@ -126,7 +126,7 @@ else:
 
 else: st.info("📂 Please upload a CSV file to continue.")
 
---- Hide Streamlit's default menu, footer, and header ---
+
 
 hide_streamlit_style = """ <style> #MainMenu {visibility: hidden;}     /* Hide hamburger menu / footer {visibility: hidden;}        / Hide footer / header {visibility: hidden;}        / Hide Streamlit header */ </style> """ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
