@@ -24,63 +24,59 @@ if uploaded_file is not None:
     st.dataframe(df.head(20))
 
     # --- Split into 3 original tables ---
-    st.subheader("🗂️ Split Tables")
-
     party_df = df[["id", "name"]].drop_duplicates().reset_index(drop=True)
     bill_df = df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
     billdetails_df = df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
 
-    st.write("### Party Table (First 20 Rows)")
-    st.dataframe(party_df.head(20))
-    with st.expander("📖 Show full Party Table"):
-        st.dataframe(party_df)
-
-    st.write("### Bill Table (First 20 Rows)")
-    st.dataframe(bill_df.head(20))
-    with st.expander("📖 Show full Bill Table"):
-        st.dataframe(bill_df)
-
-    st.write("### BillDetails Table (First 20 Rows)")
-    st.dataframe(billdetails_df.head(20))
-    with st.expander("📖 Show full BillDetails Table"):
-        st.dataframe(billdetails_df)
-
     # --- Additional joined tables ---
-    st.subheader("🧩 Joined Tables")
-
-    # Join Party + Bill
     party_bill_df = pd.merge(
         party_df, bill_df,
         left_on="id", right_on="partyid",
         how="inner",
         suffixes=("_party", "_bill")
     )
-    st.write("### Party + Bill Table (First 20 Rows)")
-    st.dataframe(party_bill_df.head(20))
-    with st.expander("📖 Show full Party + Bill Table"):
-        st.dataframe(party_bill_df)
 
-    # Join Bill + BillDetails
     bill_billdetails_df = pd.merge(
         bill_df, billdetails_df,
         left_on="bill", right_on="billindex",
         how="inner",
         suffixes=("_bill", "_details")
     )
-    st.write("### Bill + BillDetails Table (First 20 Rows)")
-    st.dataframe(bill_billdetails_df.head(20))
-    with st.expander("📖 Show full Bill + BillDetails Table"):
-        st.dataframe(bill_billdetails_df)
 
-    # Detect categorical vs numerical
-    categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-    numerical_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    # --- Show all tables with first 20 rows and expanders ---
+    st.subheader("🗂️ Tables")
+
+    tables_dict = {
+        "Party": party_df,
+        "Bill": bill_df,
+        "BillDetails": billdetails_df,
+        "Party + Bill": party_bill_df,
+        "Bill + BillDetails": bill_billdetails_df
+    }
+
+    for table_name, table_df in tables_dict.items():
+        st.write(f"### {table_name} Table (First 20 Rows)")
+        st.dataframe(table_df.head(20))
+        with st.expander(f"📖 Show full {table_name} Table"):
+            st.dataframe(table_df)
+
+    # --- Table selection for visualization ---
+    st.subheader("📌 Select Table for Visualization")
+    selected_table_name = st.selectbox("Select one table", list(tables_dict.keys()))
+    selected_df = tables_dict[selected_table_name]
+
+    st.write(f"Selected Table: **{selected_table_name}** (First 20 Rows)")
+    st.dataframe(selected_df.head(20))
+
+    # Detect categorical vs numerical for selected table
+    categorical_cols = selected_df.select_dtypes(include=["object", "category"]).columns.tolist()
+    numerical_cols = selected_df.select_dtypes(include=["int64", "float64"]).columns.tolist()
     st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
     st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
-    # Column selection for visualization
+    # Column selection for visualization based on selected table
     st.subheader("📌 Column Selection for Visualization")
-    all_columns = df.columns.tolist()
+    all_columns = selected_df.columns.tolist()
     selected_columns = st.multiselect(
         "Select columns to include in visualization",
         all_columns,
@@ -89,9 +85,9 @@ if uploaded_file is not None:
 
     if selected_columns:
         st.write("Filtered Data (First 20 Rows):")
-        st.dataframe(df[selected_columns].head(20))
+        st.dataframe(selected_df[selected_columns].head(20))
         with st.expander("📖 Show full filtered data"):
-            st.dataframe(df[selected_columns])
+            st.dataframe(selected_df[selected_columns])
 
         # Visualization options
         st.subheader("📈 Interactive Visualization")
@@ -104,7 +100,7 @@ if uploaded_file is not None:
             x_axis = st.selectbox("Select X-axis", numerical_cols)
             y_axis = st.selectbox("Select Y-axis", numerical_cols)
             fig = px.scatter(
-                df, x=x_axis, y=y_axis,
+                selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -113,7 +109,7 @@ if uploaded_file is not None:
             x_axis = st.selectbox("Select X-axis", all_columns)
             y_axis = st.selectbox("Select Y-axis", numerical_cols)
             fig = px.line(
-                df, x=x_axis, y=y_axis,
+                selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -122,35 +118,31 @@ if uploaded_file is not None:
             x_axis = st.selectbox("Select X-axis (categorical)", categorical_cols)
             y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols)
             fig = px.bar(
-                df, x=x_axis, y=y_axis,
+                selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Histogram" and numerical_cols:
             hist_col = st.selectbox("Select column for histogram", numerical_cols)
-            fig = px.histogram(df, x=hist_col, nbins=30)
+            fig = px.histogram(selected_df, x=hist_col, nbins=30)
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Correlation Heatmap" and len(numerical_cols) > 1:
-            corr = df[numerical_cols].corr()
+            corr = selected_df[numerical_cols].corr()
             fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("⚠️ Not enough suitable columns for this chart.")
 
-        # --- Forecasting Section ---
-        st.subheader("🔮 Forecasting (Next 2 Months, Monthly Sum)")
+        # --- Forecasting Section (only if 'date' and 'amount' exist in selected table) ---
+        if 'date' in selected_df.columns and 'amount' in selected_df.columns:
+            try:
+                selected_df['date'] = pd.to_datetime(selected_df['date'])
+            except Exception as e:
+                st.error(f"❌ Cannot convert 'date' column to datetime: {e}")
 
-        # Ensure 'date' is datetime
-        try:
-            df['date'] = pd.to_datetime(df['date'])
-        except Exception as e:
-            st.error(f"❌ Cannot convert 'date' column to datetime: {e}")
-
-        # Prepare data for Prophet (monthly aggregation with sum)
-        if 'date' in df.columns and 'amount' in df.columns:
-            forecast_df = df[['date', 'amount']].dropna()
+            forecast_df = selected_df[['date', 'amount']].dropna()
             forecast_df = forecast_df.rename(columns={'date': 'ds', 'amount': 'y'})
             forecast_df = forecast_df.groupby(pd.Grouper(key='ds', freq='M')).sum().reset_index()
 
@@ -191,7 +183,6 @@ if uploaded_file is not None:
                     }
                 )
                 st.dataframe(forecast_table)
-
             else:
                 st.warning("⚠️ Not enough data for forecasting.")
         else:
