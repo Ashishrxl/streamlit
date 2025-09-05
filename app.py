@@ -49,14 +49,24 @@ if uploaded_file is not None:
     st.subheader("🧩 Joined Tables")
 
     # Join Party + Bill
-    party_bill_df = pd.merge(bill_df, party_df, left_on="partyid", right_on="id", how="inner")
+    party_bill_df = pd.merge(
+        party_df, bill_df,
+        left_on="id", right_on="partyid",
+        how="inner",
+        suffixes=("_party", "_bill")
+    )
     st.write("### Party + Bill Table (First 20 Rows)")
     st.dataframe(party_bill_df.head(20))
     with st.expander("📖 Show full Party + Bill Table"):
         st.dataframe(party_bill_df)
 
     # Join Bill + BillDetails
-    bill_billdetails_df = pd.merge(billdetails_df, bill_df, left_on="billindex", right_on="bill", how="inner")
+    bill_billdetails_df = pd.merge(
+        bill_df, billdetails_df,
+        left_on="bill", right_on="billindex",
+        how="inner",
+        suffixes=("_bill", "_details")
+    )
     st.write("### Bill + BillDetails Table (First 20 Rows)")
     st.dataframe(bill_billdetails_df.head(20))
     with st.expander("📖 Show full Bill + BillDetails Table"):
@@ -195,9 +205,9 @@ else:
 # --- Hide Streamlit's default menu, footer, and header ---
 hide_streamlit_style = """
     <style>
-    #MainMenu {visibility: hidden;}     /* Hide hamburger menu */
-    footer {visibility: hidden;}        /* Hide footer */
-    header {visibility: hidden;}        /* Hide Streamlit header */
+    #MainMenu {visibility: hidden;}     
+    footer {visibility: hidden;}        
+    header {visibility: hidden;}        
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
