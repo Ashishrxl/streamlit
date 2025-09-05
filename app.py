@@ -1,6 +1,8 @@
 import streamlit as st 
 import pandas as pd 
-import plotly.express as px from prophet import Prophet
+import Prophet
+
+import plotly.express as px from prophet
 
 
 
