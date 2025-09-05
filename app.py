@@ -8,7 +8,7 @@ st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
 st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 
 # File uploader
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 
 if uploaded_file is not None:
     # Read CSV without header and rename columns
@@ -23,20 +23,21 @@ if uploaded_file is not None:
     st.subheader("🔍 Data Preview")
     st.dataframe(df.head())
 
-    # --- Show 3 separate tables ---
+    # --- Split into 3 tables ---
     st.subheader("🗂️ Split Tables")
-    party_df = df[["id", "name"]].drop_duplicates()
-    billdetails_df = df[["billindex", "partyid"]].drop_duplicates()
-    bill_df = df[["bill", "amount"]].drop_duplicates()
+
+    party_df = df[["id", "name"]].drop_duplicates().reset_index(drop=True)
+    bill_df = df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
+    billdetails_df = df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
 
     st.write("### Party Table")
-    st.dataframe(party_df.head())
-
-    st.write("### Billdetails Table")
-    st.dataframe(billdetails_df.head())
+    st.dataframe(party_df)
 
     st.write("### Bill Table")
-    st.dataframe(bill_df.head())
+    st.dataframe(bill_df)
+
+    st.write("### BillDetails Table")
+    st.dataframe(billdetails_df)
 
     # Detect categorical vs numerical
     categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
