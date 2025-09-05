@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd 
 import Prophet
 
-import plotly.express as px from prophet
+import plotly.express as px from Prophet
 
 
 
