@@ -23,7 +23,7 @@ if uploaded_file is not None:
     st.subheader("🔍 Data Preview (First 20 Rows)")
     st.dataframe(df.head(20))
 
-    # --- Split into 3 tables ---
+    # --- Split into 3 original tables ---
     st.subheader("🗂️ Split Tables")
 
     party_df = df[["id", "name"]].drop_duplicates().reset_index(drop=True)
@@ -44,6 +44,23 @@ if uploaded_file is not None:
     st.dataframe(billdetails_df.head(20))
     with st.expander("📖 Show full BillDetails Table"):
         st.dataframe(billdetails_df)
+
+    # --- Additional joined tables ---
+    st.subheader("🧩 Joined Tables")
+
+    # Join Party + Bill
+    party_bill_df = pd.merge(bill_df, party_df, left_on="partyid", right_on="id", how="inner")
+    st.write("### Party + Bill Table (First 20 Rows)")
+    st.dataframe(party_bill_df.head(20))
+    with st.expander("📖 Show full Party + Bill Table"):
+        st.dataframe(party_bill_df)
+
+    # Join Bill + BillDetails
+    bill_billdetails_df = pd.merge(billdetails_df, bill_df, left_on="billindex", right_on="bill", how="inner")
+    st.write("### Bill + BillDetails Table (First 20 Rows)")
+    st.dataframe(bill_billdetails_df.head(20))
+    with st.expander("📖 Show full Bill + BillDetails Table"):
+        st.dataframe(bill_billdetails_df)
 
     # Detect categorical vs numerical
     categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
