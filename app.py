@@ -24,7 +24,7 @@ if uploaded_file is not None:
     # --- Split into 3 original tables ---
     party_df = uploaded_df[["ID", "Name"]].drop_duplicates().reset_index(drop=True)
     bill_df = uploaded_df[["Bill", "PartyId", "Date", "Amount"]].drop_duplicates().reset_index(drop=True)
-    billdetails_df = uploaded_df[["IndexId", "Billindex", "Item", "Qty", "Rate", "less"]].drop_duplicates().reset_index(drop=True)
+    billdetails_df = uploaded_df[["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]].drop_duplicates().reset_index(drop=True)
 
     # --- Additional joined tables ---
     party_bill_df = pd.merge(
