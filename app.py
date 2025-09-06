@@ -13,7 +13,6 @@ uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["c
 if uploaded_file is not None:
     # Read CSV without header and rename columns
     uploaded_df = pd.read_csv(uploaded_file)
-    # uploaded_df.columns = ["id","name","indexid","billindex","item","qty","rate","less","bill","partyid","date","amount"]
     st.success("✅ File uploaded and columns renamed successfully!")
 
     # Show uploaded table
@@ -103,6 +102,8 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
+            fig.update_traces(hovertemplate='X: %{x}<br>Y: %{y}<extra></extra>')
+            fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Line Chart" and len(numerical_cols) >= 1:
@@ -112,6 +113,8 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
+            fig.update_traces(hovertemplate='X: %{x}<br>Y: %{y}<extra></extra>')
+            fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Bar Chart" and categorical_cols and numerical_cols:
@@ -121,11 +124,15 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
+            fig.update_traces(hovertemplate='%{x}<br>%{y}<extra></extra>')
+            fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Histogram" and numerical_cols:
             hist_col = st.selectbox("Select column for histogram", numerical_cols)
             fig = px.histogram(selected_df, x=hist_col, nbins=30)
+            fig.update_traces(hovertemplate='%{x}<br>Count: %{y}<extra></extra>')
+            fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Correlation Heatmap" and len(numerical_cols) > 1:
@@ -169,6 +176,8 @@ if uploaded_file is not None:
                     x=forecast['ds'], y=forecast['yhat_lower'],
                     mode='lines', name='Lower Bound', line=dict(dash='dot')
                 )
+                fig_forecast.update_traces(hovertemplate='Date: %{x}<br>Amount: %{y}<extra></extra>')
+                fig_forecast.update_yaxes(tickformat=",.0f")
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
                 # Show forecast table (last actual + 2 predicted months)
