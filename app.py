@@ -21,21 +21,21 @@ if uploaded_file is not None:
         st.dataframe(uploaded_df)
 
     # --- Split into tables ---
-    party_df = uploaded_df[["id", "name"]].drop_duplicates().reset_index(drop=True)
-    bill_df = uploaded_df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
-    billdetails_df = uploaded_df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
+    party_df = uploaded_df[["Id", "Name"]].drop_duplicates().reset_index(drop=True)
+    bill_df = uploaded_df[["Bill", "PartyId", "Date", "Amount"]].drop_duplicates().reset_index(drop=True)
+    billdetails_df = uploaded_df[["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]].drop_duplicates().reset_index(drop=True)
 
     # --- Additional joined tables ---
     party_bill_df = pd.merge(
         party_df, bill_df,
-        left_on="id", right_on="partyid",
+        left_on="ID", right_on="PartyId",
         how="inner",
         suffixes=("_party", "_bill")
     )
 
     bill_billdetails_df = pd.merge(
         bill_df, billdetails_df,
-        left_on="bill", right_on="billindex",
+        left_on="Bill", right_on="Billindex",
         how="inner",
         suffixes=("_bill", "_details")
     )
