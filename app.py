@@ -29,14 +29,14 @@ if uploaded_file is not None:
     # --- Additional joined tables ---
     party_bill_df = pd.merge(
         party_df, bill_df,
-        left_on="id", right_on="partyid",
+        left_on="ID", right_on="PartyId",
         how="inner",
         suffixes=("_party", "_bill")
     )
 
     bill_billdetails_df = pd.merge(
         bill_df, billdetails_df,
-        left_on="bill", right_on="billindex",
+        left_on="Bill", right_on="Billindex",
         how="inner",
         suffixes=("_bill", "_details")
     )
