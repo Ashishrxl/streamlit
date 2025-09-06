@@ -11,7 +11,6 @@ st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 
 if uploaded_file is not None:
-    # Read CSV without header and rename columns
     uploaded_df = pd.read_csv(uploaded_file)
     st.success("✅ File uploaded and columns renamed successfully!")
 
@@ -21,29 +20,28 @@ if uploaded_file is not None:
     with st.expander("📖 Show full uploaded table"):
         st.dataframe(uploaded_df)
 
-    # --- Split into 3 original tables ---
-    party_df = uploaded_df[["ID", "Name"]].drop_duplicates().reset_index(drop=True)
-    bill_df = uploaded_df[["Bill", "PartyId", "Date", "Amount"]].drop_duplicates().reset_index(drop=True)
-    billdetails_df = uploaded_df[["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]].drop_duplicates().reset_index(drop=True)
+    # --- Split into tables ---
+    party_df = uploaded_df[["id", "name"]].drop_duplicates().reset_index(drop=True)
+    bill_df = uploaded_df[["bill", "partyid", "date", "amount"]].drop_duplicates().reset_index(drop=True)
+    billdetails_df = uploaded_df[["indexid", "billindex", "item", "qty", "rate", "less"]].drop_duplicates().reset_index(drop=True)
 
     # --- Additional joined tables ---
     party_bill_df = pd.merge(
         party_df, bill_df,
-        left_on="ID", right_on="PartyId",
+        left_on="id", right_on="partyid",
         how="inner",
         suffixes=("_party", "_bill")
     )
 
     bill_billdetails_df = pd.merge(
         bill_df, billdetails_df,
-        left_on="Bill", right_on="Billindex",
+        left_on="bill", right_on="billindex",
         how="inner",
         suffixes=("_bill", "_details")
     )
 
-    # --- Show all tables with first 20 rows and expanders ---
+    # --- Show all tables ---
     st.subheader("🗂️ Tables Preview")
-
     tables_dict = {
         "Uploaded Table": uploaded_df,
         "Party": party_df,
@@ -59,7 +57,7 @@ if uploaded_file is not None:
         with st.expander(f"📖 Show full {table_name} Table"):
             st.dataframe(table_df)
 
-    # --- Table selection for visualization ---
+    # --- Table selection ---
     st.subheader("📌 Select Table for Visualization")
     selected_table_name = st.selectbox("Select one table", list(tables_dict.keys()))
     selected_df = tables_dict[selected_table_name]
@@ -67,13 +65,12 @@ if uploaded_file is not None:
     st.write(f"Selected Table: **{selected_table_name}** (First 20 Rows)")
     st.dataframe(selected_df.head(20))
 
-    # Detect categorical vs numerical for selected table
     categorical_cols = selected_df.select_dtypes(include=["object", "category"]).columns.tolist()
     numerical_cols = selected_df.select_dtypes(include=["int64", "float64"]).columns.tolist()
     st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
     st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
-    # Column selection for visualization based on selected table
+    # Column selection
     st.subheader("📌 Column Selection for Visualization")
     all_columns = selected_df.columns.tolist()
     selected_columns = st.multiselect(
@@ -88,7 +85,7 @@ if uploaded_file is not None:
         with st.expander("📖 Show full filtered data"):
             st.dataframe(selected_df[selected_columns])
 
-        # Visualization options
+        # --- Visualization ---
         st.subheader("📈 Interactive Visualization")
         chart_type = st.selectbox(
             "Select Chart Type",
@@ -102,7 +99,7 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
-            fig.update_traces(hovertemplate='X: %{x}<br>Y: %{y}<extra></extra>')
+            fig.update_traces(hovertemplate=f'{x_axis}: %{x}<br>{y_axis}: %{y:,.0f}<extra></extra>')
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -113,7 +110,7 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
-            fig.update_traces(hovertemplate='X: %{x}<br>Y: %{y}<extra></extra>')
+            fig.update_traces(hovertemplate=f'{x_axis}: %{x}<br>{y_axis}: %{y:,.0f}<extra></extra>')
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -124,14 +121,14 @@ if uploaded_file is not None:
                 selected_df, x=x_axis, y=y_axis,
                 color=categorical_cols[0] if categorical_cols else None
             )
-            fig.update_traces(hovertemplate='%{x}<br>%{y}<extra></extra>')
+            fig.update_traces(hovertemplate=f'{x_axis}: %{x}<br>{y_axis}: %{y:,.0f}<extra></extra>')
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
         elif chart_type == "Histogram" and numerical_cols:
             hist_col = st.selectbox("Select column for histogram", numerical_cols)
             fig = px.histogram(selected_df, x=hist_col, nbins=30)
-            fig.update_traces(hovertemplate='%{x}<br>Count: %{y}<extra></extra>')
+            fig.update_traces(hovertemplate=f'{hist_col}: %{x}<br>Count: %{y:,.0f}<extra></extra>')
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -142,7 +139,7 @@ if uploaded_file is not None:
         else:
             st.warning("⚠️ Not enough suitable columns for this chart.")
 
-        # --- Forecasting Section (only if 'date' and 'amount' exist in selected table) ---
+        # --- Forecasting ---
         if 'date' in selected_df.columns and 'amount' in selected_df.columns:
             try:
                 selected_df['date'] = pd.to_datetime(selected_df['date'])
@@ -157,11 +154,9 @@ if uploaded_file is not None:
                 model = Prophet()
                 model.fit(forecast_df)
 
-                # Forecast next 2 months
                 future = model.make_future_dataframe(periods=2, freq='M')
                 forecast = model.predict(future)
 
-                # Interactive forecast plot using Plotly
                 st.write("### Forecast Plot")
                 fig_forecast = px.line(
                     forecast, x='ds', y='yhat',
@@ -176,11 +171,10 @@ if uploaded_file is not None:
                     x=forecast['ds'], y=forecast['yhat_lower'],
                     mode='lines', name='Lower Bound', line=dict(dash='dot')
                 )
-                fig_forecast.update_traces(hovertemplate='Date: %{x}<br>Amount: %{y}<extra></extra>')
+                fig_forecast.update_traces(hovertemplate='Date: %{x}<br>Amount: %{y:,.0f}<extra></extra>')
                 fig_forecast.update_yaxes(tickformat=",.0f")
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
-                # Show forecast table (last actual + 2 predicted months)
                 st.subheader("📅 Forecast Table")
                 forecast_table = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(3)
                 forecast_table = forecast_table.rename(
