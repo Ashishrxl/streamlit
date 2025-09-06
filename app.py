@@ -35,7 +35,7 @@ if uploaded_file is not None:
     with st.expander("📖 Show full uploaded table"):
         st.dataframe(uploaded_df)
 
-    # --- Build derived tables (case-insensitive column discovery) ---
+    # --- Build derived tables ---
     id_col = find_col_ci(uploaded_df, "ID")
     name_col = find_col_ci(uploaded_df, "Name")
     if id_col and name_col:
@@ -162,8 +162,7 @@ if uploaded_file is not None:
             color_col = st.selectbox("Select color grouping (optional)", ["None"] + categorical_cols, key=f"scatter_color_{widget_key_base}")
             color_col = None if color_col == "None" else color_col
             fig = px.scatter(df_vis, x=x_axis, y=y_axis, color=color_col)
-            hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
-            fig.update_traces(hovertemplate=hovertemplate)
+            fig.update_traces(hovertemplate=f"{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>")
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -177,22 +176,21 @@ if uploaded_file is not None:
             color_col = st.selectbox("Select color grouping (optional)", ["None"] + categorical_cols, key=f"line_color_{widget_key_base}")
             color_col = None if color_col == "None" else color_col
             fig = px.line(df_vis, x=x_axis, y=y_axis, color=color_col)
-            hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
-            fig.update_traces(hovertemplate=hovertemplate)
+            fig.update_traces(hovertemplate=f"{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>")
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
-    # Bar (stacked)
+    # Bar (stacked / grouped)
     elif chart_type == "Bar Chart":
         if not categorical_cols or not numerical_cols:
             st.warning("⚠️ Need at least one categorical column and one numerical column for a bar chart.")
         else:
             x_axis = st.selectbox("Select X-axis (categorical)", categorical_cols, key=f"bar_x_{widget_key_base}")
             y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"bar_y_{widget_key_base}")
-            color_col = st.selectbox("Select column for stacking (categorical)", categorical_cols, key=f"bar_color_{widget_key_base}")
-            fig = px.bar(df_vis, x=x_axis, y=y_axis, color=color_col, barmode="stack")
-            hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
-            fig.update_traces(hovertemplate=hovertemplate)
+            color_col = st.selectbox("Select column for grouping/stacking (categorical)", categorical_cols, key=f"bar_color_{widget_key_base}")
+            bar_mode = st.radio("Bar Mode", ["Stacked", "Grouped"], horizontal=True, key=f"bar_mode_{widget_key_base}")
+            fig = px.bar(df_vis, x=x_axis, y=y_axis, color=color_col, barmode="stack" if bar_mode == "Stacked" else "group")
+            fig.update_traces(hovertemplate=f"{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>")
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -203,8 +201,7 @@ if uploaded_file is not None:
         else:
             hist_col = st.selectbox("Select column for histogram", numerical_cols, key=f"hist_{widget_key_base}")
             fig = px.histogram(df_vis, x=hist_col, nbins=30)
-            hovertemplate = f"{hist_col}: " + "%{x}<br>" + "Count: " + "%{y:,.0f}<extra></extra>"
-            fig.update_traces(hovertemplate=hovertemplate)
+            fig.update_traces(hovertemplate=f"{hist_col}: %{{x}}<br>Count: %{{y:,.0f}}<extra></extra>")
             fig.update_yaxes(tickformat=",.0f")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -242,7 +239,7 @@ if uploaded_file is not None:
                 fig_forecast = px.line(forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"})
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
-                fig_forecast.update_traces(hovertemplate="%{x}<br>%{y:,.0f}")
+                fig_forecast.update_traces(hovertemplate="Date: %{x}<br>Amount: %{y:,.0f}<extra></extra>")
                 fig_forecast.update_yaxes(tickformat=",.0f")
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
