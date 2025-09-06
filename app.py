@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 from prophet import Prophet
 
@@ -7,9 +8,9 @@ from prophet import Prophet
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
 st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 
-# --------- helpers ---------
-def find_col(df: pd.DataFrame, target: str):
-    """Return the column name in df that matches target case-insensitively."""
+# --- Helpers ---
+def find_col_ci(df: pd.DataFrame, target: str):
+    """Return the actual column name in df that matches target case-insensitively, or None."""
     for c in df.columns:
         if c.lower() == target.lower():
             return c
@@ -19,7 +20,13 @@ def find_col(df: pd.DataFrame, target: str):
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 
 if uploaded_file is not None:
-    uploaded_df = pd.read_csv(uploaded_file)
+    # Read CSV
+    try:
+        uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
+    except Exception as e:
+        st.error(f"❌ Error reading CSV: {e}")
+        st.stop()
+
     st.success("✅ File uploaded successfully!")
 
     # Show uploaded table
@@ -28,35 +35,66 @@ if uploaded_file is not None:
     with st.expander("📖 Show full uploaded table"):
         st.dataframe(uploaded_df)
 
-    # --- Split into tables ---
-    # These will work if the CSV contains these columns exactly
-    try:
-        party_df = uploaded_df[["ID", "Name"]].drop_duplicates().reset_index(drop=True)
-        bill_df = uploaded_df[["Bill", "PartyId", "Date", "Amount"]].drop_duplicates().reset_index(drop=True)
-        billdetails_df = uploaded_df[["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]].drop_duplicates().reset_index(drop=True)
-
-        # --- Additional joined tables ---
-        party_bill_df = pd.merge(
-            party_df, bill_df,
-            left_on="ID", right_on="PartyId",
-            how="inner",
-            suffixes=("_party", "_bill")
-        )
-
-        bill_billdetails_df = pd.merge(
-            bill_df, billdetails_df,
-            left_on="Bill", right_on="Billindex",
-            how="inner",
-            suffixes=("_bill", "_details")
-        )
-    except KeyError:
-        # If any expected column is missing, build what we can and inform the user
-        st.warning("⚠️ Some expected columns (e.g., ID, Name, Bill, PartyId, Date, Amount, etc.) are missing. "
-                   "Only tables that can be derived from your CSV will be shown.")
+    # --- Build derived tables (case-insensitive column discovery) ---
+    # Party table
+    id_col = find_col_ci(uploaded_df, "ID")
+    name_col = find_col_ci(uploaded_df, "Name")
+    if id_col and name_col:
+        party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True)
+    else:
         party_df = pd.DataFrame()
-        bill_df = pd.DataFrame()
+
+    # Bill table
+    bill_col = find_col_ci(uploaded_df, "Bill")
+    partyid_col = find_col_ci(uploaded_df, "PartyId")
+    date_col_master = find_col_ci(uploaded_df, "Date")
+    amount_col_master = find_col_ci(uploaded_df, "Amount")
+    if bill_col and partyid_col and date_col_master and amount_col_master:
+        bill_df = uploaded_df[[bill_col, partyid_col, date_col_master, amount_col_master]].drop_duplicates().reset_index(drop=True)
+    else:
+        # Try to salvage with whatever is present
+        cols_present = [c for c in [bill_col, partyid_col, date_col_master, amount_col_master] if c]
+        if cols_present:
+            bill_df = uploaded_df[cols_present].drop_duplicates().reset_index(drop=True)
+        else:
+            bill_df = pd.DataFrame()
+
+    # BillDetails table
+    indexid_col = find_col_ci(uploaded_df, "IndexId")
+    billindex_col = find_col_ci(uploaded_df, "Billindex")
+    item_col = find_col_ci(uploaded_df, "Item")
+    qty_col = find_col_ci(uploaded_df, "Qty")
+    rate_col = find_col_ci(uploaded_df, "Rate")
+    less_col = find_col_ci(uploaded_df, "Less")
+    billdetails_cols = [c for c in [indexid_col, billindex_col, item_col, qty_col, rate_col, less_col] if c]
+    if billdetails_cols:
+        billdetails_df = uploaded_df[billdetails_cols].drop_duplicates().reset_index(drop=True)
+    else:
         billdetails_df = pd.DataFrame()
+
+    # Merges (only if the required frames/cols exist)
+    try:
+        if not party_df.empty and not bill_df.empty and id_col and partyid_col:
+            party_bill_df = pd.merge(
+                party_df, bill_df,
+                left_on=id_col, right_on=partyid_col,
+                how="inner", suffixes=("_party", "_bill")
+            )
+        else:
+            party_bill_df = pd.DataFrame()
+    except Exception:
         party_bill_df = pd.DataFrame()
+
+    try:
+        if not bill_df.empty and not billdetails_df.empty and bill_col and billindex_col:
+            bill_billdetails_df = pd.merge(
+                bill_df, billdetails_df,
+                left_on=bill_col, right_on=billindex_col,
+                how="inner", suffixes=("_bill", "_details")
+            )
+        else:
+            bill_billdetails_df = pd.DataFrame()
+    except Exception:
         bill_billdetails_df = pd.DataFrame()
 
     # --- Show all tables ---
@@ -83,157 +121,201 @@ if uploaded_file is not None:
     st.subheader("📌 Select Table for Visualization")
     available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
     if not available_tables:
+        st.warning("⚠️ No usable tables could be derived from the uploaded CSV.")
         st.stop()
 
     selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
-    selected_df = available_tables[selected_table_name]
+    selected_df = available_tables[selected_table_name].copy()
 
     st.write(f"Selected Table: **{selected_table_name}** (First 20 Rows)")
     st.dataframe(selected_df.head(20))
 
-    categorical_cols = selected_df.select_dtypes(include=["object", "category"]).columns.tolist()
-    numerical_cols = selected_df.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
-    st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
-    st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
-
-    # Column selection
+    # --- Column selection (user chooses which columns to include for viz) ---
     st.subheader("📌 Column Selection for Visualization")
     all_columns = selected_df.columns.tolist()
-    default_cols = all_columns[:5] if len(all_columns) >= 5 else all_columns
+    default_cols = all_columns[:5] if all_columns else []
     selected_columns = st.multiselect(
-        "Select columns to include in visualization",
+        "Select columns to include in visualization (include 'Date' and 'Amount' if you want forecasting)",
         all_columns,
         default=default_cols
     )
 
-    if selected_columns:
-        st.write("Filtered Data (First 20 Rows):")
-        st.dataframe(selected_df[selected_columns].head(20))
-        with st.expander("📖 Show full filtered data"):
-            st.dataframe(selected_df[selected_columns])
+    if not selected_columns:
+        st.warning("⚠️ Please select at least one column for visualization.")
+        st.stop()
 
-        # --- Visualization ---
-        st.subheader("📈 Interactive Visualization")
-        chart_type = st.selectbox(
-            "Select Chart Type",
-            ["Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap"]
-        )
+    # Work with the filtered dataframe for visualization
+    df_vis = selected_df[selected_columns].copy()
 
-        if chart_type == "Scatter Plot" and len(numerical_cols) >= 2:
-            x_axis = st.selectbox("Select X-axis", numerical_cols, key="scatter_x")
-            y_axis = st.selectbox("Select Y-axis", numerical_cols, key="scatter_y")
-            fig = px.scatter(
-                selected_df, x=x_axis, y=y_axis,
-                color=categorical_cols[0] if categorical_cols else None
-            )
-            fig.update_traces(hovertemplate=f'{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>')
-            fig.update_yaxes(tickformat=",.0f")
-            st.plotly_chart(fig, use_container_width=True)
+    # Recompute categorical and numerical columns from the filtered dataframe
+    categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+    numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
 
-        elif chart_type == "Line Chart" and len(numerical_cols) >= 1:
-            x_axis = st.selectbox("Select X-axis", all_columns, key="line_x")
-            y_axis = st.selectbox("Select Y-axis", numerical_cols, key="line_y")
-            fig = px.line(
-                selected_df, x=x_axis, y=y_axis,
-                color=categorical_cols[0] if categorical_cols else None
-            )
-            fig.update_traces(hovertemplate=f'{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>')
-            fig.update_yaxes(tickformat=",.0f")
-            st.plotly_chart(fig, use_container_width=True)
+    st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
+    st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
-        elif chart_type == "Bar Chart" and categorical_cols and numerical_cols:
-            x_axis = st.selectbox("Select X-axis (categorical)", categorical_cols, key="bar_x")
-            y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key="bar_y")
-            fig = px.bar(
-                selected_df, x=x_axis, y=y_axis,
-                color=categorical_cols[0] if categorical_cols else None
-            )
-            fig.update_traces(hovertemplate=f'{x_axis}: %{{x}}<br>{y_axis}: %{{y:,.0f}}<extra></extra>')
-            fig.update_yaxes(tickformat=",.0f")
-            st.plotly_chart(fig, use_container_width=True)
+    st.write("Filtered Data (First 20 Rows):")
+    st.dataframe(df_vis.head(20))
+    with st.expander("📖 Show full filtered data"):
+        st.dataframe(df_vis)
 
-        elif chart_type == "Histogram" and numerical_cols:
-            hist_col = st.selectbox("Select column for histogram", numerical_cols, key="hist_col")
-            fig = px.histogram(selected_df, x=hist_col, nbins=30)
-            fig.update_traces(hovertemplate=f'{hist_col}: %{{x}}<br>Count: %{{y:,.0f}}<extra></extra>')
-            fig.update_yaxes(tickformat=",.0f")
-            st.plotly_chart(fig, use_container_width=True)
+    # --- Visualization ---
+    st.subheader("📈 Interactive Visualization")
 
-        elif chart_type == "Correlation Heatmap" and len(numerical_cols) > 1:
-            corr = selected_df[numerical_cols].corr()
-            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-            st.plotly_chart(fig, use_container_width=True)
+    chart_type = st.selectbox(
+        "Select Chart Type",
+        ["Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap"]
+    )
+
+    # Make keys unique per table so reruns don't clash
+    widget_key_base = selected_table_name.replace(" ", "_")
+
+    # Scatter
+    if chart_type == "Scatter Plot":
+        if len(numerical_cols) < 2:
+            st.warning("⚠️ Need at least two numerical columns for a scatter plot.")
         else:
-            st.warning("⚠️ Not enough suitable columns for this chart.")
+            x_axis = st.selectbox("Select X-axis (numerical)", numerical_cols, index=0, key=f"scatter_x_{widget_key_base}")
+            # Provide a default y different from x if possible
+            default_y_idx = 1 if len(numerical_cols) > 1 and numerical_cols[1] != x_axis else 0
+            # ensure y options exclude the selected x (optional)
+            y_options = [c for c in numerical_cols]  # keep all options (user might want same)
+            y_axis = st.selectbox("Select Y-axis (numerical)", y_options, index=default_y_idx, key=f"scatter_y_{widget_key_base}")
 
-        # --- Forecasting (case-insensitive: looks for 'date' & 'amount') ---
-        date_col = find_col(selected_df, 'date')
-        amount_col = find_col(selected_df, 'amount')
-
-        if date_col and amount_col:
+            color_col = categorical_cols[0] if categorical_cols else None
             try:
-                selected_df[date_col] = pd.to_datetime(selected_df[date_col])
+                hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
+                fig = px.scatter(df_vis, x=x_axis, y=y_axis, color=color_col)
+                fig.update_traces(hovertemplate=hovertemplate)
+                fig.update_yaxes(tickformat=",.0f")
+                st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.error(f"❌ Cannot convert '{date_col}' column to datetime: {e}")
-                st.stop()
+                st.error(f"❌ Error creating scatter plot: {e}")
 
-            forecast_df = selected_df[[date_col, amount_col]].copy()
-            # Ensure numeric y
-            forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors='coerce')
-            forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
+    # Line chart
+    elif chart_type == "Line Chart":
+        if len(numerical_cols) < 1:
+            st.warning("⚠️ Need at least one numerical column for a line chart.")
+        else:
+            x_axis = st.selectbox("Select X-axis", df_vis.columns.tolist(), key=f"line_x_{widget_key_base}")
+            y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"line_y_{widget_key_base}")
+            color_col = categorical_cols[0] if categorical_cols else None
+            try:
+                hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
+                fig = px.line(df_vis, x=x_axis, y=y_axis, color=color_col)
+                fig.update_traces(hovertemplate=hovertemplate)
+                fig.update_yaxes(tickformat=",.0f")
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error creating line chart: {e}")
 
-            if not forecast_df.empty:
-                forecast_df = forecast_df.rename(columns={date_col: 'ds', amount_col: 'y'})
-                # Monthly aggregation
-                forecast_df = forecast_df.groupby(pd.Grouper(key='ds', freq='M')).sum(numeric_only=True).reset_index()
+    # Bar chart
+    elif chart_type == "Bar Chart":
+        if not categorical_cols or not numerical_cols:
+            st.warning("⚠️ Need at least one categorical column and one numerical column for a bar chart.")
+        else:
+            x_axis = st.selectbox("Select X-axis (categorical)", categorical_cols, key=f"bar_x_{widget_key_base}")
+            y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"bar_y_{widget_key_base}")
+            color_col = categorical_cols[0] if categorical_cols else None
+            try:
+                hovertemplate = f"{x_axis}: " + "%{x}<br>" + f"{y_axis}: " + "%{y:,.0f}<extra></extra>"
+                fig = px.bar(df_vis, x=x_axis, y=y_axis, color=color_col)
+                fig.update_traces(hovertemplate=hovertemplate)
+                fig.update_yaxes(tickformat=",.0f")
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error creating bar chart: {e}")
 
-                if len(forecast_df) >= 2:
+    # Histogram
+    elif chart_type == "Histogram":
+        if not numerical_cols:
+            st.warning("⚠️ Need at least one numerical column for a histogram.")
+        else:
+            hist_col = st.selectbox("Select column for histogram", numerical_cols, key=f"hist_{widget_key_base}")
+            try:
+                hovertemplate = f"{hist_col}: " + "%{x}<br>" + "Count: " + "%{y:,.0f}<extra></extra>"
+                fig = px.histogram(df_vis, x=hist_col, nbins=30)
+                fig.update_traces(hovertemplate=hovertemplate)
+                fig.update_yaxes(tickformat=",.0f")
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error creating histogram: {e}")
+
+    # Correlation heatmap
+    elif chart_type == "Correlation Heatmap":
+        if len(numerical_cols) <= 1:
+            st.warning("⚠️ Need more than one numerical column for a correlation heatmap.")
+        else:
+            try:
+                corr = df_vis[numerical_cols].corr()
+                fig = px.imshow(corr, text_auto=True)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error creating correlation heatmap: {e}")
+
+    # --- Forecasting: requires 'date' and 'amount' present in the filtered dataset ---
+    st.subheader("🔮 Forecasting (optional)")
+    # We only attempt forecasting if the user included those columns in their selected_columns
+    date_col = find_col_ci(df_vis, "date")
+    amount_col = find_col_ci(df_vis, "amount")
+
+    if date_col and amount_col:
+        try:
+            df_vis[date_col] = pd.to_datetime(df_vis[date_col])
+        except Exception as e:
+            st.error(f"❌ Cannot convert '{date_col}' to datetime: {e}")
+            date_col = None
+
+    if date_col and amount_col:
+        # Prepare forecast dataframe
+        forecast_df = df_vis[[date_col, amount_col]].copy()
+        forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
+        forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
+
+        if forecast_df.empty:
+            st.warning("⚠️ Not enough data for forecasting after dropping NA.")
+        else:
+            # rename for Prophet
+            forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
+            # aggregate monthly (user-friendly)
+            try:
+                forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
+            except Exception:
+                # fallback: no aggregation
+                forecast_df = forecast_df.sort_values("ds").reset_index(drop=True)
+
+            if len(forecast_df) < 3:
+                st.warning("⚠️ Need at least 3 monthly data points for a reliable forecast. Found: " + str(len(forecast_df)))
+            else:
+                try:
                     model = Prophet()
                     model.fit(forecast_df)
-
-                    future = model.make_future_dataframe(periods=2, freq='M')
+                    future = model.make_future_dataframe(periods=3, freq="M")
                     forecast = model.predict(future)
 
                     st.write("### Forecast Plot")
+                    # show yhat with bounds
                     fig_forecast = px.line(
-                        forecast, x='ds', y='yhat',
-                        title='Forecast of Amount',
-                        labels={'ds': 'Date', 'yhat': 'Predicted Amount'}
+                        forecast, x="ds", y="yhat",
+                        labels={"ds": "Date", "yhat": "Predicted Amount"},
+                        title="Forecast of Amount"
                     )
-                    fig_forecast.add_scatter(
-                        x=forecast['ds'], y=forecast['yhat_upper'],
-                        mode='lines', name='Upper Bound', line=dict(dash='dot')
-                    )
-                    fig_forecast.add_scatter(
-                        x=forecast['ds'], y=forecast['yhat_lower'],
-                        mode='lines', name='Lower Bound', line=dict(dash='dot')
-                    )
-                    fig_forecast.update_traces(hovertemplate='Date: %{{x}}<br>Amount: %{{y:,.0f}}<extra></extra>')
+                    fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
+                    fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+                    # Use generic hovertemplate (Plotly placeholders are literal in this string)
+                    fig_forecast.update_traces(hovertemplate="%{x}<br>%{y:,.0f}")
                     fig_forecast.update_yaxes(tickformat=",.0f")
                     st.plotly_chart(fig_forecast, use_container_width=True)
 
-                    st.subheader("📅 Forecast Table")
-                    forecast_table = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(3)
-                    forecast_table = forecast_table.rename(
-                        columns={
-                            'ds': 'Date',
-                            'yhat': 'Predicted',
-                            'yhat_lower': 'Lower Bound',
-                            'yhat_upper': 'Upper Bound'
-                        }
+                    st.subheader("📅 Forecast Table (last 3 rows)")
+                    forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(3).rename(
+                        columns={"ds": "Date", "yhat": "Predicted", "yhat_lower": "Lower Bound", "yhat_upper": "Upper Bound"}
                     )
                     st.dataframe(forecast_table)
-                else:
-                    st.warning("⚠️ Not enough historical points after monthly aggregation for forecasting.")
-            else:
-                st.warning("⚠️ Not enough data for forecasting.")
-        else:
-            st.info("ℹ️ Could not find both 'date' and 'amount' columns (case-insensitive) in the selected table for forecasting.")
+                except Exception as e:
+                    st.error(f"❌ Forecasting failed: {e}")
     else:
-        st.warning("⚠️ Please select at least one column for visualization.")
-
-else:
-    st.info("📂 Please upload a CSV file to continue.")
+        st.info("ℹ️ To enable forecasting, include columns named 'Date' (or 'date') and 'Amount' (or 'amount') in the column selection above.")
 
 # --- Hide Streamlit's default menu, footer, and header ---
 hide_streamlit_style = """
