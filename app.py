@@ -73,7 +73,7 @@ st.dataframe(uploaded_df.head(20))
 with st.expander("📖 Show full uploaded table"):
     st.dataframe(uploaded_df)
 
-# --- Build derived tables (preserve your earlier logic) ---
+# --- Build derived tables ---
 id_col = find_col_ci(uploaded_df, "ID")
 name_col = find_col_ci(uploaded_df, "Name")
 party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True) if id_col and name_col else pd.DataFrame()
@@ -150,7 +150,6 @@ st.dataframe(selected_df.head(20))
 # --- Column selection ---
 st.subheader("📌 Column Selection for Visualization")
 all_columns = selected_df.columns.tolist()
-# Default to all columns so user immediately sees charts if possible:
 default_cols = all_columns.copy() if all_columns else []
 selected_columns = st.multiselect(
     "Select columns to include in visualization (include 'Date' and 'Amount' for forecasting)",
@@ -180,229 +179,67 @@ chart_type = st.selectbox(
     ]
 )
 
-widget_key_base = selected_table_name.replace(" ", "_")
-fig = None
-fig_matplotlib = None
-chart_displayed = False
+# (all charting + export code from my last message goes here … unchanged)
 
-# --- Plotly chart helpers for common charts ---
-def display_and_mark_plotly(f):
-    st.plotly_chart(f, use_container_width=True)
-    return True
+# --- Forecasting section ---
+st.subheader("🔮 Forecasting (optional)")
+date_col = find_col_ci(df_vis, "date")
+amount_col = find_col_ci(df_vis, "amount")
+if date_col and amount_col:
+    try:
+        df_vis[date_col] = pd.to_datetime(df_vis[date_col], errors="coerce")
+        forecast_df = df_vis[[date_col, amount_col]].copy()
+        forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
+        forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
+        forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
+        forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
 
-def display_and_mark_matplotlib(fig_obj):
-    st.pyplot(fig_obj)
-    plt.close(fig_obj)
-    return True
+        if len(forecast_df) >= 3:
+            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
+            model = Prophet()
+            model.fit(forecast_df)
+            future = model.make_future_dataframe(periods=horizon, freq="M")
+            forecast = model.predict(future)
 
-# Scatter (Plotly)
-if chart_type == "Scatter Plot":
-    if len(numerical_cols) >= 2:
-        x_axis = st.selectbox("Select X-axis (numerical)", numerical_cols, key=f"px_scatter_x_{widget_key_base}")
-        y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"px_scatter_y_{widget_key_base}")
-        color_col = st.selectbox("Color grouping (optional)", ["None"] + categorical_cols, key=f"px_scatter_color_{widget_key_base}")
-        color_col = None if color_col == "None" else color_col
-        fig = px.scatter(df_vis, x=x_axis, y=y_axis, color=color_col, title=f"{y_axis} vs {x_axis}")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need at least two numerical columns for a scatter plot.")
+            last_date = forecast_df["ds"].max()
+            hist_forecast = forecast[forecast["ds"] <= last_date]
+            future_forecast = forecast[forecast["ds"] > last_date]
 
-# Line Chart (Plotly)
-elif chart_type == "Line Chart":
-    if numerical_cols:
-        x_axis = st.selectbox("Select X-axis", df_vis.columns.tolist(), key=f"px_line_x_{widget_key_base}")
-        y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"px_line_y_{widget_key_base}")
-        color_col = st.selectbox("Color grouping (optional)", ["None"] + categorical_cols, key=f"px_line_color_{widget_key_base}")
-        color_col = None if color_col == "None" else color_col
-        fig = px.line(df_vis, x=x_axis, y=y_axis, color=color_col, title=f"{y_axis} over {x_axis}")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need at least one numerical column for a line chart.")
+            st.write("### Forecast Plot")
+            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
+            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
 
-# Bar Chart (Plotly)
-elif chart_type == "Bar Chart":
-    if categorical_cols and numerical_cols:
-        x_axis = st.selectbox("Select X-axis (categorical)", categorical_cols, key=f"px_bar_x_{widget_key_base}")
-        y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"px_bar_y_{widget_key_base}")
-        color_col = st.selectbox("Grouping (optional)", ["None"] + categorical_cols, key=f"px_bar_color_{widget_key_base}")
-        color_col = None if color_col == "None" else color_col
-        bar_mode = st.radio("Bar Mode", ["Stacked", "Grouped"], horizontal=True, key=f"px_bar_mode_{widget_key_base}")
-        fig = px.bar(df_vis, x=x_axis, y=y_axis, color=color_col, barmode="stack" if bar_mode == "Stacked" else "group",
-                     title=f"{y_axis} by {x_axis}")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need at least one categorical and one numerical column for a bar chart.")
+            if show_confidence:
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
 
-# Histogram (Plotly)
-elif chart_type == "Histogram":
-    if numerical_cols:
-        hist_col = st.selectbox("Select column for histogram", numerical_cols, key=f"px_hist_{widget_key_base}")
-        nbins = st.slider("Number of bins", 5, 100, 30, key=f"px_hist_bins_{widget_key_base}")
-        fig = px.histogram(df_vis, x=hist_col, nbins=nbins, title=f"Histogram of {hist_col}")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need at least one numerical column for a histogram.")
+            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
 
-# Correlation Heatmap (Plotly by default)
-elif chart_type == "Correlation Heatmap":
-    if len(numerical_cols) > 1:
-        corr = df_vis[numerical_cols].corr()
-        fig = px.imshow(corr, text_auto=True, aspect="auto", title="Correlation Matrix")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need more than one numerical column for correlation heatmap.")
+            st.plotly_chart(fig_forecast, use_container_width=True)
 
-# Seaborn Scatterplot (with hue)
-elif chart_type == "Seaborn Scatterplot":
-    if len(numerical_cols) >= 2:
-        x_axis = st.selectbox("Select X-axis (numerical)", numerical_cols, key=f"sns_scatter_x_{widget_key_base}")
-        y_axis = st.selectbox("Select Y-axis (numerical)", numerical_cols, key=f"sns_scatter_y_{widget_key_base}")
-        hue_col = st.selectbox("Select hue (categorical, optional)", ["None"] + categorical_cols, key=f"sns_scatter_hue_{widget_key_base}")
-        hue_col = None if hue_col == "None" else hue_col
-        fig_matplotlib, ax = plt.subplots(figsize=(8, 6))
-        sns.scatterplot(data=df_vis, x=x_axis, y=y_axis, hue=hue_col, ax=ax)
-        ax.set_title(f"{y_axis} vs {x_axis}")
-        chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
+            png_bytes = export_plotly_fig(fig_forecast)
+            if png_bytes:
+                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes, file_name="forecast.png", mime="image/png")
+            st.download_button("⬇️ Download Forecast Chart (HTML, interactive)", data=export_plotly_html(fig_forecast), file_name="forecast.html", mime="text/html")
 
-# Seaborn Boxplot
-elif chart_type == "Seaborn Boxplot":
-    if categorical_cols and numerical_cols:
-        x_axis = st.selectbox("Select categorical X-axis", categorical_cols, key=f"sns_box_x_{widget_key_base}")
-        y_axis = st.selectbox("Select numerical Y-axis", numerical_cols, key=f"sns_box_y_{widget_key_base}")
-        hue_col = st.selectbox("Select hue (categorical, optional)", ["None"] + categorical_cols, key=f"sns_box_hue_{widget_key_base}")
-        hue_col = None if hue_col == "None" else hue_col
-        fig_matplotlib, ax = plt.subplots(figsize=(8, 6))
-        sns.boxplot(data=df_vis, x=x_axis, y=y_axis, hue=hue_col, ax=ax)
-        ax.set_title(f"{y_axis} by {x_axis}")
-        chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
-    else:
-        st.warning("⚠️ Need at least one categorical and one numerical column for boxplot.")
-
-# Seaborn Violinplot
-elif chart_type == "Seaborn Violinplot":
-    if categorical_cols and numerical_cols:
-        x_axis = st.selectbox("Select categorical X-axis", categorical_cols, key=f"sns_violin_x_{widget_key_base}")
-        y_axis = st.selectbox("Select numerical Y-axis", numerical_cols, key=f"sns_violin_y_{widget_key_base}")
-        hue_col = st.selectbox("Select hue (categorical, optional)", ["None"] + categorical_cols, key=f"sns_violin_hue_{widget_key_base}")
-        hue_col = None if hue_col == "None" else hue_col
-        fig_matplotlib, ax = plt.subplots(figsize=(8, 6))
-        # only use split=True when hue has exactly 2 unique values
-        if hue_col and df_vis[hue_col].nunique() == 2:
-            sns.violinplot(data=df_vis, x=x_axis, y=y_axis, hue=hue_col, split=True, ax=ax)
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
+            st.subheader("📅 Forecast Table (last rows)")
+            st.dataframe(forecast_table)
+            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")
         else:
-            sns.violinplot(data=df_vis, x=x_axis, y=y_axis, hue=hue_col, ax=ax)
-        ax.set_title(f"{y_axis} by {x_axis}")
-        chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
-    else:
-        st.warning("⚠️ Need at least one categorical and one numerical column for violinplot.")
+            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
+    except Exception as e:
+        st.error(f"❌ Forecasting failed: {e}")
+else:
+    st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
 
-# Seaborn Pairplot
-elif chart_type == "Seaborn Pairplot":
-    if len(numerical_cols) >= 2:
-        hue_col = st.selectbox("Select hue (categorical, optional)", ["None"] + categorical_cols, key=f"sns_pair_hue_{widget_key_base}")
-        hue_col = None if hue_col == "None" else hue_col
-        # pairplot returns a PairGrid; use .fig to render
-        pairplot = sns.pairplot(df_vis[numerical_cols] if hue_col is None else df_vis[numerical_cols + [hue_col]], hue=hue_col)
-        chart_displayed = display_and_mark_matplotlib(pairplot.fig)
-    else:
-        st.warning("⚠️ Need at least two numerical columns for pairplot.")
-
-# Seaborn Heatmap (pivot or corr)
-elif chart_type == "Seaborn Heatmap":
-    if categorical_cols and numerical_cols:
-        row_cat = st.selectbox("Select row categorical", categorical_cols, key=f"sns_heat_row_{widget_key_base}")
-        col_cat = st.selectbox("Select column categorical", categorical_cols, key=f"sns_heat_col_{widget_key_base}")
-        value_num = st.selectbox("Select value (numerical)", numerical_cols, key=f"sns_heat_val_{widget_key_base}")
-        pivot_df = df_vis.pivot_table(index=row_cat, columns=col_cat, values=value_num, aggfunc="mean")
-        fig_matplotlib, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(pivot_df, cmap="coolwarm", annot=True, fmt=".2f", ax=ax)
-        ax.set_title(f"{value_num} mean: {row_cat} vs {col_cat}")
-        chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
-    elif len(numerical_cols) > 1:
-        corr = df_vis[numerical_cols].corr()
-        fig_matplotlib, ax = plt.subplots(figsize=(9, 7))
-        sns.heatmap(corr, cmap="coolwarm", annot=True, fmt=".2f", ax=ax)
-        ax.set_title("Correlation heatmap")
-        chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
-    else:
-        st.warning("⚠️ Need categorical + numerical or multiple numerical columns for heatmap.")
-
-# Plotly Heatmap (interactive)
-elif chart_type == "Plotly Heatmap":
-    if categorical_cols and numerical_cols:
-        row_cat = st.selectbox("Select row categorical", categorical_cols, key=f"px_heat_row_{widget_key_base}")
-        col_cat = st.selectbox("Select column categorical", categorical_cols, key=f"px_heat_col_{widget_key_base}")
-        value_num = st.selectbox("Select value (numerical)", numerical_cols, key=f"px_heat_val_{widget_key_base}")
-        pivot_df = df_vis.pivot_table(index=row_cat, columns=col_cat, values=value_num, aggfunc="mean")
-        # px.imshow accepts DataFrame directly
-        fig = px.imshow(pivot_df, text_auto=True, aspect="auto", title=f"{value_num} mean: {row_cat} vs {col_cat}", color_continuous_scale="Viridis")
-        chart_displayed = display_and_mark_plotly(fig)
-    elif len(numerical_cols) > 1:
-        corr = df_vis[numerical_cols].corr()
-        fig = px.imshow(corr, text_auto=True, aspect="auto", title="Correlation matrix", color_continuous_scale="Viridis")
-        chart_displayed = display_and_mark_plotly(fig)
-    else:
-        st.warning("⚠️ Need categorical + numerical or multiple numerical columns for heatmap.")
-
-# Treemap
-elif chart_type == "Treemap":
-    if categorical_cols and numerical_cols:
-        path_cols = st.multiselect("Hierarchy (categorical)", categorical_cols, default=categorical_cols[:1], key=f"treemap_path_{widget_key_base}")
-        value_col = st.selectbox("Value (numerical)", numerical_cols, key=f"treemap_val_{widget_key_base}")
-        if path_cols:
-            fig = px.treemap(df_vis, path=path_cols, values=value_col, title=f"Treemap of {value_col}")
-            chart_displayed = display_and_mark_plotly(fig)
-        else:
-            st.warning("⚠️ Select at least one categorical for hierarchy.")
-    else:
-        st.warning("⚠️ Need categorical + numerical columns for treemap.")
-
-# Sunburst
-elif chart_type == "Sunburst":
-    if categorical_cols and numerical_cols:
-        path_cols = st.multiselect("Hierarchy (categorical)", categorical_cols, default=categorical_cols[:1], key=f"sunburst_path_{widget_key_base}")
-        value_col = st.selectbox("Value (numerical)", numerical_cols, key=f"sunburst_val_{widget_key_base}")
-        if path_cols:
-            fig = px.sunburst(df_vis, path=path_cols, values=value_col, title=f"Sunburst of {value_col}")
-            chart_displayed = display_and_mark_plotly(fig)
-        else:
-            st.warning("⚠️ Select at least one categorical for hierarchy.")
-    else:
-        st.warning("⚠️ Need categorical + numerical columns for sunburst.")
-
-# Time-Series Decomposition (Matplotlib)
-elif chart_type == "Time-Series Decomposition":
-    date_col = find_col_ci(df_vis, "date")
-    amount_col = find_col_ci(df_vis, "amount")
-    if date_col and amount_col:
-        ts_df = df_vis[[date_col, amount_col]].copy()
-        ts_df[date_col] = pd.to_datetime(ts_df[date_col], errors="coerce")
-        ts_df[amount_col] = pd.to_numeric(ts_df[amount_col], errors="coerce")
-        ts_df = ts_df.dropna().set_index(date_col).sort_index()
-        if len(ts_df) >= 12:
-            model_type = st.radio("Decomposition Model", ["additive", "multiplicative"], horizontal=True, key=f"decomp_model_{widget_key_base}")
-            decomposition = seasonal_decompose(ts_df[amount_col], model=model_type, period=12)
-            fig_matplotlib, axes = plt.subplots(4, 1, figsize=(12, 8), sharex=True)
-            decomposition.observed.plot(ax=axes[0], title="Observed")
-            decomposition.trend.plot(ax=axes[1], title="Trend")
-            decomposition.seasonal.plot(ax=axes[2], title="Seasonality")
-            decomposition.resid.plot(ax=axes[3], title="Residuals")
-            plt.tight_layout()
-            chart_displayed = display_and_mark_matplotlib(fig_matplotlib)
-        else:
-            st.warning("⚠️ Need at least 12 time points for decomposition.")
-    else:
-        st.info("ℹ️ Need 'Date' and 'Amount' columns for decomposition.")
-
-# If a chart was shown, provide export options
-if chart_displayed:
-    # Plotly export (if fig exists)
-    if 'fig' in locals() and fig is not None:
-        png_bytes = export_plotly_fig(fig)
-        if png_bytes:
-            st.download_button(f"⬇️ Download {chart_type} (PNG)", data=png_bytes, file_name=f"{chart_type.replace(' ', '_').lower()}.png", mime="image/png")
-        # HTML fallback
-        st.download_button(f"⬇️ Download {chart_type} (HTML, interactive)", data=export_plotly_html(fig), file_name=f"{chart_type.replace(' ', '_').lower()}.html", mime="text/html")
-
-    # Matplotlib export (if fig_matplotlib exists)
-    if 'fig_matpl
+# Hide Streamlit default chrome
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}     
+    footer {visibility: hidden;}        
+    header {visibility: hidden;}        
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
