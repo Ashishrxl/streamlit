@@ -7,6 +7,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import seasonal_decompose
 import io
+import plotly.io as pio
+import json
 
 # Streamlit page config
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
@@ -29,8 +31,15 @@ def convert_df_to_excel(df):
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     return buffer.getvalue()
 
+# --- Plot export helpers ---
 def export_plotly_fig(fig):
-    return fig.to_image(format="png")
+    try:
+        return pio.to_image(fig, format="png", engine="kaleido")
+    except Exception:
+        return None  # fallback handled separately
+
+def export_plotly_html(fig):
+    return fig.to_html(include_plotlyjs="cdn")
 
 def export_matplotlib_fig(fig):
     buf = io.BytesIO()
@@ -162,12 +171,22 @@ if uploaded_file is not None:
 
         # --- Export buttons ---
         if fig is not None:
+            png_bytes = export_plotly_fig(fig)
+            if png_bytes:
+                st.download_button(
+                    "⬇️ Download Chart (PNG)",
+                    data=png_bytes,
+                    file_name="chart.png",
+                    mime="image/png",
+                )
+            # Always offer HTML as fallback
             st.download_button(
-                "⬇️ Download Chart (PNG)",
-                data=export_plotly_fig(fig),
-                file_name="chart.png",
-                mime="image/png",
+                "⬇️ Download Chart (HTML, interactive)",
+                data=export_plotly_html(fig),
+                file_name="chart.html",
+                mime="text/html",
             )
+
         if fig_matplotlib is not None:
             st.download_button(
                 "⬇️ Download Chart (PNG)",
@@ -209,11 +228,19 @@ if uploaded_file is not None:
                     st.plotly_chart(fig_forecast, use_container_width=True)
 
                     # Export forecast plot
+                    png_bytes = export_plotly_fig(fig_forecast)
+                    if png_bytes:
+                        st.download_button(
+                            "⬇️ Download Forecast Chart (PNG)",
+                            data=png_bytes,
+                            file_name="forecast.png",
+                            mime="image/png",
+                        )
                     st.download_button(
-                        "⬇️ Download Forecast Chart (PNG)",
-                        data=export_plotly_fig(fig_forecast),
-                        file_name="forecast.png",
-                        mime="image/png",
+                        "⬇️ Download Forecast Chart (HTML, interactive)",
+                        data=export_plotly_html(fig_forecast),
+                        file_name="forecast.html",
+                        mime="text/html",
                     )
 
                     # Export forecast data
