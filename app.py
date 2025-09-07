@@ -46,6 +46,12 @@ def export_matplotlib_fig(fig):
     buf.seek(0)
     return buf.getvalue()
 
+# Sidebar options
+st.sidebar.header("⚙️ Settings")
+forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
+forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.1, step=0.05)
+show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)
+
 # File uploader
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 
@@ -182,88 +188,6 @@ if uploaded_file is not None:
     st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
     st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
-    # --- Visualization ---
-    st.subheader("📈 Interactive Visualization")
-    chart_type = st.selectbox(
-        "Select Chart Type",
-        [
-            "Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap",
-            "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot",
-            "Treemap", "Sunburst", "Time-Series Decomposition"
-        ]
-    )
-
-    fig = None
-    fig_matplotlib = None
-
-    # Scatter
-    if chart_type == "Scatter Plot" and len(numerical_cols) >= 2:
-        x_axis = st.selectbox("X-axis", numerical_cols)
-        y_axis = st.selectbox("Y-axis", numerical_cols)
-        color_col = st.selectbox("Color (optional)", ["None"] + categorical_cols)
-        color_col = None if color_col == "None" else color_col
-        fig = px.scatter(df_vis, x=x_axis, y=y_axis, color=color_col)
-        st.plotly_chart(fig, use_container_width=True)
-
-    elif chart_type == "Seaborn Boxplot" and categorical_cols and numerical_cols:
-        x_axis = st.selectbox("X-axis (categorical)", categorical_cols)
-        y_axis = st.selectbox("Y-axis (numerical)", numerical_cols)
-        hue_col = st.selectbox("Hue (optional)", ["None"] + categorical_cols)
-        hue_col = None if hue_col == "None" else hue_col
-        fig_matplotlib, ax = plt.subplots(figsize=(8, 5))
-        sns.boxplot(data=df_vis, x=x_axis, y=y_axis, hue=hue_col, ax=ax)
-        st.pyplot(fig_matplotlib)
-
-    elif chart_type == "Treemap" and categorical_cols and numerical_cols:
-        path_cols = st.multiselect("Hierarchy (categorical)", categorical_cols, default=categorical_cols[:1])
-        value_col = st.selectbox("Value (numerical)", numerical_cols)
-        if path_cols:
-            fig = px.treemap(df_vis, path=path_cols, values=value_col)
-            st.plotly_chart(fig, use_container_width=True)
-
-    elif chart_type == "Time-Series Decomposition":
-        date_col = find_col_ci(df_vis, "date")
-        amount_col = find_col_ci(df_vis, "amount")
-        if date_col and amount_col:
-            ts_df = df_vis[[date_col, amount_col]].copy()
-            ts_df[date_col] = pd.to_datetime(ts_df[date_col], errors="coerce")
-            ts_df[amount_col] = pd.to_numeric(ts_df[amount_col], errors="coerce")
-            ts_df = ts_df.dropna().set_index(date_col).sort_index()
-            if len(ts_df) >= 12:
-                model_type = st.radio("Decomposition Model", ["additive", "multiplicative"], horizontal=True)
-                decomposition = seasonal_decompose(ts_df[amount_col], model=model_type, period=12)
-                fig_matplotlib, axes = plt.subplots(4, 1, figsize=(12, 8), sharex=True)
-                decomposition.observed.plot(ax=axes[0], title="Observed")
-                decomposition.trend.plot(ax=axes[1], title="Trend")
-                decomposition.seasonal.plot(ax=axes[2], title="Seasonality")
-                decomposition.resid.plot(ax=axes[3], title="Residuals")
-                st.pyplot(fig_matplotlib)
-
-    # --- Export buttons ---
-    if fig is not None:
-        png_bytes = export_plotly_fig(fig)
-        if png_bytes:
-            st.download_button(
-                "⬇️ Download Chart (PNG)",
-                data=png_bytes,
-                file_name="chart.png",
-                mime="image/png",
-            )
-        st.download_button(
-            "⬇️ Download Chart (HTML, interactive)",
-            data=export_plotly_html(fig),
-            file_name="chart.html",
-            mime="text/html",
-        )
-
-    if fig_matplotlib is not None:
-        st.download_button(
-            "⬇️ Download Chart (PNG)",
-            data=export_matplotlib_fig(fig_matplotlib),
-            file_name="chart.png",
-            mime="image/png",
-        )
-
     # --- Forecasting ---
     st.subheader("🔮 Forecasting (optional)")
     date_col = find_col_ci(df_vis, "date")
@@ -286,27 +210,38 @@ if uploaded_file is not None:
                 future = model.make_future_dataframe(periods=horizon, freq="M")
                 forecast = model.predict(future)
 
-                st.write("### Forecast Plot")
-                fig_forecast = px.line(forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"})
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
-                st.plotly_chart(fig_forecast, use_container_width=True)
+                # Separate historical vs forecast periods
+                last_date = forecast_df["ds"].max()
+                hist_forecast = forecast[forecast["ds"] <= last_date]
+                future_forecast = forecast[forecast["ds"] > last_date]
 
-                # Export forecast plot
-                png_bytes = export_plotly_fig(fig_forecast)
-                if png_bytes:
-                    st.download_button(
-                        "⬇️ Download Forecast Chart (PNG)",
-                        data=png_bytes,
-                        file_name="forecast.png",
-                        mime="image/png",
-                    )
-                st.download_button(
-                    "⬇️ Download Forecast Chart (HTML, interactive)",
-                    data=export_plotly_html(fig_forecast),
-                    file_name="forecast.html",
-                    mime="text/html",
+                st.write("### Forecast Plot")
+                fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"})
+                fig_forecast.update_traces(line=dict(color="blue", dash="solid"), name="Historical")
+
+                fig_forecast.add_scatter(
+                    x=future_forecast["ds"], y=future_forecast["yhat"],
+                    mode="lines", name="Forecast", line=dict(color="orange", dash="dash")
                 )
+
+                if show_confidence:
+                    fig_forecast.add_scatter(
+                        x=forecast["ds"], y=forecast["yhat_upper"],
+                        mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")
+                    )
+                    fig_forecast.add_scatter(
+                        x=forecast["ds"], y=forecast["yhat_lower"],
+                        mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")
+                    )
+
+                # Highlight forecast area (user-selected color & opacity)
+                fig_forecast.add_vrect(
+                    x0=last_date, x1=forecast["ds"].max(),
+                    fillcolor=forecast_color, opacity=forecast_opacity, line_width=0,
+                    annotation_text="Forecast Period", annotation_position="top left"
+                )
+
+                st.plotly_chart(fig_forecast, use_container_width=True)
 
                 # Forecast table
                 st.subheader("📅 Forecast Table (last few rows)")
@@ -314,14 +249,6 @@ if uploaded_file is not None:
                     columns={"ds": "Date", "yhat": "Predicted", "yhat_lower": "Lower Bound", "yhat_upper": "Upper Bound"}
                 )
                 st.dataframe(forecast_table)
-
-                # Export forecast data
-                st.download_button(
-                    "⬇️ Download Forecast Data (CSV)",
-                    data=convert_df_to_csv(forecast_table),
-                    file_name="forecast.csv",
-                    mime="text/csv",
-                )
 
         except Exception as e:
             st.error(f"❌ Forecasting failed: {e}")
