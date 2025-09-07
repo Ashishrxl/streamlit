@@ -15,7 +15,6 @@ st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
 
 # --- Helpers ---
 def find_col_ci(df: pd.DataFrame, target: str):
-    """Return the actual column name in df that matches target case-insensitively, or None."""
     for c in df.columns:
         if c.lower() == target.lower():
             return c
@@ -30,7 +29,7 @@ def convert_df_to_excel(df):
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     return buffer.getvalue()
 
-# --- Plot export helpers ---
+# Plot export helpers
 def export_plotly_fig(fig):
     try:
         return pio.to_image(fig, format="png", engine="kaleido")
@@ -56,7 +55,6 @@ show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bou
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 
 if uploaded_file is not None:
-    # Read CSV
     try:
         uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
     except Exception as e:
@@ -65,7 +63,7 @@ if uploaded_file is not None:
 
     st.success("✅ File uploaded successfully!")
 
-    # Show uploaded table
+    # Uploaded table preview
     st.subheader("🔍 Uploaded Table Preview (First 20 Rows)")
     st.dataframe(uploaded_df.head(20))
     with st.expander("📖 Show full uploaded table"):
@@ -74,49 +72,29 @@ if uploaded_file is not None:
     # --- Build derived tables ---
     id_col = find_col_ci(uploaded_df, "ID")
     name_col = find_col_ci(uploaded_df, "Name")
-    if id_col and name_col:
-        party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True)
-    else:
-        party_df = pd.DataFrame()
+    party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True) if id_col and name_col else pd.DataFrame()
 
     bill_col = find_col_ci(uploaded_df, "Bill")
     partyid_col = find_col_ci(uploaded_df, "PartyId")
     date_col_master = find_col_ci(uploaded_df, "Date")
     amount_col_master = find_col_ci(uploaded_df, "Amount")
-    if bill_col and partyid_col and date_col_master and amount_col_master:
-        bill_df = uploaded_df[[bill_col, partyid_col, date_col_master, amount_col_master]].drop_duplicates().reset_index(drop=True)
-    else:
-        bill_df = pd.DataFrame()
+    bill_df = (
+        uploaded_df[[bill_col, partyid_col, date_col_master, amount_col_master]].drop_duplicates().reset_index(drop=True)
+        if bill_col and partyid_col and date_col_master and amount_col_master else pd.DataFrame()
+    )
 
     billdetails_cols = [find_col_ci(uploaded_df, c) for c in ["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]]
     billdetails_cols = [c for c in billdetails_cols if c]
-    if billdetails_cols:
-        billdetails_df = uploaded_df[billdetails_cols].drop_duplicates().reset_index(drop=True)
-    else:
-        billdetails_df = pd.DataFrame()
+    billdetails_df = uploaded_df[billdetails_cols].drop_duplicates().reset_index(drop=True) if billdetails_cols else pd.DataFrame()
 
     try:
-        if not party_df.empty and not bill_df.empty and id_col and partyid_col:
-            party_bill_df = pd.merge(
-                party_df, bill_df,
-                left_on=id_col, right_on=partyid_col,
-                how="inner", suffixes=("_party", "_bill")
-            )
-        else:
-            party_bill_df = pd.DataFrame()
+        party_bill_df = pd.merge(party_df, bill_df, left_on=id_col, right_on=partyid_col, how="inner", suffixes=("_party", "_bill")) if not party_df.empty and not bill_df.empty else pd.DataFrame()
     except Exception:
         party_bill_df = pd.DataFrame()
 
     try:
         billindex_col = find_col_ci(uploaded_df, "Billindex")
-        if not bill_df.empty and not billdetails_df.empty and bill_col and billindex_col:
-            bill_billdetails_df = pd.merge(
-                bill_df, billdetails_df,
-                left_on=bill_col, right_on=billindex_col,
-                how="inner", suffixes=("_bill", "_details")
-            )
-        else:
-            bill_billdetails_df = pd.DataFrame()
+        bill_billdetails_df = pd.merge(bill_df, billdetails_df, left_on=bill_col, right_on=billindex_col, how="inner", suffixes=("_bill", "_details")) if not bill_df.empty and not billdetails_df.empty else pd.DataFrame()
     except Exception:
         bill_billdetails_df = pd.DataFrame()
 
@@ -138,7 +116,7 @@ if uploaded_file is not None:
             with st.expander(f"📖 Show full {table_name} Table"):
                 st.dataframe(table_df)
 
-            # Download buttons for each table
+            # Download buttons
             st.download_button(
                 f"⬇️ Download {table_name} (CSV)",
                 data=convert_df_to_csv(table_df),
@@ -188,6 +166,55 @@ if uploaded_file is not None:
     st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
     st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
+    # --- Visualization ---
+    st.subheader("📈 Interactive Visualization")
+    chart_type = st.selectbox(
+        "Select Chart Type",
+        [
+            "Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap",
+            "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot",
+            "Seaborn Heatmap", "Plotly Heatmap"
+        ]
+    )
+
+    widget_key_base = selected_table_name.replace(" ", "_")
+
+    # Seaborn Heatmap
+    if chart_type == "Seaborn Heatmap":
+        if categorical_cols and numerical_cols:
+            row_cat = st.selectbox("Select row categorical", categorical_cols, key=f"heatmap_row_{widget_key_base}")
+            col_cat = st.selectbox("Select column categorical", categorical_cols, key=f"heatmap_col_{widget_key_base}")
+            value_num = st.selectbox("Select value (numerical)", numerical_cols, key=f"heatmap_val_{widget_key_base}")
+
+            pivot_df = df_vis.pivot_table(index=row_cat, columns=col_cat, values=value_num, aggfunc="mean")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            sns.heatmap(pivot_df, cmap="coolwarm", annot=True, fmt=".1f", ax=ax)
+            st.pyplot(fig)
+        elif len(numerical_cols) > 1:
+            corr = df_vis[numerical_cols].corr()
+            fig, ax = plt.subplots(figsize=(8, 6))
+            sns.heatmap(corr, cmap="coolwarm", annot=True, ax=ax)
+            st.pyplot(fig)
+        else:
+            st.warning("⚠️ Need categorical + numerical or multiple numerical columns.")
+
+    # Plotly Heatmap
+    elif chart_type == "Plotly Heatmap":
+        if categorical_cols and numerical_cols:
+            row_cat = st.selectbox("Select row categorical", categorical_cols, key=f"plotly_heatmap_row_{widget_key_base}")
+            col_cat = st.selectbox("Select column categorical", categorical_cols, key=f"plotly_heatmap_col_{widget_key_base}")
+            value_num = st.selectbox("Select value (numerical)", numerical_cols, key=f"plotly_heatmap_val_{widget_key_base}")
+
+            pivot_df = df_vis.pivot_table(index=row_cat, columns=col_cat, values=value_num, aggfunc="mean").reset_index()
+            fig = px.imshow(pivot_df.set_index(row_cat), text_auto=True, aspect="auto", color_continuous_scale="Viridis")
+            st.plotly_chart(fig, use_container_width=True)
+        elif len(numerical_cols) > 1:
+            corr = df_vis[numerical_cols].corr()
+            fig = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="Viridis")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ Need categorical + numerical or multiple numerical columns.")
+
     # --- Forecasting ---
     st.subheader("🔮 Forecasting (optional)")
     date_col = find_col_ci(df_vis, "date")
@@ -210,7 +237,6 @@ if uploaded_file is not None:
                 future = model.make_future_dataframe(periods=horizon, freq="M")
                 forecast = model.predict(future)
 
-                # Separate historical vs forecast periods
                 last_date = forecast_df["ds"].max()
                 hist_forecast = forecast[forecast["ds"] <= last_date]
                 future_forecast = forecast[forecast["ds"] > last_date]
@@ -234,7 +260,6 @@ if uploaded_file is not None:
                         mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")
                     )
 
-                # Highlight forecast area (user-selected color & opacity)
                 fig_forecast.add_vrect(
                     x0=last_date, x1=forecast["ds"].max(),
                     fillcolor=forecast_color, opacity=forecast_opacity, line_width=0,
@@ -243,7 +268,6 @@ if uploaded_file is not None:
 
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
-                # Forecast table
                 st.subheader("📅 Forecast Table (last few rows)")
                 forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(6).rename(
                     columns={"ds": "Date", "yhat": "Predicted", "yhat_lower": "Lower Bound", "yhat_upper": "Upper Bound"}
