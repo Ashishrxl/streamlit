@@ -8,3 +8,4 @@ Prophet
 plotly
 statsmodels
 xlsxwriter
+kaleido
