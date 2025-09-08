@@ -65,11 +65,12 @@ except Exception as e:
 
 st.success("✅ File uploaded successfully!")
 
-# --- Preview uploaded ---
-st.subheader("🔍 Uploaded Table Preview (First 20 Rows)")
-st.dataframe(uploaded_df.head(20))
-with st.expander("📖 Show full uploaded table"):
-    st.dataframe(uploaded_df)
+# --- Uploaded Table Preview with Button ---
+st.subheader("🔍 Uploaded Table Preview")
+if st.button("Expand Uploaded Table"):
+    st.dataframe(uploaded_df.head(20))
+    with st.expander("📖 Show full uploaded table"):
+        st.dataframe(uploaded_df)
 
 # --- Build derived tables ---
 id_col = find_col_ci(uploaded_df, "ID")
@@ -100,7 +101,7 @@ try:
 except Exception:
     bill_billdetails_df = pd.DataFrame()
 
-# --- Show tables and provide downloads ---
+# --- Show tables and provide downloads with expand button ---
 st.subheader("🗂️ Tables Preview")
 tables_dict = {
     "Uploaded Table": uploaded_df,
@@ -112,25 +113,29 @@ tables_dict = {
 }
 
 for table_name, table_df in tables_dict.items():
-    st.write(f"### {table_name} Table (First 20 Rows)")
-    if not table_df.empty:
-        st.dataframe(table_df.head(20))
-        with st.expander(f"📖 Show full {table_name} Table"):
-            st.dataframe(table_df)
-        st.download_button(  
-            f"⬇️ Download {table_name} (CSV)",  
-            data=convert_df_to_csv(table_df),  
-            file_name=f"{table_name.lower().replace(' ', '_')}.csv",  
-            mime="text/csv",  
-        )  
-        st.download_button(  
-            f"⬇️ Download {table_name} (Excel)",  
-            data=convert_df_to_excel(table_df),  
-            file_name=f"{table_name.lower().replace(' ', '_')}.xlsx",  
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  
-        )  
-    else:  
-        st.info("ℹ️ Not available from the uploaded CSV.")
+    col1, col2 = st.columns([1,3])
+    with col1:
+        if st.button(f"Expand {table_name} Table", key=f"expand_{table_name}"):
+            with col2:
+                st.write(f"### {table_name} Table (First 20 Rows)")
+                if not table_df.empty:
+                    st.dataframe(table_df.head(20))
+                    with st.expander(f"📖 Show full {table_name} Table"):
+                        st.dataframe(table_df)
+                    st.download_button(  
+                        f"⬇️ Download {table_name} (CSV)",  
+                        data=convert_df_to_csv(table_df),  
+                        file_name=f"{table_name.lower().replace(' ', '_')}.csv",  
+                        mime="text/csv",  
+                    )  
+                    st.download_button(  
+                        f"⬇️ Download {table_name} (Excel)",  
+                        data=convert_df_to_excel(table_df),  
+                        file_name=f"{table_name.lower().replace(' ', '_')}.xlsx",  
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  
+                    )  
+                else:  
+                    st.info("ℹ️ Not available from the uploaded CSV.")
 
 # --- Select table for visualization ---
 st.subheader("📌 Select Table for Visualization")
@@ -141,8 +146,9 @@ if not available_tables:
 
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
-st.write(f"Selected Table: {selected_table_name} (First 20 Rows)")
-st.dataframe(selected_df.head(20))
+if st.button("Expand Selected Table Preview"):
+    st.write(f"{selected_table_name} (First 20 Rows)")
+    st.dataframe(selected_df.head(20))
 
 # --- Column selection ---
 st.subheader("📌 Column Selection for Visualization")
@@ -348,20 +354,15 @@ else:
 hide_streamlit_style = """
 <style>
 #MainMenu, footer, header {visibility: hidden;}
-/* Hide standard header/footer and main menu */
 footer {display: none !important;}
 header {display: none !important;}
 #MainMenu {display: none !important;}
 [data-testid="stToolbar"] { display: none !important; }
-/* Hide 3-dot menu in top-right */
 .st-emotion-cache-1xw8zd0 {display: none !important;}
 [aria-label="View app source"] {display: none !important;}
-/* Hide github ribbon/link if present */
 a[href^="https://github.com"] {display: none !important;}
-/* Additional selectors for Streamlit 1.20+ chrome */
 [data-testid="stDecoration"] {display: none !important;}
 [data-testid="stStatusWidget"] {display: none !important;}
-/* Hide the Home menu button if present */
 button[title="Menu"] {display: none !important;}
 </style>
 """
