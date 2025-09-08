@@ -12,6 +12,23 @@ import io
 # --- Page config ---
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
 st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
+# --- Hide all Streamlit default chrome and extra header/footer links ---
+hide_streamlit_style = """
+<style>
+#MainMenu, footer, header {visibility: hidden;}
+footer {display: none !important;}
+header {display: none !important;}
+#MainMenu {display: none !important;}
+[data-testid="stToolbar"] { display: none !important; }
+.st-emotion-cache-1xw8zd0 {display: none !important;}
+[aria-label="View app source"] {display: none !important;}
+a[href^="https://github.com"] {display: none !important;}
+[data-testid="stDecoration"] {display: none !important;}
+[data-testid="stStatusWidget"] {display: none !important;}
+button[title="Menu"] {display: none !important;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # --- Helpers ---
 def find_col_ci(df: pd.DataFrame, target: str):
@@ -366,20 +383,4 @@ if date_col and amount_col:
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
 
-# --- Hide all Streamlit default chrome and extra header/footer links ---
-hide_streamlit_style = """
-<style>
-#MainMenu, footer, header {visibility: hidden;}
-footer {display: none !important;}
-header {display: none !important;}
-#MainMenu {display: none !important;}
-[data-testid="stToolbar"] { display: none !important; }
-.st-emotion-cache-1xw8zd0 {display: none !important;}
-[aria-label="View app source"] {display: none !important;}
-a[href^="https://github.com"] {display: none !important;}
-[data-testid="stDecoration"] {display: none !important;}
-[data-testid="stStatusWidget"] {display: none !important;}
-button[title="Menu"] {display: none !important;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
