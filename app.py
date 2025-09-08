@@ -10,7 +10,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import io
 
 # --- Page config ---
-st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
+st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 # --- Hide all Streamlit default chrome and extra header/footer links ---
 hide_streamlit_style = """
@@ -357,9 +357,9 @@ if date_col and amount_col:
 
             st.plotly_chart(fig_forecast, use_container_width=True)
 
-            png_bytes = export_plotly_fig(fig_forecast)
-            if png_bytes:
-                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes, file_name="forecast.png", mime="image/png")
+            png_bytes_forecast = export_plotly_fig(fig_forecast)
+            if png_bytes_forecast:
+                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
 
             forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
             st.subheader("📅 Forecast Table (last rows)")
