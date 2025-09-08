@@ -11,7 +11,7 @@ import io
 
 # --- Page config ---
 st.set_page_config(page_title="CSV Visualizer & Forecaster", layout="wide")
-st.title("📊 CSV Data Visualizer with Forecasting (Interactive)")
+st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 # --- Hide all Streamlit default chrome and extra header/footer links ---
 hide_streamlit_style = """
 <style>
@@ -317,9 +317,8 @@ try:
         png_bytes = export_plotly_fig(fig)
         if png_bytes:
             st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="chart.png", mime="image/png")
-            # Remove html download button, replaced by PNG download above
-    except Exception as e:
-        st.error(f"⚠️ Failed to render chart: {e}")
+except Exception as e:
+    st.error(f"⚠️ Failed to render chart: {e}")
 
 # --- Forecasting section ---
 st.subheader("🔮 Forecasting (optional)")
@@ -361,7 +360,6 @@ if date_col and amount_col:
             png_bytes = export_plotly_fig(fig_forecast)
             if png_bytes:
                 st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes, file_name="forecast.png", mime="image/png")
-                # Remove HTML download button replaced by PNG download above
 
             forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
             st.subheader("📅 Forecast Table (last rows)")
