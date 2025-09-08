@@ -53,7 +53,7 @@ def export_plotly_fig(fig):
         return None
 
 def export_plotly_html(fig):
-    return fig.to_html(include_plotlyjs="cdn")
+    return None  # Disabled as no HTML download needed
 
 def export_matplotlib_fig(fig):
     buf = io.BytesIO()
@@ -81,8 +81,6 @@ except Exception as e:
     st.stop()
 
 st.success("✅ File uploaded successfully!")
-
-# --- Removed Uploaded Table Preview Section ---
 
 # --- Build derived tables ---
 id_col = find_col_ci(uploaded_df, "ID")
@@ -129,10 +127,9 @@ for table_name, table_df in tables_dict.items():
     if state_key not in st.session_state:
         st.session_state[state_key] = False
 
-    # Button label always reflects current state before toggle
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
     clicked = st.button(btn_label, key=f"btn_{table_name}")
-    if clicked:  # Toggle state on button click
+    if clicked:
         st.session_state[state_key] = not st.session_state[state_key]
 
     if st.session_state[state_key]:
@@ -320,9 +317,9 @@ try:
         png_bytes = export_plotly_fig(fig)
         if png_bytes:
             st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="chart.png", mime="image/png")
-        st.download_button("⬇️ Download Chart (HTML, interactive)", data=export_plotly_html(fig), file_name="chart.html", mime="text/html")
-except Exception as e:
-    st.error(f"⚠️ Failed to render chart: {e}")
+            # Remove html download button, replaced by PNG download above
+    except Exception as e:
+        st.error(f"⚠️ Failed to render chart: {e}")
 
 # --- Forecasting section ---
 st.subheader("🔮 Forecasting (optional)")
@@ -337,42 +334,42 @@ if date_col and amount_col:
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
         forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
 
-        if len(forecast_df) >= 3:  
-            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)  
-            model = Prophet()  
-            model.fit(forecast_df)  
-            future = model.make_future_dataframe(periods=horizon, freq="M")  
-            forecast = model.predict(future)  
+        if len(forecast_df) >= 3:
+            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
+            model = Prophet()
+            model.fit(forecast_df)
+            future = model.make_future_dataframe(periods=horizon, freq="M")
+            forecast = model.predict(future)
 
-            last_date = forecast_df["ds"].max()  
-            hist_forecast = forecast[forecast["ds"] <= last_date]  
-            future_forecast = forecast[forecast["ds"] > last_date]  
+            last_date = forecast_df["ds"].max()
+            hist_forecast = forecast[forecast["ds"] <= last_date]
+            future_forecast = forecast[forecast["ds"] > last_date]
 
-            st.write("### Forecast Plot")  
-            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")  
-            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))  
-            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))  
+            st.write("### Forecast Plot")
+            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
+            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
 
-            if show_confidence:  
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))  
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))  
+            if show_confidence:
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
 
-            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")  
+            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
 
-            st.plotly_chart(fig_forecast, use_container_width=True)  
+            st.plotly_chart(fig_forecast, use_container_width=True)
 
-            png_bytes = export_plotly_fig(fig_forecast)  
-            if png_bytes:  
-                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes, file_name="forecast.png", mime="image/png")  
-            st.download_button("⬇️ Download Forecast Chart (HTML, interactive)", data=export_plotly_html(fig_forecast), file_name="forecast.html", mime="text/html")  
+            png_bytes = export_plotly_fig(fig_forecast)
+            if png_bytes:
+                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes, file_name="forecast.png", mime="image/png")
+                # Remove HTML download button replaced by PNG download above
 
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})  
-            st.subheader("📅 Forecast Table (last rows)")  
-            st.dataframe(forecast_table)  
-            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")  
-        else:  
-            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")  
-    except Exception as e:  
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
+            st.subheader("📅 Forecast Table (last rows)")
+            st.dataframe(forecast_table)
+            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")
+        else:
+            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
+    except Exception as e:
         st.error(f"❌ Forecasting failed: {e}")
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
