@@ -244,8 +244,8 @@ if need_hue:
 
 st.write("### Chart:")
 
+fig = None
 try:
-    fig = None
     if chart_type == "Scatter Plot":
         fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
     elif chart_type == "Line Chart":
