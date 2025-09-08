@@ -82,19 +82,7 @@ except Exception as e:
 
 st.success("✅ File uploaded successfully!")
 
-# --- Uploaded Table Preview with Expand/Minimise Button ---
-st.subheader("🔍 Uploaded Table Preview")
-if "expand_Uploaded_Table" not in st.session_state:
-    st.session_state["expand_Uploaded_Table"] = False
-
-uploaded_btn_label = "Minimise Uploaded Table" if st.session_state["expand_Uploaded_Table"] else "Expand Uploaded Table"
-if st.button(uploaded_btn_label, key="btn_Uploaded_Table"):
-    st.session_state["expand_Uploaded_Table"] = not st.session_state["expand_Uploaded_Table"]
-
-if st.session_state["expand_Uploaded_Table"]:
-    st.dataframe(uploaded_df.head(20))
-    with st.expander("📖 Show full uploaded table"):
-        st.dataframe(uploaded_df)
+# --- Removed Uploaded Table Preview Section ---
 
 # --- Build derived tables ---
 id_col = find_col_ci(uploaded_df, "ID")
@@ -125,7 +113,7 @@ try:
 except Exception:
     bill_billdetails_df = pd.DataFrame()
 
-# --- Tables Preview with Expand/Minimise Buttons ---
+# --- Tables Preview with Auto Toggle Expand/Minimise Buttons ---
 st.subheader("🗂️ Tables Preview")
 tables_dict = {
     "Uploaded Table": uploaded_df,
@@ -140,28 +128,32 @@ for table_name, table_df in tables_dict.items():
     state_key = f"expand_{table_name.replace(' ', '_')}"
     if state_key not in st.session_state:
         st.session_state[state_key] = False
+
+    # Button label always reflects current state before toggle
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
-    if st.button(btn_label, key=f"btn_{table_name}"):
+    clicked = st.button(btn_label, key=f"btn_{table_name}")
+    if clicked:  # Toggle state on button click
         st.session_state[state_key] = not st.session_state[state_key]
+
     if st.session_state[state_key]:
         st.write(f"### {table_name} Table (First 20 Rows)")
         if not table_df.empty:
             st.dataframe(table_df.head(20))
             with st.expander(f"📖 Show full {table_name} Table"):
                 st.dataframe(table_df)
-            st.download_button(  
-                f"⬇️ Download {table_name} (CSV)",  
-                data=convert_df_to_csv(table_df),  
-                file_name=f"{table_name.lower().replace(' ', '_')}.csv",  
-                mime="text/csv",  
-            )  
-            st.download_button(  
-                f"⬇️ Download {table_name} (Excel)",  
-                data=convert_df_to_excel(table_df),  
-                file_name=f"{table_name.lower().replace(' ', '_')}.xlsx",  
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  
-            )  
-        else:  
+            st.download_button(
+                f"⬇️ Download {table_name} (CSV)",
+                data=convert_df_to_csv(table_df),
+                file_name=f"{table_name.lower().replace(' ', '_')}.csv",
+                mime="text/csv",
+            )
+            st.download_button(
+                f"⬇️ Download {table_name} (Excel)",
+                data=convert_df_to_excel(table_df),
+                file_name=f"{table_name.lower().replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        else:
             st.info("ℹ️ Not available from the uploaded CSV.")
 
 # --- Select table for visualization ---
@@ -176,8 +168,10 @@ selected_df = available_tables[selected_table_name].copy()
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
     st.session_state[sel_state_key] = False
+
 btn_sel_label = f"Minimise {selected_table_name} Table" if st.session_state[sel_state_key] else f"Expand {selected_table_name} Table"
-if st.button(btn_sel_label, key="btn_selected_table"):
+clicked_sel = st.button(btn_sel_label, key="btn_selected_table")
+if clicked_sel:
     st.session_state[sel_state_key] = not st.session_state[sel_state_key]
 if st.session_state[sel_state_key]:
     st.write(f"{selected_table_name} (First 20 Rows)")
@@ -382,5 +376,3 @@ if date_col and amount_col:
         st.error(f"❌ Forecasting failed: {e}")
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
-
-
