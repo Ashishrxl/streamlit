@@ -171,12 +171,43 @@ if not available_tables:
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
 
-# Order by date column if present
+# Order by date column if present and group by month
 date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date")
+amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
+
 if date_col_sel:
-    # Convert to datetime and sort
-    selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
-    selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
+    try:
+        # Convert to datetime and sort
+        selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
+        selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
+        
+        # Group by month if both date and amount columns exist
+        if amount_col_sel:
+            # Create a copy for monthly aggregation
+            monthly_df = selected_df.copy()
+            monthly_df['Year_Month'] = monthly_df[date_col_sel].dt.to_period('M')
+            
+            # Group by month and sum numerical columns
+            numerical_cols = monthly_df.select_dtypes(include=[np.number]).columns.tolist()
+            if numerical_cols:
+                monthly_aggregated = monthly_df.groupby('Year_Month')[numerical_cols].sum().reset_index()
+                monthly_aggregated['Year_Month'] = monthly_aggregated['Year_Month'].astype(str)
+                
+                # Add option to choose between original and monthly data
+                data_view = st.radio(
+                    "Select data view:",
+                    ["Original Data", "Monthly Aggregated Data"],
+                    help="Monthly aggregated data groups records by month and sums numerical values"
+                )
+                
+                if data_view == "Monthly Aggregated Data":
+                    selected_df = monthly_aggregated.copy()
+                    # Update column references for monthly data
+                    if date_col_sel in selected_df.columns:
+                        date_col_sel = 'Year_Month'
+                    st.info("📅 Data has been grouped by month and numerical values aggregated.")
+    except Exception as e:
+        st.warning(f"⚠️ Could not process date column: {e}")
 
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
@@ -258,15 +289,6 @@ if need_hue:
     if hue_col == "(None)":
         hue_col = None
 
-# If visualizing by date, always sort date column for visualization
-date_col_vis = x_col if 'date' in str(x_col).lower() else None
-if date_col_vis:
-    try:
-        df_vis[date_col_vis] = pd.to_datetime(df_vis[date_col_vis], errors="coerce")
-        df_vis = df_vis.sort_values(by=date_col_vis).reset_index(drop=True)
-    except Exception:
-        pass  # if can't convert, show as is
-
 st.write("### Chart:")
 
 fig = None
@@ -317,7 +339,14 @@ try:
     elif chart_type == "Sunburst":
         fig = px.sunburst(df_vis, path=[x_col], values=y_col)
     elif chart_type == "Time-Series Decomposition":
-        date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
+        # Handle different date column formats
+        date_series = None
+        if 'Year_Month' in df_vis.columns:
+            # Convert Year_Month string back to datetime
+            date_series = pd.to_datetime(df_vis['Year_Month'], errors="coerce")
+        else:
+            date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
+        
         value_series = pd.to_numeric(df_vis[y_col], errors="coerce")
         df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()
         df_ts = df_ts.sort_values('x')
@@ -347,16 +376,26 @@ except Exception as e:
 
 # Forecasting section
 st.subheader("🔮 Forecasting (optional)")
-date_col = find_col_ci(df_vis, "date")
+date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month")
 amount_col = find_col_ci(df_vis, "amount")
 if date_col and amount_col:
     try:
-        df_vis[date_col] = pd.to_datetime(df_vis[date_col], errors="coerce")
         forecast_df = df_vis[[date_col, amount_col]].copy()
+        
+        # Handle Year_Month format
+        if date_col == 'Year_Month':
+            forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
+        else:
+            forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
+        
         forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
-        forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
+        
+        # If not already monthly, group by month
+        if date_col != 'Year_Month':
+            forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
+        
         if len(forecast_df) >= 3:  
             horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)  
             model = Prophet()  
