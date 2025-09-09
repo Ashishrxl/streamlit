@@ -12,7 +12,8 @@ import io
 # --- Page config ---
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
-# --- Hide all Streamlit default chrome and extra header/footer links ---
+
+# --- Hide Streamlit chrome ---
 hide_streamlit_style = """
 <style>
 #MainMenu, footer, header {visibility: hidden;}
@@ -51,9 +52,6 @@ def export_plotly_fig(fig):
         return pio.to_image(fig, format="png", engine="kaleido")
     except Exception:
         return None
-
-def export_plotly_html(fig):
-    return None  # Disabled as no HTML download needed
 
 def export_matplotlib_fig(fig):
     buf = io.BytesIO()
@@ -111,7 +109,7 @@ try:
 except Exception:
     bill_billdetails_df = pd.DataFrame()
 
-# --- Tables Preview with Auto Toggle Expand/Minimise Buttons ---
+# --- Tables Preview ---
 st.subheader("🗂️ Tables Preview")
 tables_dict = {
     "Uploaded Table": uploaded_df,
@@ -196,15 +194,13 @@ other_cols = [c for c in df_vis.columns if c not in categorical_cols + numerical
 st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
 st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
 
-# --- Visualization choices (dynamic axis selection) ---
+# --- Visualization choices ---
 st.subheader("📈 Interactive Visualization")
-
 chart_options = [
     "Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap",
     "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot",
     "Seaborn Heatmap", "Plotly Heatmap", "Treemap", "Sunburst", "Time-Series Decomposition"
 ]
-
 chart_type = st.selectbox("Select Chart Type", chart_options)
 
 chart_x_y_hue_req = {
@@ -225,12 +221,10 @@ chart_x_y_hue_req = {
 }
 
 need_x, need_y, need_hue = chart_x_y_hue_req.get(chart_type, (True, True, False))
-
 x_col = y_col = hue_col = None
 
 if need_x:
-    x_options = [c for c in df_vis.columns]
-    x_col = st.selectbox("Select X Axis", x_options, key="x_axis")
+    x_col = st.selectbox("Select X Axis", df_vis.columns, key="x_axis")
 
 if need_y:
     y_options = [c for c in df_vis.columns if (c != x_col or not need_x)]
@@ -260,31 +254,23 @@ try:
     elif chart_type == "Seaborn Scatterplot":
         plt.figure(figsize=(8, 5))
         sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
-        plt.close()
+        st.pyplot(plt.gcf()); plt.close()
     elif chart_type == "Seaborn Boxplot":
         plt.figure(figsize=(8, 5))
         sns.boxplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
-        plt.close()
+        st.pyplot(plt.gcf()); plt.close()
     elif chart_type == "Seaborn Violinplot":
         plt.figure(figsize=(8, 5))
         sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
-        plt.close()
+        st.pyplot(plt.gcf()); plt.close()
     elif chart_type == "Seaborn Pairplot":
         sns.pairplot(df_vis, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf())
-        plt.close()
+        st.pyplot(plt.gcf()); plt.close()
     elif chart_type == "Seaborn Heatmap":
         plt.figure(figsize=(8, 6))
         corr = df_vis.select_dtypes(include=[np.number]).corr()
         sns.heatmap(corr, annot=True, cmap="coolwarm")
-        st.pyplot(plt.gcf())
-        plt.close()
+        st.pyplot(plt.gcf()); plt.close()
     elif chart_type == "Plotly Heatmap":
         fig = px.density_heatmap(df_vis, x=x_col, y=y_col)
     elif chart_type == "Treemap":
@@ -294,8 +280,7 @@ try:
     elif chart_type == "Time-Series Decomposition":
         date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
         value_series = pd.to_numeric(df_vis[y_col], errors="coerce")
-        df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()
-        df_ts = df_ts.sort_values('x')
+        df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna().sort_values('x')
         df_ts.set_index('x', inplace=True)
         if len(df_ts) >= 24:
             result = seasonal_decompose(df_ts['y'], model="additive", period=12)
@@ -304,11 +289,10 @@ try:
             result.trend.plot(ax=axs[1], title="Trend")
             result.seasonal.plot(ax=axs[2], title="Seasonal")
             result.resid.plot(ax=axs[3], title="Residual")
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            plt.tight_layout(); st.pyplot(fig); plt.close()
         else:
             st.warning("At least 24 data points needed for decomposition.")
+
     if fig is not None and chart_type not in [
         "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot",
         "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"
@@ -320,7 +304,7 @@ try:
 except Exception as e:
     st.error(f"⚠️ Failed to render chart: {e}")
 
-# --- Forecasting section ---
+# --- Forecasting ---
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date")
 amount_col = find_col_ci(df_vis, "amount")
@@ -354,20 +338,10 @@ if date_col and amount_col:
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
 
             fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
-
             st.plotly_chart(fig_forecast, use_container_width=True)
 
             png_bytes_forecast = export_plotly_fig(fig_forecast)
             if png_bytes_forecast:
                 st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
 
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
-            st.subheader("📅 Forecast Table (last rows)")
-            st.dataframe(forecast_table)
-            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")
-        else:
-            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
-    except Exception as e:
-        st.error(f"❌ Forecasting failed: {e}")
-else:
-    st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","
