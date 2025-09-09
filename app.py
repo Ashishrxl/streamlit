@@ -170,6 +170,14 @@ if not available_tables:
 
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
+
+# Order by date column if present
+date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date")
+if date_col_sel:
+    # Convert to datetime and sort
+    selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
+    selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
+
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
     st.session_state[sel_state_key] = False
@@ -249,6 +257,15 @@ if need_hue:
     hue_col = st.selectbox("Select Hue/Category (optional)", ["(None)"] + hue_options, key="hue_axis")
     if hue_col == "(None)":
         hue_col = None
+
+# If visualizing by date, always sort date column for visualization
+date_col_vis = x_col if 'date' in str(x_col).lower() else None
+if date_col_vis:
+    try:
+        df_vis[date_col_vis] = pd.to_datetime(df_vis[date_col_vis], errors="coerce")
+        df_vis = df_vis.sort_values(by=date_col_vis).reset_index(drop=True)
+    except Exception:
+        pass  # if can't convert, show as is
 
 st.write("### Chart:")
 
@@ -340,7 +357,6 @@ if date_col and amount_col:
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
         forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
-
         if len(forecast_df) >= 3:  
             horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)  
             model = Prophet()  
