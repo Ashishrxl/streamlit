@@ -13,20 +13,14 @@ import io
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
-# --- Hide Streamlit chrome ---
+# --- Hide Streamlit UI ---
 hide_streamlit_style = """
 <style>
 #MainMenu, footer, header {visibility: hidden;}
-footer {display: none !important;}
-header {display: none !important;}
-#MainMenu {display: none !important;}
-[data-testid="stToolbar"] { display: none !important; }
-.st-emotion-cache-1xw8zd0 {display: none !important;}
-[aria-label="View app source"] {display: none !important;}
-a[href^="https://github.com"] {display: none !important;}
-[data-testid="stDecoration"] {display: none !important;}
-[data-testid="stStatusWidget"] {display: none !important;}
-button[title="Menu"] {display: none !important;}
+footer, header, #MainMenu {display: none !important;}
+[data-testid="stToolbar"], .st-emotion-cache-1xw8zd0,
+[aria-label="View app source"], [data-testid="stDecoration"],
+[data-testid="stStatusWidget"], button[title="Menu"] {display: none !important;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -120,6 +114,8 @@ tables_dict = {
     "Bill + BillDetails": bill_billdetails_df
 }
 
+
+# Expand/minimise per-table
 for table_name, table_df in tables_dict.items():
     state_key = f"expand_{table_name.replace(' ', '_')}"
     if state_key not in st.session_state:
@@ -160,17 +156,6 @@ if not available_tables:
 
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
-sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
-if sel_state_key not in st.session_state:
-    st.session_state[sel_state_key] = False
-
-btn_sel_label = f"Minimise {selected_table_name} Table" if st.session_state[sel_state_key] else f"Expand {selected_table_name} Table"
-clicked_sel = st.button(btn_sel_label, key="btn_selected_table")
-if clicked_sel:
-    st.session_state[sel_state_key] = not st.session_state[sel_state_key]
-if st.session_state[sel_state_key]:
-    st.write(f"{selected_table_name} (First 20 Rows)")
-    st.dataframe(selected_df.head(20))
 
 # --- Column selection ---
 st.subheader("📌 Column Selection for Visualization")
@@ -181,130 +166,12 @@ selected_columns = st.multiselect(
     all_columns,
     default=default_cols
 )
-
 if not selected_columns:
     st.warning("⚠️ Please select at least one column for visualization.")
     st.stop()
-
 df_vis = selected_df[selected_columns].copy()
-categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
-numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
-other_cols = [c for c in df_vis.columns if c not in categorical_cols + numerical_cols]
 
-st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
-st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
-
-# --- Visualization choices ---
-st.subheader("📈 Interactive Visualization")
-chart_options = [
-    "Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap",
-    "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot",
-    "Seaborn Heatmap", "Plotly Heatmap", "Treemap", "Sunburst", "Time-Series Decomposition"
-]
-chart_type = st.selectbox("Select Chart Type", chart_options)
-
-chart_x_y_hue_req = {
-    "Scatter Plot": (True, True, True),
-    "Line Chart": (True, True, True),
-    "Bar Chart": (True, True, True),
-    "Histogram": (True, False, True),
-    "Correlation Heatmap": (False, False, False),
-    "Seaborn Scatterplot": (True, True, True),
-    "Seaborn Boxplot": (True, True, True),
-    "Seaborn Violinplot": (True, True, True),
-    "Seaborn Pairplot": (False, False, True),
-    "Seaborn Heatmap": (False, False, False),
-    "Plotly Heatmap": (True, True, False),
-    "Treemap": (True, True, False),
-    "Sunburst": (True, True, False),
-    "Time-Series Decomposition": (True, True, False)
-}
-
-need_x, need_y, need_hue = chart_x_y_hue_req.get(chart_type, (True, True, False))
-x_col = y_col = hue_col = None
-
-if need_x:
-    x_col = st.selectbox("Select X Axis", df_vis.columns, key="x_axis")
-
-if need_y:
-    y_options = [c for c in df_vis.columns if (c != x_col or not need_x)]
-    y_col = st.selectbox("Select Y Axis", y_options, key="y_axis")
-
-if need_hue:
-    hue_options = [c for c in df_vis.columns if c not in [x_col, y_col]]
-    hue_col = st.selectbox("Select Hue/Category (optional)", ["(None)"] + hue_options, key="hue_axis")
-    if hue_col == "(None)":
-        hue_col = None
-
-st.write("### Chart:")
-
-fig = None
-try:
-    if chart_type == "Scatter Plot":
-        fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
-    elif chart_type == "Line Chart":
-        fig = px.line(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
-    elif chart_type == "Bar Chart":
-        fig = px.bar(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
-    elif chart_type == "Histogram":
-        fig = px.histogram(df_vis, x=x_col, color=hue_col if hue_col else None)
-    elif chart_type == "Correlation Heatmap":
-        corr = df_vis.select_dtypes(include=[np.number]).corr()
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', aspect='auto')
-    elif chart_type == "Seaborn Scatterplot":
-        plt.figure(figsize=(8, 5))
-        sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf()); plt.close()
-    elif chart_type == "Seaborn Boxplot":
-        plt.figure(figsize=(8, 5))
-        sns.boxplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf()); plt.close()
-    elif chart_type == "Seaborn Violinplot":
-        plt.figure(figsize=(8, 5))
-        sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf()); plt.close()
-    elif chart_type == "Seaborn Pairplot":
-        sns.pairplot(df_vis, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf()); plt.close()
-    elif chart_type == "Seaborn Heatmap":
-        plt.figure(figsize=(8, 6))
-        corr = df_vis.select_dtypes(include=[np.number]).corr()
-        sns.heatmap(corr, annot=True, cmap="coolwarm")
-        st.pyplot(plt.gcf()); plt.close()
-    elif chart_type == "Plotly Heatmap":
-        fig = px.density_heatmap(df_vis, x=x_col, y=y_col)
-    elif chart_type == "Treemap":
-        fig = px.treemap(df_vis, path=[x_col], values=y_col)
-    elif chart_type == "Sunburst":
-        fig = px.sunburst(df_vis, path=[x_col], values=y_col)
-    elif chart_type == "Time-Series Decomposition":
-        date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
-        value_series = pd.to_numeric(df_vis[y_col], errors="coerce")
-        df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna().sort_values('x')
-        df_ts.set_index('x', inplace=True)
-        if len(df_ts) >= 24:
-            result = seasonal_decompose(df_ts['y'], model="additive", period=12)
-            fig, axs = plt.subplots(4, 1, figsize=(10, 10))
-            result.observed.plot(ax=axs[0], title="Observed")
-            result.trend.plot(ax=axs[1], title="Trend")
-            result.seasonal.plot(ax=axs[2], title="Seasonal")
-            result.resid.plot(ax=axs[3], title="Residual")
-            plt.tight_layout(); st.pyplot(fig); plt.close()
-        else:
-            st.warning("At least 24 data points needed for decomposition.")
-
-    if fig is not None and chart_type not in [
-        "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot",
-        "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"
-    ]:
-        st.plotly_chart(fig, use_container_width=True)
-        png_bytes = export_plotly_fig(fig)
-        if png_bytes:
-            st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="chart.png", mime="image/png")
-except Exception as e:
-    st.error(f"⚠️ Failed to render chart: {e}")
-
-# --- Forecasting ---
+# --- Forecasting section ---
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date")
 amount_col = find_col_ci(df_vis, "amount")
@@ -329,19 +196,64 @@ if date_col and amount_col:
             future_forecast = forecast[forecast["ds"] > last_date]
 
             st.write("### Forecast Plot")
-            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
-            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
-            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
+            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"})
+            fig_forecast.update_traces(line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"],
+                                     mode="lines", name="Forecast",
+                                     line=dict(color="orange", dash="dash"))
 
             if show_confidence:
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"],
+                                         mode="lines", name="Upper Bound",
+                                         line=dict(dash="dot", color="green"))
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"],
+                                         mode="lines", name="Lower Bound",
+                                         line=dict(dash="dot", color="red"))
 
-            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
+            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(),
+                                   fillcolor=forecast_color, opacity=forecast_opacity,
+                                   line_width=0, annotation_text="Forecast Period")
+
             st.plotly_chart(fig_forecast, use_container_width=True)
 
-            png_bytes_forecast = export_plotly_fig(fig_forecast)
-            if png_bytes_forecast:
-                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon)
+            forecast_table = forecast_table.rename(columns={
+                "ds": "Date", "yhat": "Predicted",
+                "yhat_lower": "Lower Bound", "yhat_upper": "Upper Bound"
+            })
+            st.subheader("📅 Forecast Table (last rows)")
+            st.dataframe(forecast_table)
+            st.download_button("⬇️ Download Forecast Data (CSV)",
+                               data=convert_df_to_csv(forecast_table),
+                               file_name="forecast.csv", mime="text/csv")
+        else:
+            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
+    except Exception as e:
+        st.error(f"❌ Forecasting failed: {e}")
+else:
+    st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns.")
 
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","
+# --- Hugging Face Q&A ---
+from pandasai import SmartDataframe
+from pandasai.llm import HuggingFaceLLM
+
+st.subheader("💬 Ask about your selected data (Hugging Face Model)")
+
+HF_TOKEN = st.secrets["huggingface"]["token"]
+MODEL_NAME = st.secrets["huggingface"].get("model", "tiiuae/falcon-7b-instruct")
+hf_llm = HuggingFaceLLM(api_token=HF_TOKEN, model=MODEL_NAME)
+
+def query_dataframe_with_llm(query, df):
+    try:
+        sdf = SmartDataframe(df, config={"llm": hf_llm})
+        return sdf.chat(query)
+    except Exception as e:
+        return f"❌ Error: {e}"
+
+user_query = st.text_area("Ask a question about this table")
+if st.button("Ask LLM"):
+    if user_query:
+        with st.spinner("🤔 Thinking..."):
+            answer = query_dataframe_with_llm(user_query, df_vis)
+            st.write("### Answer")
+            st.write(answer)
