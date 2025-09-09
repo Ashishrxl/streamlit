@@ -1,9 +1,11 @@
 streamlit
-requests
 pandas
-matplotlib
-seaborn
-Prophet
+numpy
 plotly
+prophet
+seaborn
+matplotlib
 statsmodels
-pandasai
+openpyxl
+xlsxwriter
+kaleido
