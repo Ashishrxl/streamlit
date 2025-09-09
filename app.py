@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import seasonal_decompose
 import io
 
---- Page config ---
+
 
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
---- Hide all Streamlit default chrome and extra header/footer links ---
+
 
 hide_streamlit_style = """
 
@@ -33,7 +33,7 @@ button[title="Menu"] {display: none !important;}
 </style>  """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
---- Helpers ---
+
 
 def find_col_ci(df: pd.DataFrame, target: str):
 for c in df.columns:
@@ -65,21 +65,21 @@ fig.savefig(buf, format="png", bbox_inches="tight")
 buf.seek(0)
 return buf.getvalue()
 
---- Sidebar controls ---
+
 
 st.sidebar.header("⚙️ Settings")
 forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
 forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01)
 show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)
 
---- File upload ---
+
 
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 if uploaded_file is None:
 st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")
 st.stop()
 
---- Read CSV ---
+
 
 try:
 uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
@@ -89,7 +89,7 @@ st.stop()
 
 st.success("✅ File uploaded successfully!")
 
---- Build derived tables ---
+
 
 id_col = find_col_ci(uploaded_df, "ID")
 name_col = find_col_ci(uploaded_df, "Name")
@@ -118,8 +118,6 @@ billindex_col = find_col_ci(uploaded_df, "Billindex")
 bill_billdetails_df = pd.merge(bill_df, billdetails_df, left_on=bill_col, right_on=billindex_col, how="inner", suffixes=("_bill", "_details")) if not bill_df.empty and not billdetails_df.empty else pd.DataFrame()
 except Exception:
 bill_billdetails_df = pd.DataFrame()
-
---- Tables Preview with Auto Toggle Expand/Minimise Buttons ---
 
 st.subheader("🗂️ Tables Preview")
 tables_dict = {
@@ -162,7 +160,7 @@ if st.session_state[state_key]:
     else:  
         st.info("ℹ️ Not available from the uploaded CSV.")
 
---- Select table for visualization ---
+
 
 st.subheader("📌 Select Table for Visualization")
 available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
@@ -184,7 +182,7 @@ if st.session_state[sel_state_key]:
 st.write(f"{selected_table_name} (First 20 Rows)")
 st.dataframe(selected_df.head(20))
 
---- Column selection ---
+
 
 st.subheader("📌 Column Selection for Visualization")
 all_columns = selected_df.columns.tolist()
@@ -207,7 +205,7 @@ other_cols = [c for c in df_vis.columns if c not in categorical_cols + numerical
 st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
 st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
 
---- Visualization choices (dynamic axis selection) ---
+
 
 st.subheader("📈 Interactive Visualization")
 
@@ -332,7 +330,7 @@ st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="cha
 except Exception as e:
 st.error(f"⚠️ Failed to render chart: {e}")
 
---- Forecasting section ---
+
 
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date")
