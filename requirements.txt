@@ -9,3 +9,4 @@ plotly
 statsmodels
 xlsxwriter
 kaleido
+pandasai
