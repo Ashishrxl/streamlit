@@ -171,9 +171,10 @@ if not available_tables:
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
 
-# Order by date column if present and group by month
+# Detect columns for date, amount, and name
 date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date")
 amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
+name_col_sel = find_col_ci(selected_df, "name") or find_col_ci(selected_df, "Name")
 
 if date_col_sel:
     try:
@@ -181,33 +182,44 @@ if date_col_sel:
         selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
         selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
         
-        # Group by month if both date and amount columns exist
-        if amount_col_sel:
-            # Create a copy for monthly aggregation
-            monthly_df = selected_df.copy()
-            monthly_df['Year_Month'] = monthly_df[date_col_sel].dt.to_period('M')
+        if amount_col_sel and name_col_sel:
+            # Create a 'Year_Month' period column
+            selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
             
-            # Group by month and sum numerical columns
-            numerical_cols = monthly_df.select_dtypes(include=[np.number]).columns.tolist()
-            if numerical_cols:
-                monthly_aggregated = monthly_df.groupby('Year_Month')[numerical_cols].sum().reset_index()
-                monthly_aggregated['Year_Month'] = monthly_aggregated['Year_Month'].astype(str)
-                
-                # Add option to choose between original and monthly data
-                data_view = st.radio(
-                    "Select data view:",
-                    ["Original Data", "Monthly Aggregated Data"],
-                    help="Monthly aggregated data groups records by month and sums numerical values"
-                )
-                
-                if data_view == "Monthly Aggregated Data":
-                    selected_df = monthly_aggregated.copy()
-                    # Update column references for monthly data
-                    if date_col_sel in selected_df.columns:
-                        date_col_sel = 'Year_Month'
-                    st.info("📅 Data has been grouped by month and numerical values aggregated.")
+            # Group by 'Year_Month' and 'Name' summing numerical columns including Amount
+            numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+            
+            grouped_df = selected_df.groupby(['Year_Month', name_col_sel])[numerical_cols].sum().reset_index()
+            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
+            
+            # Radio for data view option
+            data_view = st.radio(
+                "Select data view:",
+                ["Original Data", "Monthly Aggregated by Name"],
+                help="Monthly aggregation sums amounts grouped by month and name"
+            )
+            
+            if data_view == "Monthly Aggregated by Name":
+                selected_df = grouped_df.copy()
+                date_col_sel = 'Year_Month'
+                st.info("📅 Data grouped by month and name with numerical values aggregated.")
+        elif amount_col_sel:
+            # If no name column, fallback to monthly aggregation only
+            selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
+            numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+            grouped_df = selected_df.groupby('Year_Month')[numerical_cols].sum().reset_index()
+            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
+            data_view = st.radio(
+                "Select data view:",
+                ["Original Data", "Monthly Aggregated Data"],
+                help="Monthly aggregated data groups records by month and sums numerical values"
+            )
+            if data_view == "Monthly Aggregated Data":
+                selected_df = grouped_df.copy()
+                date_col_sel = 'Year_Month'
+                st.info("📅 Data grouped by month with numerical values aggregated.")
     except Exception as e:
-        st.warning(f"⚠️ Could not process date column: {e}")
+        st.warning(f"⚠️ Could not process date grouping: {e}")
 
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
@@ -339,14 +351,11 @@ try:
     elif chart_type == "Sunburst":
         fig = px.sunburst(df_vis, path=[x_col], values=y_col)
     elif chart_type == "Time-Series Decomposition":
-        # Handle different date column formats
         date_series = None
         if 'Year_Month' in df_vis.columns:
-            # Convert Year_Month string back to datetime
             date_series = pd.to_datetime(df_vis['Year_Month'], errors="coerce")
         else:
             date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
-        
         value_series = pd.to_numeric(df_vis[y_col], errors="coerce")
         df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()
         df_ts = df_ts.sort_values('x')
@@ -378,11 +387,11 @@ except Exception as e:
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month")
 amount_col = find_col_ci(df_vis, "amount")
+name_col = find_col_ci(df_vis, "name")
 if date_col and amount_col:
     try:
         forecast_df = df_vis[[date_col, amount_col]].copy()
         
-        # Handle Year_Month format
         if date_col == 'Year_Month':
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
         else:
@@ -390,47 +399,48 @@ if date_col and amount_col:
         
         forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
+
+        # If data is not monthly aggregated, group by month
+        if date_col != 'Year_Month':
+            forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()
+        
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
         
-        # If not already monthly, group by month
-        if date_col != 'Year_Month':
-            forecast_df = forecast_df.groupby(pd.Grouper(key="ds", freq="M")).sum(numeric_only=True).reset_index()
-        
-        if len(forecast_df) >= 3:  
-            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)  
-            model = Prophet()  
-            model.fit(forecast_df)  
-            future = model.make_future_dataframe(periods=horizon, freq="M")  
-            forecast = model.predict(future)  
-
-            last_date = forecast_df["ds"].max()  
-            hist_forecast = forecast[forecast["ds"] <= last_date]  
-            future_forecast = forecast[forecast["ds"] > last_date]  
-
-            st.write("### Forecast Plot")  
-            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")  
-            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))  
-            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))  
-
-            if show_confidence:  
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))  
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))  
-
-            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")  
-
-            st.plotly_chart(fig_forecast, use_container_width=True)  
-
-            png_bytes_forecast = export_plotly_fig(fig_forecast)  
-            if png_bytes_forecast:  
-                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")  
-
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})  
-            st.subheader("📅 Forecast Table (last rows)")  
-            st.dataframe(forecast_table)  
-            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")  
-        else:  
-            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")  
-    except Exception as e:  
+        if len(forecast_df) >= 3:
+            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
+            model = Prophet()
+            model.fit(forecast_df)
+            future = model.make_future_dataframe(periods=horizon, freq="M")
+            forecast = model.predict(future)
+            
+            last_date = forecast_df["ds"].max()
+            hist_forecast = forecast[forecast["ds"] <= last_date]
+            future_forecast = forecast[forecast["ds"] > last_date]
+            
+            st.write("### Forecast Plot")
+            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
+            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
+            
+            if show_confidence:
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
+                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
+            
+            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
+            
+            st.plotly_chart(fig_forecast, use_container_width=True)
+            
+            png_bytes_forecast = export_plotly_fig(fig_forecast)
+            if png_bytes_forecast:
+                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
+            
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
+            st.subheader("📅 Forecast Table (last rows)")
+            st.dataframe(forecast_table)
+            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")
+        else:
+            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
+    except Exception as e:
         st.error(f"❌ Forecasting failed: {e}")
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
