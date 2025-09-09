@@ -1,5 +1,4 @@
 streamlit
-rjsmin
 requests
 pandas
 matplotlib
@@ -7,6 +6,4 @@ seaborn
 Prophet
 plotly
 statsmodels
-xlsxwriter
-kaleido
 pandasai
