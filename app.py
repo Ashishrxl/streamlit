@@ -54,10 +54,6 @@ def export_plotly_fig(fig):
     except Exception:
         return None
 
-def export_plotly_html(fig):
-    """Export Plotly figure as HTML (disabled)"""
-    return None  # Disabled as no HTML download needed
-
 def export_matplotlib_fig(fig):
     """Export Matplotlib figure as PNG"""
     buf = io.BytesIO()
@@ -181,24 +177,24 @@ if date_col_sel:
         # Convert to datetime and sort
         selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
         selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
-        
+
         if amount_col_sel and name_col_sel:
             # Create a 'Year_Month' period column
             selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
-            
+
             # Group by 'Year_Month' and 'Name' summing numerical columns including Amount
             numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
-            
+
             grouped_df = selected_df.groupby(['Year_Month', name_col_sel])[numerical_cols].sum().reset_index()
             grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-            
+
             # Radio for data view option
             data_view = st.radio(
                 "Select data view:",
                 ["Original Data", "Monthly Aggregated by Name"],
                 help="Monthly aggregation sums amounts grouped by month and name"
             )
-            
+
             if data_view == "Monthly Aggregated by Name":
                 selected_df = grouped_df.copy()
                 date_col_sel = 'Year_Month'
@@ -221,6 +217,7 @@ if date_col_sel:
     except Exception as e:
         st.warning(f"⚠️ Could not process date grouping: {e}")
 
+# Fixed: Better table display for selected table
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
     st.session_state[sel_state_key] = False
@@ -229,9 +226,29 @@ btn_sel_label = f"Minimise {selected_table_name} Table" if st.session_state[sel_
 clicked_sel = st.button(btn_sel_label, key="btn_selected_table")
 if clicked_sel:
     st.session_state[sel_state_key] = not st.session_state[sel_state_key]
+
 if st.session_state[sel_state_key]:
-    st.write(f"{selected_table_name} (First 20 Rows)")
+    st.write(f"### {selected_table_name} Table (First 20 Rows)")
     st.dataframe(selected_df.head(20))
+    # Add expandable section for full table
+    with st.expander(f"📖 Show Full {selected_table_name} Table ({len(selected_df)} rows)"):
+        st.dataframe(selected_df)
+    # Add download options for the selected table
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            f"⬇️ Download {selected_table_name} (CSV)",
+            data=convert_df_to_csv(selected_df),
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_selected.csv",
+            mime="text/csv",
+        )
+    with col2:
+        st.download_button(
+            f"⬇️ Download {selected_table_name} (Excel)",
+            data=convert_df_to_excel(selected_df),
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_selected.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 # Column selection
 st.subheader("📌 Column Selection for Visualization")
@@ -264,8 +281,6 @@ chart_options = [
     "Seaborn Heatmap", "Plotly Heatmap", "Treemap", "Sunburst", "Time-Series Decomposition"
 ]
 
-chart_type = st.selectbox("Select Chart Type", chart_options)
-
 chart_x_y_hue_req = {
     "Scatter Plot": (True, True, True),
     "Line Chart": (True, True, True),
@@ -282,6 +297,8 @@ chart_x_y_hue_req = {
     "Sunburst": (True, True, False),
     "Time-Series Decomposition": (True, True, False)
 }
+
+chart_type = st.selectbox("Select Chart Type", chart_options)
 
 need_x, need_y, need_hue = chart_x_y_hue_req.get(chart_type, (True, True, False))
 
@@ -320,19 +337,16 @@ try:
         plt.figure(figsize=(8, 5))
         sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
         st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
         plt.close()
     elif chart_type == "Seaborn Boxplot":
         plt.figure(figsize=(8, 5))
         sns.boxplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
         st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
         plt.close()
     elif chart_type == "Seaborn Violinplot":
         plt.figure(figsize=(8, 5))
         sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
         st.pyplot(plt.gcf())
-        st.info("Use download options on main chart above for Plotly exports.")
         plt.close()
     elif chart_type == "Seaborn Pairplot":
         sns.pairplot(df_vis, hue=hue_col if hue_col else None)
@@ -391,49 +405,49 @@ name_col = find_col_ci(df_vis, "name")
 if date_col and amount_col:
     try:
         forecast_df = df_vis[[date_col, amount_col]].copy()
-        
+
         if date_col == 'Year_Month':
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
         else:
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
-        
+
         forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
 
         # If data is not monthly aggregated, group by month
         if date_col != 'Year_Month':
             forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()
-        
+
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
-        
+
         if len(forecast_df) >= 3:
             horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
             model = Prophet()
             model.fit(forecast_df)
             future = model.make_future_dataframe(periods=horizon, freq="M")
             forecast = model.predict(future)
-            
+
             last_date = forecast_df["ds"].max()
             hist_forecast = forecast[forecast["ds"] <= last_date]
             future_forecast = forecast[forecast["ds"] > last_date]
-            
+
             st.write("### Forecast Plot")
             fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
             fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
             fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
-            
+
             if show_confidence:
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
-            
+
             fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
-            
+
             st.plotly_chart(fig_forecast, use_container_width=True)
-            
+
             png_bytes_forecast = export_plotly_fig(fig_forecast)
             if png_bytes_forecast:
                 st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
-            
+
             forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
             st.subheader("📅 Forecast Table (last rows)")
             st.dataframe(forecast_table)
