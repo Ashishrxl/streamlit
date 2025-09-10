@@ -172,81 +172,91 @@ date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Dat
 amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
 name_col_sel = find_col_ci(selected_df, "name") or find_col_ci(selected_df, "Name")
 
-# Enhanced aggregation options
+# Enhanced aggregation options with Monthly and Yearly
 if date_col_sel:
     try:
         # Convert to datetime and sort
         selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
         selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
 
-        # Add 'Year_Month' period column
+        # Add period columns for both monthly and yearly aggregation
         selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
+        selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')
         
         # Identify numerical and categorical columns
         numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
-        categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', date_col_sel]]
+        categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]
         
         st.markdown("### 📅 Data Aggregation Options")
         
-        # Aggregation option selector
-        aggregation_options = ["Original Data"]
-        
-        if name_col_sel:
-            aggregation_options.append("Monthly Aggregated by Name")
-        
-        if categorical_cols:
-            aggregation_options.append("Monthly Aggregated by Custom Columns")
-        
-        aggregation_options.append("Monthly Aggregated (No Grouping)")
-        
-        aggregation_choice = st.radio(
-            "Choose how to aggregate your data:",
-            aggregation_options,
-            help="Aggregation will sum numerical columns and group by selected criteria"
+        # Time period selector
+        time_period = st.selectbox(
+            "Choose time aggregation period:",
+            ["No Aggregation", "Monthly", "Yearly"],
+            help="Select how you want to aggregate your data over time"
         )
         
-        if aggregation_choice == "Monthly Aggregated by Name" and name_col_sel:
-            grouped_df = selected_df.groupby(['Year_Month', name_col_sel], as_index=False)[numerical_cols].sum()
-            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-            selected_df = grouped_df.copy()
-            date_col_sel = 'Year_Month'
-            st.success(f"✅ Data grouped by month and **{name_col_sel}** with numerical values aggregated.")
+        if time_period != "No Aggregation":
+            # Grouping method selector
+            grouping_options = ["No Grouping"]
             
-        elif aggregation_choice == "Monthly Aggregated by Custom Columns":
-            st.markdown("#### Select Columns for Grouping")
+            if name_col_sel:
+                grouping_options.append("Group by Name")
             
-            # Allow user to select columns for grouping
-            selected_group_cols = st.multiselect(
-                "Choose columns to group by (in addition to monthly grouping):",
-                categorical_cols,
-                default=[],
-                help="Select one or more columns to group your data by. Numerical columns will be summed."
+            if categorical_cols:
+                grouping_options.append("Group by Custom Columns")
+            
+            grouping_choice = st.selectbox(
+                f"Choose {time_period.lower()} grouping method:",
+                grouping_options,
+                help=f"Select how to group your data within each {time_period.lower()} period"
             )
             
-            if selected_group_cols:
-                group_by_cols = ['Year_Month'] + selected_group_cols
-                grouped_df = selected_df.groupby(group_by_cols, as_index=False)[numerical_cols].sum()
-                grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-                selected_df = grouped_df.copy()
-                date_col_sel = 'Year_Month'
-                st.success(f"✅ Data grouped by month and **{', '.join(selected_group_cols)}** with numerical values aggregated.")
-            else:
-                # If no columns selected, fall back to monthly only
-                grouped_df = selected_df.groupby('Year_Month', as_index=False)[numerical_cols].sum()
-                grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-                selected_df = grouped_df.copy()
-                date_col_sel = 'Year_Month'
-                st.info("ℹ️ No grouping columns selected. Data grouped by month only.")
-                
-        elif aggregation_choice == "Monthly Aggregated (No Grouping)":
-            grouped_df = selected_df.groupby('Year_Month', as_index=False)[numerical_cols].sum()
-            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-            selected_df = grouped_df.copy()
-            date_col_sel = 'Year_Month'
-            st.success("✅ Data aggregated by month only. All numerical values summed per month.")
+            # Set up aggregation parameters
+            period_col = 'Year_Month' if time_period == "Monthly" else 'Year'
+            freq_setting = "M" if time_period == "Monthly" else "Y"
             
-        elif aggregation_choice == "Original Data":
-            st.info("ℹ️ Using original data without aggregation.")
+            if grouping_choice == "Group by Name" and name_col_sel:
+                grouped_df = selected_df.groupby([period_col, name_col_sel], as_index=False)[numerical_cols].sum()
+                grouped_df[period_col] = grouped_df[period_col].astype(str)
+                selected_df = grouped_df.copy()
+                date_col_sel = period_col
+                st.success(f"✅ Data aggregated {time_period.lower()} and grouped by **{name_col_sel}** with numerical values summed.")
+                
+            elif grouping_choice == "Group by Custom Columns":
+                st.markdown(f"#### Select Columns for {time_period} Grouping")
+                
+                selected_group_cols = st.multiselect(
+                    f"Choose columns to group by (in addition to {time_period.lower()} grouping):",
+                    categorical_cols,
+                    default=[],
+                    help=f"Select one or more columns to group your data by within each {time_period.lower()} period. Numerical columns will be summed."
+                )
+                
+                if selected_group_cols:
+                    group_by_cols = [period_col] + selected_group_cols
+                    grouped_df = selected_df.groupby(group_by_cols, as_index=False)[numerical_cols].sum()
+                    grouped_df[period_col] = grouped_df[period_col].astype(str)
+                    selected_df = grouped_df.copy()
+                    date_col_sel = period_col
+                    st.success(f"✅ Data aggregated {time_period.lower()} and grouped by **{', '.join(selected_group_cols)}** with numerical values summed.")
+                else:
+                    # If no columns selected, fall back to time aggregation only
+                    grouped_df = selected_df.groupby(period_col, as_index=False)[numerical_cols].sum()
+                    grouped_df[period_col] = grouped_df[period_col].astype(str)
+                    selected_df = grouped_df.copy()
+                    date_col_sel = period_col
+                    st.info(f"ℹ️ No grouping columns selected. Data aggregated {time_period.lower()} only.")
+                    
+            elif grouping_choice == "No Grouping":
+                grouped_df = selected_df.groupby(period_col, as_index=False)[numerical_cols].sum()
+                grouped_df[period_col] = grouped_df[period_col].astype(str)
+                selected_df = grouped_df.copy()
+                date_col_sel = period_col
+                st.success(f"✅ Data aggregated {time_period.lower()} only. All numerical values summed per {time_period.lower()} period.")
+                
+        else:
+            st.info("ℹ️ Using original data without time aggregation.")
             
     except Exception as e:
         st.warning(f"⚠️ Could not process date grouping: {e}")
@@ -447,15 +457,22 @@ try:
         date_series = None
         if 'Year_Month' in df_vis.columns:
             date_series = pd.to_datetime(df_vis['Year_Month'], errors="coerce")
+        elif 'Year' in df_vis.columns:
+            date_series = pd.to_datetime(df_vis['Year'], errors="coerce")
         else:
             date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
+            
         value_series = pd.to_numeric(df_vis[y_col], errors="coerce")
         df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()
         df_ts = df_ts.sort_values('x')
         df_ts.set_index('x', inplace=True)
         
-        if len(df_ts) >= 24:
-            result = seasonal_decompose(df_ts['y'], model="additive", period=12)
+        # Adjust minimum periods based on aggregation level
+        min_periods = 24 if 'Year_Month' in df_vis.columns else 4 if 'Year' in df_vis.columns else 24
+        
+        if len(df_ts) >= min_periods:
+            period = 12 if 'Year_Month' in df_vis.columns else 4 if 'Year' in df_vis.columns else 12
+            result = seasonal_decompose(df_ts['y'], model="additive", period=period)
             fig, axs = plt.subplots(4, 1, figsize=(12, 10))
             result.observed.plot(ax=axs[0], title="Observed")
             result.trend.plot(ax=axs[1], title="Trend")
@@ -468,7 +485,8 @@ try:
             st.download_button("⬇️ Download Decomposition (PNG)", data=png_bytes_mpl, file_name="time_series_decomposition.png", mime="image/png")
             plt.close()
         else:
-            st.warning("⚠️ At least 24 data points needed for time series decomposition.")
+            period_type = "monthly" if 'Year_Month' in df_vis.columns else "yearly" if 'Year' in df_vis.columns else "time series"
+            st.warning(f"⚠️ At least {min_periods} data points needed for {period_type} decomposition.")
             
     # Display Plotly charts and download options
     if fig is not None and chart_type not in [
@@ -484,42 +502,60 @@ except Exception as e:
     st.error(f"⚠️ Failed to render chart: {e}")
     st.error(f"Error details: {str(e)}")
 
-# Forecasting section
+# Enhanced Forecasting section with support for yearly data
 st.subheader("🔮 Forecasting (optional)")
-date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month")
+date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month") or find_col_ci(df_vis, "Year")
 amount_col = find_col_ci(df_vis, "amount")
 
 if date_col and amount_col:
     try:
         forecast_df = df_vis[[date_col, amount_col]].copy()
 
+        # Handle different date column formats
         if date_col == 'Year_Month':
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
+            freq_str = "M"
+            period_type = "months"
+        elif date_col == 'Year':
+            forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
+            freq_str = "Y"
+            period_type = "years"
         else:
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
+            freq_str = "M"
+            period_type = "months"
 
         forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
 
-        # If data is not monthly aggregated, group by month
-        if date_col != 'Year_Month':
-            forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()
+        # If data is not aggregated, group by appropriate period
+        if date_col not in ['Year_Month', 'Year']:
+            if freq_str == "M":
+                forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()
+            else:
+                forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='Y')).sum(numeric_only=True).reset_index()
 
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
 
-        if len(forecast_df) >= 3:
+        # Adjust minimum data requirements based on frequency
+        min_data_points = 3 if freq_str == "Y" else 3
+        
+        if len(forecast_df) >= min_data_points:
             st.write(f"📈 **Forecasting based on {len(forecast_df)} data points**")
             
             col1, col2 = st.columns(2)
             with col1:
-                horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
+                if freq_str == "Y":
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 1, 10, 3)
+                else:
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 3, 24, 6)
             with col2:
                 st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")
             
             with st.spinner("🔄 Running forecast model..."):
                 model = Prophet()
                 model.fit(forecast_df)
-                future = model.make_future_dataframe(periods=horizon, freq="M")
+                future = model.make_future_dataframe(periods=horizon, freq=freq_str)
                 forecast = model.predict(future)
 
             last_date = forecast_df["ds"].max()
@@ -530,7 +566,7 @@ if date_col and amount_col:
             fig_forecast = px.line(
                 hist_forecast, x="ds", y="yhat", 
                 labels={"ds": "Date", "yhat": "Predicted Amount"}, 
-                title=f"Forecast Analysis - Next {horizon} Months"
+                title=f"Forecast Analysis - Next {horizon} {period_type.title()}"
             )
             fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
             fig_forecast.add_scatter(
@@ -568,7 +604,13 @@ if date_col and amount_col:
             # Forecast table with better formatting
             forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()
             forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]
-            forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')
+            
+            # Format dates based on frequency
+            if freq_str == "Y":
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')
+            else:
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')
+                
             forecast_table["Predicted"] = forecast_table["Predicted"].round(2)
             forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)
             forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)
@@ -607,13 +649,12 @@ if date_col and amount_col:
                     st.metric("Growth Rate", f"{growth_rate:.2f}%")
                     
         else:
-            st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
+            required_points = "3 yearly" if freq_str == "Y" else "3 monthly"
+            st.warning(f"⚠️ Need at least {required_points} data points for forecasting.")
     except Exception as e:
         st.error(f"❌ Forecasting failed: {e}")
         st.error(f"Error details: {str(e)}")
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
 
-# Footer
-st.markdown("---")
-st.markdown("*Built with Streamlit - CSV Visualizer & Forecasting Tool*")
+
