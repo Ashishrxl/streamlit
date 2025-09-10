@@ -172,52 +172,87 @@ date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Dat
 amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
 name_col_sel = find_col_ci(selected_df, "name") or find_col_ci(selected_df, "Name")
 
+# Enhanced aggregation options
 if date_col_sel:
     try:
         # Convert to datetime and sort
         selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
         selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
 
-        if amount_col_sel and name_col_sel:
-            # Create a 'Year_Month' period column
-            selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
-
-            # Group by 'Year_Month' and 'Name' summing numerical columns including Amount
-            numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
-
-            grouped_df = selected_df.groupby(['Year_Month', name_col_sel])[numerical_cols].sum().reset_index()
+        # Add 'Year_Month' period column
+        selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
+        
+        # Identify numerical and categorical columns
+        numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
+        categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', date_col_sel]]
+        
+        st.markdown("### 📅 Data Aggregation Options")
+        
+        # Aggregation option selector
+        aggregation_options = ["Original Data"]
+        
+        if name_col_sel:
+            aggregation_options.append("Monthly Aggregated by Name")
+        
+        if categorical_cols:
+            aggregation_options.append("Monthly Aggregated by Custom Columns")
+        
+        aggregation_options.append("Monthly Aggregated (No Grouping)")
+        
+        aggregation_choice = st.radio(
+            "Choose how to aggregate your data:",
+            aggregation_options,
+            help="Aggregation will sum numerical columns and group by selected criteria"
+        )
+        
+        if aggregation_choice == "Monthly Aggregated by Name" and name_col_sel:
+            grouped_df = selected_df.groupby(['Year_Month', name_col_sel], as_index=False)[numerical_cols].sum()
             grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-
-            # Radio for data view option
-            data_view = st.radio(
-                "Select data view:",
-                ["Original Data", "Monthly Aggregated by Name"],
-                help="Monthly aggregation sums amounts grouped by month and name"
+            selected_df = grouped_df.copy()
+            date_col_sel = 'Year_Month'
+            st.success(f"✅ Data grouped by month and **{name_col_sel}** with numerical values aggregated.")
+            
+        elif aggregation_choice == "Monthly Aggregated by Custom Columns":
+            st.markdown("#### Select Columns for Grouping")
+            
+            # Allow user to select columns for grouping
+            selected_group_cols = st.multiselect(
+                "Choose columns to group by (in addition to monthly grouping):",
+                categorical_cols,
+                default=[],
+                help="Select one or more columns to group your data by. Numerical columns will be summed."
             )
-
-            if data_view == "Monthly Aggregated by Name":
+            
+            if selected_group_cols:
+                group_by_cols = ['Year_Month'] + selected_group_cols
+                grouped_df = selected_df.groupby(group_by_cols, as_index=False)[numerical_cols].sum()
+                grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
                 selected_df = grouped_df.copy()
                 date_col_sel = 'Year_Month'
-                st.info("📅 Data grouped by month and name with numerical values aggregated.")
-        elif amount_col_sel:
-            # If no name column, fallback to monthly aggregation only
-            selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
-            numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
-            grouped_df = selected_df.groupby('Year_Month')[numerical_cols].sum().reset_index()
-            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
-            data_view = st.radio(
-                "Select data view:",
-                ["Original Data", "Monthly Aggregated Data"],
-                help="Monthly aggregated data groups records by month and sums numerical values"
-            )
-            if data_view == "Monthly Aggregated Data":
+                st.success(f"✅ Data grouped by month and **{', '.join(selected_group_cols)}** with numerical values aggregated.")
+            else:
+                # If no columns selected, fall back to monthly only
+                grouped_df = selected_df.groupby('Year_Month', as_index=False)[numerical_cols].sum()
+                grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
                 selected_df = grouped_df.copy()
                 date_col_sel = 'Year_Month'
-                st.info("📅 Data grouped by month with numerical values aggregated.")
+                st.info("ℹ️ No grouping columns selected. Data grouped by month only.")
+                
+        elif aggregation_choice == "Monthly Aggregated (No Grouping)":
+            grouped_df = selected_df.groupby('Year_Month', as_index=False)[numerical_cols].sum()
+            grouped_df['Year_Month'] = grouped_df['Year_Month'].astype(str)
+            selected_df = grouped_df.copy()
+            date_col_sel = 'Year_Month'
+            st.success("✅ Data aggregated by month only. All numerical values summed per month.")
+            
+        elif aggregation_choice == "Original Data":
+            st.info("ℹ️ Using original data without aggregation.")
+            
     except Exception as e:
         st.warning(f"⚠️ Could not process date grouping: {e}")
+        st.error(f"Error details: {str(e)}")
 
-# Fixed: Better table display for selected table
+# Better table display for selected table
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
     st.session_state[sel_state_key] = False
@@ -228,25 +263,31 @@ if clicked_sel:
     st.session_state[sel_state_key] = not st.session_state[sel_state_key]
 
 if st.session_state[sel_state_key]:
-    st.write(f"### {selected_table_name} Table (First 20 Rows)")
-    st.dataframe(selected_df.head(20))
-    # Add expandable section for full table
-    with st.expander(f"📖 Show Full {selected_table_name} Table ({len(selected_df)} rows)"):
-        st.dataframe(selected_df)
-    # Add download options for the selected table
+    st.write(f"### {selected_table_name} Table Preview")
+    st.info(f"📊 **Data shape:** {selected_df.shape[0]} rows × {selected_df.shape[1]} columns")
+    
+    # Show first 20 rows
+    st.write("**First 20 Rows:**")
+    st.dataframe(selected_df.head(20), use_container_width=True)
+    
+    # Expandable section for full table
+    with st.expander(f"📖 Show Full {selected_table_name} Table ({len(selected_df):,} rows)"):
+        st.dataframe(selected_df, use_container_width=True)
+    
+    # Download options
     col1, col2 = st.columns(2)
     with col1:
         st.download_button(
             f"⬇️ Download {selected_table_name} (CSV)",
             data=convert_df_to_csv(selected_df),
-            file_name=f"{selected_table_name.lower().replace(' ', '_')}_selected.csv",
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.csv",
             mime="text/csv",
         )
     with col2:
         st.download_button(
             f"⬇️ Download {selected_table_name} (Excel)",
             data=convert_df_to_excel(selected_df),
-            file_name=f"{selected_table_name.lower().replace(' ', '_')}_selected.xlsx",
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -257,7 +298,8 @@ default_cols = all_columns.copy() if all_columns else []
 selected_columns = st.multiselect(
     "Select columns to include in visualization (include 'Date' and 'Amount' for forecasting)",
     all_columns,
-    default=default_cols
+    default=default_cols,
+    help="Choose which columns to include in your analysis and visualization"
 )
 
 if not selected_columns:
@@ -267,10 +309,19 @@ if not selected_columns:
 df_vis = selected_df[selected_columns].copy()
 categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
-other_cols = [c for c in df_vis.columns if c not in categorical_cols + numerical_cols]
 
-st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
-st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
+# Display column information
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Total Columns", len(selected_columns))
+with col2:
+    st.metric("Numerical Columns", len(numerical_cols))
+with col3:
+    st.metric("Categorical Columns", len(categorical_cols))
+
+with st.expander("📋 Column Details"):
+    st.write("**Categorical columns:**", categorical_cols if categorical_cols else "None")
+    st.write("**Numerical columns:**", numerical_cols if numerical_cols else "None")
 
 # Interactive visualization
 st.subheader("📈 Interactive Visualization")
@@ -323,47 +374,75 @@ st.write("### Chart:")
 fig = None
 try:
     if chart_type == "Scatter Plot":
-        fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
+        fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None, title=f"Scatter Plot: {x_col} vs {y_col}")
     elif chart_type == "Line Chart":
-        fig = px.line(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
+        fig = px.line(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None, title=f"Line Chart: {x_col} vs {y_col}")
     elif chart_type == "Bar Chart":
-        fig = px.bar(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None)
+        fig = px.bar(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None, title=f"Bar Chart: {x_col} vs {y_col}")
     elif chart_type == "Histogram":
-        fig = px.histogram(df_vis, x=x_col, color=hue_col if hue_col else None)
+        fig = px.histogram(df_vis, x=x_col, color=hue_col if hue_col else None, title=f"Histogram: {x_col}")
     elif chart_type == "Correlation Heatmap":
-        corr = df_vis.select_dtypes(include=[np.number]).corr()
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', aspect='auto')
+        if len(numerical_cols) >= 2:
+            corr = df_vis.select_dtypes(include=[np.number]).corr()
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', aspect='auto', title="Correlation Heatmap")
+        else:
+            st.warning("⚠️ Need at least 2 numerical columns for correlation heatmap.")
     elif chart_type == "Seaborn Scatterplot":
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(10, 6))
         sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+        plt.title(f"Scatterplot: {x_col} vs {y_col}")
         st.pyplot(plt.gcf())
+        
+        png_bytes_mpl = export_matplotlib_fig(plt.gcf())
+        st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="seaborn_scatterplot.png", mime="image/png")
         plt.close()
     elif chart_type == "Seaborn Boxplot":
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(10, 6))
         sns.boxplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+        plt.title(f"Boxplot: {x_col} vs {y_col}")
         st.pyplot(plt.gcf())
+        
+        png_bytes_mpl = export_matplotlib_fig(plt.gcf())
+        st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="seaborn_boxplot.png", mime="image/png")
         plt.close()
     elif chart_type == "Seaborn Violinplot":
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(10, 6))
         sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+        plt.title(f"Violinplot: {x_col} vs {y_col}")
         st.pyplot(plt.gcf())
+        
+        png_bytes_mpl = export_matplotlib_fig(plt.gcf())
+        st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="seaborn_violinplot.png", mime="image/png")
         plt.close()
     elif chart_type == "Seaborn Pairplot":
-        sns.pairplot(df_vis, hue=hue_col if hue_col else None)
-        st.pyplot(plt.gcf())
-        plt.close()
+        if len(numerical_cols) >= 2:
+            sns.pairplot(df_vis, hue=hue_col if hue_col else None)
+            st.pyplot(plt.gcf())
+            
+            png_bytes_mpl = export_matplotlib_fig(plt.gcf())
+            st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="seaborn_pairplot.png", mime="image/png")
+            plt.close()
+        else:
+            st.warning("⚠️ Need at least 2 numerical columns for pairplot.")
     elif chart_type == "Seaborn Heatmap":
-        plt.figure(figsize=(8, 6))
-        corr = df_vis.select_dtypes(include=[np.number]).corr()
-        sns.heatmap(corr, annot=True, cmap="coolwarm")
-        st.pyplot(plt.gcf())
-        plt.close()
+        if len(numerical_cols) >= 2:
+            plt.figure(figsize=(10, 8))
+            corr = df_vis.select_dtypes(include=[np.number]).corr()
+            sns.heatmap(corr, annot=True, cmap="coolwarm", center=0)
+            plt.title("Correlation Heatmap")
+            st.pyplot(plt.gcf())
+            
+            png_bytes_mpl = export_matplotlib_fig(plt.gcf())
+            st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="seaborn_heatmap.png", mime="image/png")
+            plt.close()
+        else:
+            st.warning("⚠️ Need at least 2 numerical columns for heatmap.")
     elif chart_type == "Plotly Heatmap":
-        fig = px.density_heatmap(df_vis, x=x_col, y=y_col)
+        fig = px.density_heatmap(df_vis, x=x_col, y=y_col, title=f"Density Heatmap: {x_col} vs {y_col}")
     elif chart_type == "Treemap":
-        fig = px.treemap(df_vis, path=[x_col], values=y_col)
+        fig = px.treemap(df_vis, path=[x_col], values=y_col, title=f"Treemap: {x_col}")
     elif chart_type == "Sunburst":
-        fig = px.sunburst(df_vis, path=[x_col], values=y_col)
+        fig = px.sunburst(df_vis, path=[x_col], values=y_col, title=f"Sunburst: {x_col}")
     elif chart_type == "Time-Series Decomposition":
         date_series = None
         if 'Year_Month' in df_vis.columns:
@@ -374,18 +453,24 @@ try:
         df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()
         df_ts = df_ts.sort_values('x')
         df_ts.set_index('x', inplace=True)
+        
         if len(df_ts) >= 24:
             result = seasonal_decompose(df_ts['y'], model="additive", period=12)
-            fig, axs = plt.subplots(4, 1, figsize=(10, 10))
+            fig, axs = plt.subplots(4, 1, figsize=(12, 10))
             result.observed.plot(ax=axs[0], title="Observed")
             result.trend.plot(ax=axs[1], title="Trend")
             result.seasonal.plot(ax=axs[2], title="Seasonal")
             result.resid.plot(ax=axs[3], title="Residual")
             plt.tight_layout()
             st.pyplot(fig)
+            
+            png_bytes_mpl = export_matplotlib_fig(fig)
+            st.download_button("⬇️ Download Decomposition (PNG)", data=png_bytes_mpl, file_name="time_series_decomposition.png", mime="image/png")
             plt.close()
         else:
-            st.warning("At least 24 data points needed for decomposition.")
+            st.warning("⚠️ At least 24 data points needed for time series decomposition.")
+            
+    # Display Plotly charts and download options
     if fig is not None and chart_type not in [
         "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot",
         "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"
@@ -393,15 +478,17 @@ try:
         st.plotly_chart(fig, use_container_width=True)
         png_bytes = export_plotly_fig(fig)
         if png_bytes:
-            st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="chart.png", mime="image/png")
+            st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="plotly_chart.png", mime="image/png")
+            
 except Exception as e:
     st.error(f"⚠️ Failed to render chart: {e}")
+    st.error(f"Error details: {str(e)}")
 
 # Forecasting section
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month")
 amount_col = find_col_ci(df_vis, "amount")
-name_col = find_col_ci(df_vis, "name")
+
 if date_col and amount_col:
     try:
         forecast_df = df_vis[[date_col, amount_col]].copy()
@@ -421,40 +508,112 @@ if date_col and amount_col:
         forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})
 
         if len(forecast_df) >= 3:
-            horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
-            model = Prophet()
-            model.fit(forecast_df)
-            future = model.make_future_dataframe(periods=horizon, freq="M")
-            forecast = model.predict(future)
+            st.write(f"📈 **Forecasting based on {len(forecast_df)} data points**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                horizon = st.slider("Forecast Horizon (months)", 3, 24, 6)
+            with col2:
+                st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")
+            
+            with st.spinner("🔄 Running forecast model..."):
+                model = Prophet()
+                model.fit(forecast_df)
+                future = model.make_future_dataframe(periods=horizon, freq="M")
+                forecast = model.predict(future)
 
             last_date = forecast_df["ds"].max()
             hist_forecast = forecast[forecast["ds"] <= last_date]
             future_forecast = forecast[forecast["ds"] > last_date]
 
-            st.write("### Forecast Plot")
-            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title="Forecast (historical + future)")
+            st.write("### 📊 Forecast Plot")
+            fig_forecast = px.line(
+                hist_forecast, x="ds", y="yhat", 
+                labels={"ds": "Date", "yhat": "Predicted Amount"}, 
+                title=f"Forecast Analysis - Next {horizon} Months"
+            )
             fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
-            fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))
+            fig_forecast.add_scatter(
+                x=future_forecast["ds"], y=future_forecast["yhat"], 
+                mode="lines", name="Forecast", line=dict(color="orange", dash="dash")
+            )
 
             if show_confidence:
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))
-                fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_upper"], 
+                    mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")
+                )
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_lower"], 
+                    mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")
+                )
 
-            fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")
+            fig_forecast.add_vrect(
+                x0=last_date, x1=forecast["ds"].max(), 
+                fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, 
+                annotation_text="Forecast Period", annotation_position="top left"
+            )
 
             st.plotly_chart(fig_forecast, use_container_width=True)
 
             png_bytes_forecast = export_plotly_fig(fig_forecast)
             if png_bytes_forecast:
-                st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast.png", mime="image/png")
+                st.download_button(
+                    "⬇️ Download Forecast Chart (PNG)", 
+                    data=png_bytes_forecast, 
+                    file_name="forecast_chart.png", 
+                    mime="image/png"
+                )
 
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).rename(columns={"ds": "Date", "yhat":"Predicted","yhat_lower":"Lower Bound","yhat_upper":"Upper Bound"})
-            st.subheader("📅 Forecast Table (last rows)")
-            st.dataframe(forecast_table)
-            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast.csv", mime="text/csv")
+            # Forecast table with better formatting
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()
+            forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]
+            forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')
+            forecast_table["Predicted"] = forecast_table["Predicted"].round(2)
+            forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)
+            forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)
+            
+            st.subheader("📅 Forecast Table (Future Predictions)")
+            st.dataframe(forecast_table, use_container_width=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    "⬇️ Download Forecast Data (CSV)", 
+                    data=convert_df_to_csv(forecast_table), 
+                    file_name="forecast_predictions.csv", 
+                    mime="text/csv"
+                )
+            with col2:
+                st.download_button(
+                    "⬇️ Download Forecast Data (Excel)", 
+                    data=convert_df_to_excel(forecast_table), 
+                    file_name="forecast_predictions.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+            # Summary statistics
+            with st.expander("📊 Forecast Summary Statistics"):
+                future_avg = future_forecast["yhat"].mean()
+                historical_avg = hist_forecast["yhat"].mean()
+                growth_rate = ((future_avg - historical_avg) / historical_avg) * 100 if historical_avg != 0 else 0
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Historical Average", f"{historical_avg:,.2f}")
+                with col2:
+                    st.metric("Forecast Average", f"{future_avg:,.2f}")
+                with col3:
+                    st.metric("Growth Rate", f"{growth_rate:.2f}%")
+                    
         else:
             st.warning("⚠️ Need at least 3 monthly data points for forecasting.")
     except Exception as e:
         st.error(f"❌ Forecasting failed: {e}")
+        st.error(f"Error details: {str(e)}")
 else:
     st.info("ℹ️ To enable forecasting, include 'Date' and 'Amount' columns in your selection.")
+
+# Footer
+st.markdown("---")
+st.markdown("*Built with Streamlit - CSV Visualizer & Forecasting Tool*")
