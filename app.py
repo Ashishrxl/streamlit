@@ -11,8 +11,6 @@ if "csv_preview" not in st.session_state:
     st.session_state.csv_preview = None
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
-if "navigate_to" not in st.session_state:
-    st.session_state.navigate_to = None  # store target page
 
 # CSS for card layout
 card_style = """
@@ -59,38 +57,29 @@ card_style = """
 """
 st.markdown(card_style, unsafe_allow_html=True)
 
-# Layout columns
 col1, col2 = st.columns(2)
 
 def render_clickable_card(title, desc, df, target_page):
-    with st.form(key=title):
-        st.markdown(f'<div class="card">', unsafe_allow_html=True)
-        st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="card-desc">{desc}</div>', unsafe_allow_html=True)
-        # Mini table preview
-        if df is not None:
-            st.markdown(f'<div class="card-preview">{df.head(3).to_html(index=False)}</div>', unsafe_allow_html=True)
-            numeric_cols = df.select_dtypes(include='number').columns
-            for col in numeric_cols[:2]:
-                chart = alt.Chart(df.head(10)).mark_line(point=True).encode(
-                    x=alt.X(df.head(10).index, title='Index'),
-                    y=alt.Y(col, title=col)
-                )
-                st.altair_chart(chart, use_container_width=True)
-        submitted = st.form_submit_button(label="Click anywhere on the card")
-        st.markdown("</div>", unsafe_allow_html=True)
-        if submitted:
-            st.session_state.navigate_to = target_page  # set flag for navigation
+    # Use a regular button instead of form + rerun
+    st.markdown(f'<div class="card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card-desc">{desc}</div>', unsafe_allow_html=True)
+    if df is not None:
+        st.markdown(f'<div class="card-preview">{df.head(3).to_html(index=False)}</div>', unsafe_allow_html=True)
+        numeric_cols = df.select_dtypes(include='number').columns
+        for col in numeric_cols[:2]:
+            chart = alt.Chart(df.head(10)).mark_line(point=True).encode(
+                x=alt.X(df.head(10).index, title='Index'),
+                y=alt.Y(col, title=col)
+            )
+            st.altair_chart(chart, use_container_width=True)
+    # Full card button
+    if st.button(f"Go to {title}", key=title):
+        st.query_params = {"page": target_page}
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Render cards
 with col1:
     render_clickable_card("📄 CSV Page", "Upload CSV files and view analytics.", st.session_state.csv_preview, "csv")
 
 with col2:
     render_clickable_card("📊 XLSX Page", "Upload XLSX files and view analytics.", st.session_state.xlsx_preview, "xlsx")
-
-# Perform navigation if requested
-if st.session_state.navigate_to is not None:
-    st.query_params = {"page": st.session_state.navigate_to}
-    st.session_state.navigate_to = None
-    st.experimental_rerun()
