@@ -20,5 +20,5 @@ with col1:
         st.experimental_rerun()
 with col2:
     if st.button("🏠 Home Page"):
-        st.experimental_set_query_params(page="Home")
+        st.experimental_set_query_params(page="app")
         st.experimental_rerun()
