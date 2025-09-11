@@ -36,7 +36,7 @@ if st.session_state.page == "app":
                     )
                     st.altair_chart(chart, use_container_width=True)
             # Single-click navigation button
-            if st.button(f"Go to {title}", key=f"home_{target_page}"):
+            if st.button(f"Go to {title}", key=f"{target_page}"):
                 navigate(target_page)
 
     render_card(col1, "📄 CSV Page", st.session_state.csv_preview, "csv")
