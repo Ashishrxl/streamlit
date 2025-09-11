@@ -4,17 +4,20 @@ import altair as alt
 
 st.set_page_config(page_title="Pro Dashboard", layout="wide")
 
-# Initialize session_state for previews
+# Initialize session_state for uploaded data
 if "csv_preview" not in st.session_state:
     st.session_state.csv_preview = None
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
+if "page" not in st.session_state:
+    st.session_state.page = "home"
 
-# Determine current page from query params
-page = st.query_params.get("page", ["home"])[0]
+# ---------------- Navigation Buttons ----------------
+def go_to(page_name):
+    st.session_state.page = page_name
 
 # ---------------- Home Page ----------------
-if page == "home":
+if st.session_state.page == "home":
     st.title("📊 Pro Dashboard Home")
     st.write("Click a button to navigate or see live previews.")
 
@@ -33,13 +36,13 @@ if page == "home":
                     )
                     st.altair_chart(chart, use_container_width=True)
             if st.button(f"Go to {title}", key=title):
-                st.query_params = {"page": target_page}
+                go_to(target_page)
 
     render_card(col1, "📄 CSV Page", st.session_state.csv_preview, "csv")
     render_card(col2, "📊 XLSX Page", st.session_state.xlsx_preview, "xlsx")
 
 # ---------------- CSV Page ----------------
-elif page == "csv":
+elif st.session_state.page == "csv":
     st.title("📄 CSV Page")
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
     if uploaded_file:
@@ -48,13 +51,16 @@ elif page == "csv":
         st.session_state.csv_preview = df
 
     st.write("---")
-    if st.button("🏠 Home Page"):
-        st.query_params = {"page": "home"}
-    if st.button("📊 XLSX Page"):
-        st.query_params = {"page": "xlsx"}
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🏠 Home Page"):
+            go_to("home")
+    with col2:
+        if st.button("📊 XLSX Page"):
+            go_to("xlsx")
 
 # ---------------- XLSX Page ----------------
-elif page == "xlsx":
+elif st.session_state.page == "xlsx":
     st.title("📊 XLSX Page")
     uploaded_file = st.file_uploader("Upload XLSX", type=["xlsx"])
     if uploaded_file:
@@ -63,7 +69,10 @@ elif page == "xlsx":
         st.session_state.xlsx_preview = df
 
     st.write("---")
-    if st.button("🏠 Home Page"):
-        st.query_params = {"page": "home"}
-    if st.button("📄 CSV Page"):
-        st.query_params = {"page": "csv"}
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🏠 Home Page"):
+            go_to("home")
+    with col2:
+        if st.button("📄 CSV Page"):
+            go_to("csv")
