@@ -3,8 +3,6 @@ import pandas as pd
 import altair as alt
 
 st.set_page_config(page_title="Pro Dashboard", layout="wide")
-st.title("📊 Pro Analytics Dashboard")
-st.write("Click a card to navigate, or see live previews of uploaded files.")
 
 # Initialize session_state for previews
 if "csv_preview" not in st.session_state:
@@ -12,74 +10,60 @@ if "csv_preview" not in st.session_state:
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
 
-# CSS for card layout
-card_style = """
-<style>
-.card {
-    background-color: #f5f5f5;
-    border-radius: 15px;
-    padding: 15px;
-    transition: 0.3s;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    min-height: 200px;
-    max-height: 400px;
-}
-.card:hover {
-    background-color: #e0f7fa;
-    transform: translateY(-3px);
-}
-.card-title {
-    font-size: 24px;
-    font-weight: bold;
-    text-align: center;
-}
-.card-desc {
-    font-size: 16px;
-    color: #555;
-    text-align: center;
-    margin-bottom: 10px;
-}
-.card-preview {
-    margin-top: 10px;
-    max-height: 100px;
-    overflow: auto;
-    font-size: 12px;
-}
-.card-chart {
-    flex: 1;
-    overflow: auto;
-}
-</style>
-"""
-st.markdown(card_style, unsafe_allow_html=True)
+# Determine current page from query params
+page = st.query_params.get("page", ["home"])[0]
 
-col1, col2 = st.columns(2)
+# ---------------- Home Page ----------------
+if page == "home":
+    st.title("📊 Pro Dashboard Home")
+    st.write("Click a button to navigate or see live previews.")
 
-def render_clickable_card(title, desc, df, target_page):
-    # Use a regular button instead of form + rerun
-    st.markdown(f'<div class="card">', unsafe_allow_html=True)
-    st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="card-desc">{desc}</div>', unsafe_allow_html=True)
-    if df is not None:
-        st.markdown(f'<div class="card-preview">{df.head(3).to_html(index=False)}</div>', unsafe_allow_html=True)
-        numeric_cols = df.select_dtypes(include='number').columns
-        for col in numeric_cols[:2]:
-            chart = alt.Chart(df.head(10)).mark_line(point=True).encode(
-                x=alt.X(df.head(10).index, title='Index'),
-                y=alt.Y(col, title=col)
-            )
-            st.altair_chart(chart, use_container_width=True)
-    # Full card button
-    if st.button(f"Go to {title}", key=title):
-        st.query_params = {"page": target_page}
-    st.markdown("</div>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
 
-with col1:
-    render_clickable_card("📄 CSV Page", "Upload CSV files and view analytics.", st.session_state.csv_preview, "csv")
+    def render_card(col, title, df, target_page):
+        with col:
+            st.markdown(f"### {title}")
+            if df is not None:
+                st.dataframe(df.head(3))
+                numeric_cols = df.select_dtypes(include='number').columns
+                for col_name in numeric_cols[:2]:
+                    chart = alt.Chart(df.head(10)).mark_line(point=True).encode(
+                        x=alt.X(df.head(10).index, title='Index'),
+                        y=alt.Y(col_name, title=col_name)
+                    )
+                    st.altair_chart(chart, use_container_width=True)
+            if st.button(f"Go to {title}", key=title):
+                st.query_params = {"page": target_page}
 
-with col2:
-    render_clickable_card("📊 XLSX Page", "Upload XLSX files and view analytics.", st.session_state.xlsx_preview, "xlsx")
+    render_card(col1, "📄 CSV Page", st.session_state.csv_preview, "csv")
+    render_card(col2, "📊 XLSX Page", st.session_state.xlsx_preview, "xlsx")
+
+# ---------------- CSV Page ----------------
+elif page == "csv":
+    st.title("📄 CSV Page")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        st.dataframe(df)
+        st.session_state.csv_preview = df
+
+    st.write("---")
+    if st.button("🏠 Home Page"):
+        st.query_params = {"page": "home"}
+    if st.button("📊 XLSX Page"):
+        st.query_params = {"page": "xlsx"}
+
+# ---------------- XLSX Page ----------------
+elif page == "xlsx":
+    st.title("📊 XLSX Page")
+    uploaded_file = st.file_uploader("Upload XLSX", type=["xlsx"])
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+        st.dataframe(df)
+        st.session_state.xlsx_preview = df
+
+    st.write("---")
+    if st.button("🏠 Home Page"):
+        st.query_params = {"page": "home"}
+    if st.button("📄 CSV Page"):
+        st.query_params = {"page": "csv"}
