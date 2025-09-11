@@ -12,24 +12,17 @@ import io
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
-hide_streamlit_style = """
+# Hide default Streamlit style
+st.markdown("""
 <style>  
 #MainMenu, footer, header {visibility: hidden;}  
 footer {display: none !important;}  
 header {display: none !important;}  
-#MainMenu {display: none !important;}  
 [data-testid="stToolbar"] { display: none !important; }  
-.st-emotion-cache-1xw8zd0 {display: none !important;}  
-[aria-label="View app source"] {display: none !important;}  
-a[href^="https://github.com"] {display: none !important;}  
-[data-testid="stDecoration"] {display: none !important;}  
-[data-testid="stStatusWidget"] {display: none !important;}  
-button[title="Menu"] {display: none !important;}  
 </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# --- utility functions ---
+# --- Utility functions ---
 def find_col_ci(df: pd.DataFrame, target: str):
     for c in df.columns:
         if c.lower() == target.lower():
@@ -57,16 +50,16 @@ def export_matplotlib_fig(fig):
     buf.seek(0)
     return buf.getvalue()
 
-# --- sidebar ---
+# --- Sidebar settings ---
 st.sidebar.header("⚙️ Settings")
 forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
 forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01)
 show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)
 
-# --- file upload ---
+# --- File upload ---
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 if uploaded_file is None:
-    st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")
+    st.info("Upload a CSV to start. The app will detect tables.")
     st.stop()
 
 try:
@@ -77,20 +70,41 @@ except Exception as e:
 
 st.success("✅ File uploaded successfully!")
 
-# --- Table selection ---
-st.subheader("📌 Column Selection for Visualization")
-all_columns = uploaded_df.columns.tolist()
-selected_columns = st.multiselect("Select columns to include", all_columns, default=all_columns)
+# --- Table splitting (for simplicity, treat each group of non-empty rows between empty rows as table) ---
+def split_tables(df: pd.DataFrame):
+    """Return list of DataFrames as tables"""
+    # Detect empty rows (all NaN)
+    empty_idx = df[df.isna().all(axis=1)].index.tolist()
+    empty_idx = [-1] + empty_idx + [len(df)]
+    tables = []
+    for i in range(len(empty_idx)-1):
+        sub = df.iloc[empty_idx[i]+1:empty_idx[i+1]].dropna(how='all')
+        if not sub.empty:
+            tables.append(sub.reset_index(drop=True))
+    return tables
+
+tables = split_tables(uploaded_df)
+table_names = [f"Table {i+1}" for i in range(len(tables))]
+selected_table_name = st.selectbox("Select Table to Visualize", table_names)
+selected_table_idx = table_names.index(selected_table_name)
+df_table = tables[selected_table_idx].copy()
+
+st.subheader(f"Preview of {selected_table_name}")
+st.dataframe(df_table.head(10), use_container_width=True)
+
+# --- Column selection ---
+all_columns = df_table.columns.tolist()
+selected_columns = st.multiselect("Select columns for visualization", all_columns, default=all_columns)
 if not selected_columns:
     st.warning("⚠️ Select at least one column")
     st.stop()
-df_vis = uploaded_df[selected_columns].copy()
+df_vis = df_table[selected_columns].copy()
 
 categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
 
 # --- Visualization ---
-st.subheader("📈 Interactive Visualization")
+st.subheader("📈 Visualization")
 chart_options = ["Scatter Plot", "Line Chart", "Bar Chart", "Histogram",
                  "Correlation Heatmap", "Seaborn Scatterplot", "Seaborn Boxplot",
                  "Seaborn Violinplot", "Seaborn Pairplot", "Seaborn Heatmap",
@@ -111,22 +125,22 @@ st.write("### Chart:")
 fig = None
 try:
     if chart_type == "Scatter Plot":
-        fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col, title=f"{x_col} vs {y_col}")
+        fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col)
     elif chart_type == "Line Chart":
-        fig = px.line(df_vis, x=x_col, y=y_col, color=hue_col, title=f"{x_col} vs {y_col}")
+        fig = px.line(df_vis, x=x_col, y=y_col, color=hue_col)
     elif chart_type == "Bar Chart":
-        fig = px.bar(df_vis, x=x_col, y=y_col, color=hue_col, title=f"{x_col} vs {y_col}")
+        fig = px.bar(df_vis, x=x_col, y=y_col, color=hue_col)
     elif chart_type == "Histogram":
-        fig = px.histogram(df_vis, x=x_col, color=hue_col, title=f"{x_col} Histogram")
-    elif chart_type == "Correlation Heatmap" and len(numerical_cols) >= 2:
+        fig = px.histogram(df_vis, x=x_col, color=hue_col)
+    elif chart_type == "Correlation Heatmap" and len(numerical_cols)>=2:
         corr = df_vis[numerical_cols].corr()
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', title="Correlation Heatmap")
+        fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu')
     elif chart_type == "Plotly Heatmap":
-        fig = px.density_heatmap(df_vis, x=x_col, y=y_col, title=f"Density Heatmap: {x_col} vs {y_col}")
+        fig = px.density_heatmap(df_vis, x=x_col, y=y_col)
     elif chart_type == "Treemap":
-        fig = px.treemap(df_vis, path=[x_col], values=y_col, title=f"Treemap: {x_col}")
+        fig = px.treemap(df_vis, path=[x_col], values=y_col)
     elif chart_type == "Sunburst":
-        fig = px.sunburst(df_vis, path=[x_col], values=y_col, title=f"Sunburst: {x_col}")
+        fig = px.sunburst(df_vis, path=[x_col], values=y_col)
     elif chart_type == "Seaborn Scatterplot":
         fig, ax = plt.subplots()
         sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col, ax=ax)
@@ -140,13 +154,10 @@ try:
         sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col, split=True if hue_col else False, ax=ax)
         st.pyplot(fig)
     elif chart_type == "Seaborn Pairplot":
-        st.write("Pairplot will use all selected columns")
-        pairplot_fig = sns.pairplot(df_vis)
-        st.pyplot(pairplot_fig)
+        st.pyplot(sns.pairplot(df_vis))
     elif chart_type == "Seaborn Heatmap" and len(numerical_cols)>=2:
-        corr = df_vis[numerical_cols].corr()
         fig, ax = plt.subplots(figsize=(10,8))
-        sns.heatmap(corr, annot=True, fmt=".2f", cmap="RdBu", ax=ax)
+        sns.heatmap(df_vis[numerical_cols].corr(), annot=True, fmt=".2f", cmap="RdBu", ax=ax)
         st.pyplot(fig)
     elif chart_type == "Time-Series Decomposition":
         date_series = pd.to_datetime(df_vis[x_col], errors="coerce")
@@ -181,13 +192,13 @@ if date_col and amount_col:
         forecast_df = df_vis[[date_col, amount_col]].copy()
         if date_col == 'Year_Month':
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
-            freq_str = "M"; period_type="months"
+            freq_str, period_type = "M", "months"
         elif date_col == 'Year':
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
-            freq_str = "Y"; period_type="years"
+            freq_str, period_type = "Y", "years"
         else:
             forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")
-            freq_str = "M"; period_type="months"
+            freq_str, period_type = "M", "months"
 
         forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")
         forecast_df = forecast_df.dropna(subset=[date_col, amount_col])
@@ -207,24 +218,22 @@ if date_col and amount_col:
             hist_forecast = forecast[forecast["ds"]<=last_date]
             future_forecast = forecast[forecast["ds"]>last_date]
 
-            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds":"Date","yhat":amount_col}, title=f"Forecast - Next {horizon} {period_type.title()}")
+            fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds":"Date","yhat":amount_col})
             fig_forecast.update_traces(line=dict(color="blue", dash="solid"), hovertemplate="%{y:.2f}<extra></extra>")
             fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast",
                                      line=dict(color="orange", dash="dash"),
                                      hovertemplate=f"Predicted {amount_col}: %{y:.2f}<extra></extra>")
-
             if show_confidence:
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound",
-                                         line=dict(dash="dot", color="green"), hovertemplate="Upper Bound: %{y:.2f}<extra></extra>")
+                                         line=dict(dash="dot", color="green"))
                 fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound",
-                                         line=dict(dash="dot", color="red"), hovertemplate="Lower Bound: %{y:.2f}<extra></extra>")
-
+                                         line=dict(dash="dot", color="red"))
             fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity,
                                    line_width=0, annotation_text="Forecast Period", annotation_position="top left")
             st.plotly_chart(fig_forecast, use_container_width=True)
 
             # Forecast table
-            forecast_table = forecast[["ds","yhat","yhat_lower","yhat_upper"]].tail(horizon).copy()
+            forecast_table = forecast[["ds","yhat","yhat_lower","yhat_upper"]].tail(horizon)
             forecast_table.columns = ["Date","Predicted","Lower Bound","Upper Bound"]
             forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d') if freq_str!="Y" else forecast_table["Date"].dt.strftime('%Y')
             forecast_table[["Predicted","Lower Bound","Upper Bound"]] = forecast_table[["Predicted","Lower Bound","Upper Bound"]].round(2)
