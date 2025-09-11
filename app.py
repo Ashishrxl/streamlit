@@ -10,7 +10,7 @@ if "csv_preview" not in st.session_state:
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
 if "page" not in st.session_state:
-    st.session_state.page = "home"
+    st.session_state.page = "app"
 
 # Navigation function
 def navigate(page_name):
