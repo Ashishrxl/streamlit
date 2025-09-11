@@ -30,32 +30,32 @@ button[title="Menu"] {display: none !important;}
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 def find_col_ci(df: pd.DataFrame, target: str):
-"""Find column name case-insensitively"""
+
 for c in df.columns:
 if c.lower() == target.lower():
 return c
 return None
 
 def convert_df_to_csv(df: pd.DataFrame) -> bytes:
-"""Convert DataFrame to CSV bytes"""
+
 return df.to_csv(index=False).encode("utf-8")
 
 def convert_df_to_excel(df: pd.DataFrame) -> bytes:
-"""Convert DataFrame to Excel bytes"""
+
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
 df.to_excel(writer, index=False, sheet_name="Sheet1")
 return buffer.getvalue()
 
 def export_plotly_fig(fig):
-"""Export Plotly figure as PNG"""
+
 try:
 return pio.to_image(fig, format="png", engine="kaleido")
 except Exception:
 return None
 
 def export_matplotlib_fig(fig):
-"""Export Matplotlib figure as PNG"""
+
 buf = io.BytesIO()
 fig.savefig(buf, format="png", bbox_inches="tight")
 buf.seek(0)
@@ -68,14 +68,14 @@ forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
 forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01)
 show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)
 
-File upload
+
 
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])
 if uploaded_file is None:
 st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")
 st.stop()
 
-Read CSV
+
 
 try:
 uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
@@ -85,7 +85,7 @@ st.stop()
 
 st.success("✅ File uploaded successfully!")
 
-Derive tables
+
 
 id_col = find_col_ci(uploaded_df, "ID")
 name_col = find_col_ci(uploaded_df, "Name")
@@ -119,7 +119,7 @@ bill_df, billdetails_df, left_on=bill_col, right_on=billindex_col, how="inner", 
 except Exception:
 bill_billdetails_df = pd.DataFrame()
 
-Tables preview
+
 
 st.subheader("🗂️ Tables Preview")
 tables_dict = {
@@ -162,7 +162,6 @@ if st.session_state[state_key]:
     else:  
         st.info("ℹ️ Not available from the uploaded CSV.")
 
-Table selection for visualization
 
 st.subheader("📌 Select Table for Visualization")
 available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
@@ -173,31 +172,30 @@ st.stop()
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
 selected_df = available_tables[selected_table_name].copy()
 
-Detect columns for date, amount, and name
+
 
 date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date")
 amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
 name_col_sel = find_col_ci(selected_df, "name") or find_col_ci(selected_df, "Name")
 
-Enhanced aggregation options with Monthly and Yearly
 
 if date_col_sel:
 try:
-# Convert to datetime and sort
+
 selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")
 selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
 
-# Add period columns for both monthly and yearly aggregation  
+
     selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')  
     selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')  
 
-    # Identify numerical and categorical columns  
+    
     numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()  
     categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]  
 
     st.markdown("### 📅 Data Aggregation Options")  
 
-    # Time period selector  
+   
     time_period = st.selectbox(  
         "Choose time aggregation period:",  
         ["No Aggregation", "Monthly", "Yearly"],  
@@ -220,7 +218,7 @@ selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
             help=f"Select how to group your data within each {time_period.lower()} period"  
         )  
 
-        # Set up aggregation parameters  
+         
         period_col = 'Year_Month' if time_period == "Monthly" else 'Year'  
         freq_setting = "M" if time_period == "Monthly" else "Y"  
 
@@ -270,7 +268,7 @@ except Exception as e:
     st.warning(f"⚠️ Could not process date grouping: {e}")  
     st.error(f"Error details: {str(e)}")
 
-Better table display for selected table
+
 
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"
 if sel_state_key not in st.session_state:
@@ -285,15 +283,15 @@ if st.session_state[sel_state_key]:
 st.write(f"### {selected_table_name} Table Preview")
 st.info(f"📊 Data shape: {selected_df.shape[0]} rows × {selected_df.shape[1]} columns")
 
-# Show first 20 rows  
+
 st.write("**First 20 Rows:**")  
 st.dataframe(selected_df.head(20), use_container_width=True)  
 
-# Expandable section for full table  
+
 with st.expander(f"📖 Show Full {selected_table_name} Table ({len(selected_df):,} rows)"):  
     st.dataframe(selected_df, use_container_width=True)  
 
-# Download options  
+
 col1, col2 = st.columns(2)  
 with col1:  
     st.download_button(  
@@ -310,7 +308,6 @@ with col2:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  
     )
 
-Column selection
 
 st.subheader("📌 Column Selection for Visualization")
 all_columns = selected_df.columns.tolist()
@@ -330,7 +327,7 @@ df_vis = selected_df[selected_columns].copy()
 categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
 
-Display column information
+
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -344,7 +341,7 @@ with st.expander("📋 Column Details"):
 st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
 st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
 
-Interactive visualization
+
 
 st.subheader("📈 Interactive Visualization")
 
@@ -479,7 +476,7 @@ elif chart_type == "Time-Series Decomposition":
     df_ts = df_ts.sort_values('x')  
     df_ts.set_index('x', inplace=True)  
 
-    # Adjust minimum periods based on aggregation level  
+    
     min_periods = 24 if 'Year_Month' in df_vis.columns else 4 if 'Year' in df_vis.columns else 24  
 
     if len(df_ts) >= min_periods:  
@@ -500,7 +497,7 @@ elif chart_type == "Time-Series Decomposition":
         period_type = "monthly" if 'Year_Month' in df_vis.columns else "yearly" if 'Year' in df_vis.columns else "time series"  
         st.warning(f"⚠️ At least {min_periods} data points needed for {period_type} decomposition.")  
 
-# Display Plotly charts and download options  
+
 if fig is not None and chart_type not in [  
     "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot",  
     "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"  
@@ -514,7 +511,7 @@ except Exception as e:
 st.error(f"⚠️ Failed to render chart: {e}")
 st.error(f"Error details: {str(e)}")
 
-Enhanced Forecasting section with support for yearly data
+
 
 st.subheader("🔮 Forecasting (optional)")
 date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month") or find_col_ci(df_vis, "Year")
@@ -524,7 +521,7 @@ if date_col and amount_col:
 try:
 forecast_df = df_vis[[date_col, amount_col]].copy()
 
-# Handle different date column formats  
+
     if date_col == 'Year_Month':  
         forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")  
         freq_str = "M"  
@@ -541,7 +538,7 @@ forecast_df = df_vis[[date_col, amount_col]].copy()
     forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")  
     forecast_df = forecast_df.dropna(subset=[date_col, amount_col])  
 
-    # If data is not aggregated, group by appropriate period  
+    
     if date_col not in ['Year_Month', 'Year']:  
         if freq_str == "M":  
             forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()  
@@ -550,7 +547,7 @@ forecast_df = df_vis[[date_col, amount_col]].copy()
 
     forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})  
 
-    # Adjust minimum data requirements based on frequency  
+    
     min_data_points = 3 if freq_str == "Y" else 3  
 
     if len(forecast_df) >= min_data_points:  
@@ -614,11 +611,11 @@ forecast_df = df_vis[[date_col, amount_col]].copy()
                 mime="image/png"  
             )  
 
-        # Forecast table with better formatting  
+       
         forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()  
         forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]  
 
-        # Format dates based on frequency  
+         
         if freq_str == "Y":  
             forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')  
         else:  
@@ -647,7 +644,7 @@ forecast_df = df_vis[[date_col, amount_col]].copy()
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"  
             )  
 
-        # Summary statistics  
+        
         with st.expander("📊 Forecast Summary Statistics"):  
             future_avg = future_forecast["yhat"].mean()  
             historical_avg = hist_forecast["yhat"].mean()  
