@@ -1,6 +1,0 @@
-[server]
-headless = true
-
-[ui]
-hideToolbar = true
-hideSidebarNav = true
