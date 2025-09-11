@@ -11,8 +11,10 @@ if "csv_preview" not in st.session_state:
     st.session_state.csv_preview = None
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
+if "navigate_to" not in st.session_state:
+    st.session_state.navigate_to = None  # store target page
 
-# CSS for card layout with dynamic height
+# CSS for card layout
 card_style = """
 <style>
 .card {
@@ -78,8 +80,7 @@ def render_clickable_card(title, desc, df, target_page):
         submitted = st.form_submit_button(label="Click anywhere on the card")
         st.markdown("</div>", unsafe_allow_html=True)
         if submitted:
-            st.query_params = {"page": target_page}
-            st.experimental_rerun()
+            st.session_state.navigate_to = target_page  # set flag for navigation
 
 # Render cards
 with col1:
@@ -87,3 +88,9 @@ with col1:
 
 with col2:
     render_clickable_card("📊 XLSX Page", "Upload XLSX files and view analytics.", st.session_state.xlsx_preview, "xlsx")
+
+# Perform navigation if requested
+if st.session_state.navigate_to is not None:
+    st.query_params = {"page": st.session_state.navigate_to}
+    st.session_state.navigate_to = None
+    st.experimental_rerun()
