@@ -12,7 +12,7 @@ if "csv_preview" not in st.session_state:
 if "xlsx_preview" not in st.session_state:
     st.session_state.xlsx_preview = None
 
-# CSS for card layout
+# CSS for card layout with dynamic height
 card_style = """
 <style>
 .card {
@@ -22,6 +22,11 @@ card_style = """
     transition: 0.3s;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-height: 200px;
+    max-height: 400px;
 }
 .card:hover {
     background-color: #e0f7fa;
@@ -40,9 +45,13 @@ card_style = """
 }
 .card-preview {
     margin-top: 10px;
-    max-height: 80px;
+    max-height: 100px;
     overflow: auto;
     font-size: 12px;
+}
+.card-chart {
+    flex: 1;
+    overflow: auto;
 }
 </style>
 """
@@ -56,7 +65,7 @@ def render_clickable_card(title, desc, df, target_page):
         st.markdown(f'<div class="card">', unsafe_allow_html=True)
         st.markdown(f'<div class="card-title">{title}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="card-desc">{desc}</div>', unsafe_allow_html=True)
-        # Show mini table preview
+        # Mini table preview
         if df is not None:
             st.markdown(f'<div class="card-preview">{df.head(3).to_html(index=False)}</div>', unsafe_allow_html=True)
             numeric_cols = df.select_dtypes(include='number').columns
@@ -66,11 +75,10 @@ def render_clickable_card(title, desc, df, target_page):
                     y=alt.Y(col, title=col)
                 )
                 st.altair_chart(chart, use_container_width=True)
-        # Submit button covers the whole card
         submitted = st.form_submit_button(label="Click anywhere on the card")
         st.markdown("</div>", unsafe_allow_html=True)
         if submitted:
-            st.experimental_set_query_params(page=target_page)
+            st.query_params = {"page": target_page}
             st.experimental_rerun()
 
 # Render cards
