@@ -4,7 +4,7 @@ import altair as alt
 
 st.set_page_config(page_title="Pro Dashboard", layout="wide")
 
-# Initialize session_state for uploaded data
+# Initialize session_state
 if "csv_preview" not in st.session_state:
     st.session_state.csv_preview = None
 if "xlsx_preview" not in st.session_state:
@@ -12,8 +12,8 @@ if "xlsx_preview" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
-# ---------------- Navigation Buttons ----------------
-def go_to(page_name):
+# Navigation function
+def navigate(page_name):
     st.session_state.page = page_name
 
 # ---------------- Home Page ----------------
@@ -35,44 +35,9 @@ if st.session_state.page == "home":
                         y=alt.Y(col_name, title=col_name)
                     )
                     st.altair_chart(chart, use_container_width=True)
-            if st.button(f"Go to {title}", key=title):
-                go_to(target_page)
+            # Single-click navigation button
+            if st.button(f"Go to {title}", key=f"home_{target_page}"):
+                navigate(target_page)
 
     render_card(col1, "📄 CSV Page", st.session_state.csv_preview, "csv")
     render_card(col2, "📊 XLSX Page", st.session_state.xlsx_preview, "xlsx")
-
-# ---------------- CSV Page ----------------
-elif st.session_state.page == "csv":
-    st.title("📄 CSV Page")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.dataframe(df)
-        st.session_state.csv_preview = df
-
-    st.write("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🏠 Home Page"):
-            go_to("home")
-    with col2:
-        if st.button("📊 XLSX Page"):
-            go_to("xlsx")
-
-# ---------------- XLSX Page ----------------
-elif st.session_state.page == "xlsx":
-    st.title("📊 XLSX Page")
-    uploaded_file = st.file_uploader("Upload XLSX", type=["xlsx"])
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        st.dataframe(df)
-        st.session_state.xlsx_preview = df
-
-    st.write("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🏠 Home Page"):
-            go_to("home")
-    with col2:
-        if st.button("📄 CSV Page"):
-            go_to("csv")
