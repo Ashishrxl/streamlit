@@ -17,7 +17,7 @@ def navigate(page_name):
     st.session_state.page = page_name
 
 # ---------------- Home Page ----------------
-if st.session_state.page == "home":
+if st.session_state.page == "app":
     st.title("📊 Pro Dashboard Home")
     st.write("Click a button to navigate or see live previews.")
 
