@@ -26,7 +26,9 @@ a[href^="https://github.com"] {display: none !important;}
 [data-testid="stDecoration"] {display: none !important;}  
 [data-testid="stStatusWidget"] {display: none !important;}  
 button[title="Menu"] {display: none !important;}  
-</style>""" st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+</style>""" 
+
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 ----------------- Helper Functions -----------------
 
