@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.seasonal import seasonal_decompose 
 import io as sys_io
 
-st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide") st.title("📊 CSV Visualizer with Forecasting (Interactive)")
+st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide") 
+st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 hide_streamlit_style = """
 
