@@ -120,12 +120,10 @@ for table_name, table_df in tables_dict.items():
     state_key = f"expand_{table_name.replace(' ', '_')}"    
     if state_key not in st.session_state:    
         st.session_state[state_key] = False    
-
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"    
     clicked = st.button(btn_label, key=f"btn_{table_name}")    
     if clicked:    
         st.session_state[state_key] = not st.session_state[state_key]    
-
     if st.session_state[state_key]:    
         st.write(f"### {table_name} Table (First 20 Rows)")    
         if not table_df.empty:    
@@ -145,7 +143,7 @@ for table_name, table_df in tables_dict.items():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",    
             )    
         else:    
-            st.info("ℹ️ Not available from the uploaded CSV.")    
+            st.info("ℹ️ Not available from the uploaded CSV.")
 
 st.subheader("📌 Select Table for Visualization")    
 available_tables = {k: v for k, v in tables_dict.items() if not v.empty}    
@@ -168,47 +166,63 @@ if date_col_sel:
         selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')    
         numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()    
         categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]    
-
         st.markdown("### 📅 Data Aggregation Options")    
-        time_period = st.selectbox("Choose time aggregation period:", ["No Aggregation", "Monthly", "Yearly"])    
-
+        time_period = st.selectbox(    
+            "Choose time aggregation period:",    
+            ["No Aggregation", "Monthly", "Yearly"],    
+            help="Select how you want to aggregate your data over time"    
+        )    
         if time_period != "No Aggregation":    
             grouping_options = ["No Grouping"]    
             if name_col_sel:    
                 grouping_options.append("Group by Name")    
             if categorical_cols:    
                 grouping_options.append("Group by Custom Columns")    
-            grouping_choice = st.selectbox(f"Choose {time_period.lower()} grouping method:", grouping_options)    
-
+            grouping_choice = st.selectbox(    
+                f"Choose {time_period.lower()} grouping method:",    
+                grouping_options,    
+                help=f"Select how to group your data within each {time_period.lower()} period"    
+            )    
             period_col = 'Year_Month' if time_period == "Monthly" else 'Year'    
             freq_setting = "M" if time_period == "Monthly" else "Y"    
-
             if grouping_choice == "Group by Name" and name_col_sel:    
                 grouped_df = selected_df.groupby([period_col, name_col_sel], as_index=False)[numerical_cols].sum()    
                 grouped_df[period_col] = grouped_df[period_col].astype(str)    
                 selected_df = grouped_df.copy()    
                 date_col_sel = period_col    
+                st.success(f"✅ Data aggregated {time_period.lower()} and grouped by **{name_col_sel}** with numerical values summed.")    
             elif grouping_choice == "Group by Custom Columns":    
-                selected_group_cols = st.multiselect(f"Choose columns to group by (in addition to {time_period.lower()} grouping):", categorical_cols, default=[])    
+                st.markdown(f"#### Select Columns for {time_period} Grouping")    
+                selected_group_cols = st.multiselect(    
+                    f"Choose columns to group by (in addition to {time_period.lower()} grouping):",    
+                    categorical_cols,    
+                    default=[],    
+                    help=f"Select one or more columns to group your data by within each {time_period.lower()} period. Numerical columns will be summed."    
+                )    
                 if selected_group_cols:    
                     group_by_cols = [period_col] + selected_group_cols    
                     grouped_df = selected_df.groupby(group_by_cols, as_index=False)[numerical_cols].sum()    
                     grouped_df[period_col] = grouped_df[period_col].astype(str)    
                     selected_df = grouped_df.copy()    
                     date_col_sel = period_col    
+                    st.success(f"✅ Data aggregated {time_period.lower()} and grouped by **{', '.join(selected_group_cols)}** with numerical values summed.")    
                 else:    
                     grouped_df = selected_df.groupby(period_col, as_index=False)[numerical_cols].sum()    
                     grouped_df[period_col] = grouped_df[period_col].astype(str)    
                     selected_df = grouped_df.copy()    
                     date_col_sel = period_col    
+                    st.info(f"ℹ️ No grouping columns selected. Data aggregated {time_period.lower()} only.")    
             elif grouping_choice == "No Grouping":    
                 grouped_df = selected_df.groupby(period_col, as_index=False)[numerical_cols].sum()    
                 grouped_df[period_col] = grouped_df[period_col].astype(str)    
                 selected_df = grouped_df.copy()    
                 date_col_sel = period_col    
+                st.success(f"✅ Data aggregated {time_period.lower()} only. All numerical values summed per {time_period.lower()} period.")    
+        else:    
+            st.info("ℹ️ Using original data without time aggregation.")    
     except Exception as e:    
         st.warning(f"⚠️ Could not process date grouping: {e}")    
-        st.error(f"Error details: {str(e)}")    
+        st.error(f"Error details: {str(e)}")
 
 sel_state_key = f"expand_selected_{selected_table_name.replace(' ', '_')}"    
 if sel_state_key not in st.session_state:    
@@ -228,13 +242,29 @@ if st.session_state[sel_state_key]:
         st.dataframe(selected_df, use_container_width=True)    
     col1, col2 = st.columns(2)    
     with col1:    
-        st.download_button(f"⬇️ Download {selected_table_name} (CSV)", data=convert_df_to_csv(selected_df), file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.csv", mime="text/csv")    
+        st.download_button(    
+            f"⬇️ Download {selected_table_name} (CSV)",    
+            data=convert_df_to_csv(selected_df),    
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.csv",    
+            mime="text/csv",    
+        )    
     with col2:    
-        st.download_button(f"⬇️ Download {selected_table_name} (Excel)", data=convert_df_to_excel(selected_df), file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(    
+            f"⬇️ Download {selected_table_name} (Excel)",    
+            data=convert_df_to_excel(selected_df),    
+            file_name=f"{selected_table_name.lower().replace(' ', '_')}_processed.xlsx",    
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",    
+        )    
 
+st.subheader("📌 Column Selection for Visualization")    
 all_columns = selected_df.columns.tolist()    
 default_cols = all_columns.copy() if all_columns else []    
-selected_columns = st.multiselect("Select columns to include in visualization (include 'Date' and 'Amount' for forecasting)", all_columns, default=default_cols)    
+selected_columns = st.multiselect(    
+    "Select columns to include in visualization (include 'Date' and 'Amount' for forecasting)",    
+    all_columns,    
+    default=default_cols,    
+    help="Choose which columns to include in your analysis and visualization"    
+)    
 
 if not selected_columns:    
     st.warning("⚠️ Please select at least one column for visualization.")    
@@ -258,13 +288,31 @@ with st.expander("📋 Column Details"):
 
 st.subheader("📈 Interactive Visualization")    
 
-chart_options = ["Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap", "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot", "Seaborn Heatmap", "Plotly Heatmap", "Treemap", "Sunburst", "Time-Series Decomposition"]    
+chart_options = [    
+    "Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Correlation Heatmap",    
+    "Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot",    
+    "Seaborn Heatmap", "Plotly Heatmap", "Treemap", "Sunburst", "Time-Series Decomposition"    
+]    
 
-chart_x_y_hue_req = {"Scatter Plot": (True, True, True), "Line Chart": (True, True, True), "Bar Chart": (True, True, True), "Histogram": (True, False, True), "Correlation Heatmap": (False, False, False), "Seaborn Scatterplot": (True, True, True), "Seaborn Boxplot": (True, True, True), "Seaborn Violinplot": (True, True, True), "Seaborn Pairplot": (False, False, True), "Seaborn Heatmap": (False, False, False), "Plotly Heatmap": (True, True, False), "Treemap": (True, True, False), "Sunburst": (True, True, False), "Time-Series Decomposition": (True, True, False)}    
+chart_x_y_hue_req = {    
+    "Scatter Plot": (True, True, True),    
+    "Line Chart": (True, True, True),    
+    "Bar Chart": (True, True, True),    
+    "Histogram": (True, False, True),    
+    "Correlation Heatmap": (False, False, False),    
+    "Seaborn Scatterplot": (True, True, True),    
+    "Seaborn Boxplot": (True, True, True),    
+    "Seaborn Violinplot": (True, True, True),    
+    "Seaborn Pairplot": (False, False, True),    
+    "Seaborn Heatmap": (False, False, False),    
+    "Plotly Heatmap": (True, True, False),    
+    "Treemap": (True, True, False),    
+    "Sunburst": (True, True, False),    
+    "Time-Series Decomposition": (True, True, False)    
+}    
 
 chart_type = st.selectbox("Select Chart Type", chart_options)    
 need_x, need_y, need_hue = chart_x_y_hue_req.get(chart_type, (True, True, False))    
-
 x_col = y_col = hue_col = None    
 
 if need_x:    
@@ -282,8 +330,8 @@ if need_hue:
         hue_col = None    
 
 st.write("### Chart:")    
-fig = None    
-try:    
+
+try:
     if chart_type == "Scatter Plot":    
         fig = px.scatter(df_vis, x=x_col, y=y_col, color=hue_col if hue_col else None, title=f"Scatter Plot: {x_col} vs {y_col}")    
     elif chart_type == "Line Chart":    
@@ -297,9 +345,8 @@ try:
             corr = df_vis.select_dtypes(include=[np.number]).corr()    
             fig = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', aspect='auto', title="Correlation Heatmap")    
         else:    
-            st.warning("⚠️ Need at least 2 numerical columns for correlation heatmap.")
-
-elif chart_type == "Seaborn Scatterplot":    
+            st.warning("⚠️ Need at least 2 numerical columns for correlation heatmap.")    
+    elif chart_type == "Seaborn Scatterplot":    
         plt.figure(figsize=(10, 6))    
         sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)    
         plt.title(f"Scatterplot: {x_col} vs {y_col}")    
@@ -344,118 +391,143 @@ elif chart_type == "Seaborn Scatterplot":
             plt.close()    
         else:    
             st.warning("⚠️ Need at least 2 numerical columns for heatmap.")    
-    elif chart_type == "Plotly Heatmap":    
-        fig = px.density_heatmap(df_vis, x=x_col, y=y_col, title=f"Density Heatmap: {x_col} vs {y_col}")    
-    elif chart_type == "Treemap":    
-        fig = px.treemap(df_vis, path=[x_col], values=y_col, title=f"Treemap: {x_col}")    
-    elif chart_type == "Sunburst":    
-        fig = px.sunburst(df_vis, path=[x_col], values=y_col, title=f"Sunburst: {x_col}")    
-    elif chart_type == "Time-Series Decomposition":    
-        date_series = pd.to_datetime(df_vis[x_col], errors="coerce")    
-        value_series = pd.to_numeric(df_vis[y_col], errors="coerce")    
-        df_ts = pd.DataFrame({'x': date_series, 'y': value_series}).dropna()    
-        df_ts = df_ts.sort_values('x').set_index('x')    
-        if len(df_ts) >= 12:    
-            period = 12    
-            result = seasonal_decompose(df_ts['y'], model="additive", period=period)    
-            fig, axs = plt.subplots(4, 1, figsize=(12, 10))    
-            result.observed.plot(ax=axs[0], title="Observed")    
-            result.trend.plot(ax=axs[1], title="Trend")    
-            result.seasonal.plot(ax=axs[2], title="Seasonal")    
-            result.resid.plot(ax=axs[3], title="Residual")    
-            plt.tight_layout()    
-            st.pyplot(fig)    
-            png_bytes_mpl = export_matplotlib_fig(fig)    
-            st.download_button("⬇️ Download Decomposition (PNG)", data=png_bytes_mpl, file_name="time_series_decomposition.png", mime="image/png")    
-            plt.close()    
-        else:    
-            st.warning("⚠️ Need at least 12 data points for decomposition.")    
+except Exception as e:
+    st.error(f"⚠️ Failed to render chart: {e}")
 
-if fig is not None and chart_type not in ["Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"]:    
-    st.plotly_chart(fig, use_container_width=True)    
-    png_bytes = export_plotly_fig(fig)    
-    if png_bytes:    
-        st.download_button("⬇️ Download Chart (PNG)", data=png_bytes, file_name="plotly_chart.png", mime="image/png")    
+st.subheader("🔮 Forecasting (optional)")
 
-st.subheader("🔮 Forecasting (optional)")    
-date_col = find_col_ci(df_vis, "date") or find_col_ci(df_vis, "Year_Month") or find_col_ci(df_vis, "Year")    
-amount_col = find_col_ci(df_vis, "amount")    
+date_columns = [c for c in df_vis.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
+if date_columns and numerical_cols:
+    selected_date_col = st.selectbox("Select Date Column for Forecasting", date_columns)
+    selected_amount_col = st.selectbox("Select Numerical Column for Forecasting", numerical_cols)
 
-if date_col and amount_col:    
-    time_period_options = []    
-    if 'Year_Month' in df_vis.columns:    
-        time_period_options = ["Monthly", "Yearly"]    
-    elif 'Year' in df_vis.columns:    
-        time_period_options = ["Yearly"]    
-    else:    
-        time_period_options = ["Monthly"]    
+    if selected_date_col and selected_amount_col:
+        forecast_df = df_vis[[selected_date_col, selected_amount_col]].copy()
+        forecast_df[selected_date_col] = pd.to_datetime(forecast_df[selected_date_col], errors="coerce")
+        forecast_df[selected_amount_col] = pd.to_numeric(forecast_df[selected_amount_col], errors="coerce")
+        forecast_df = forecast_df.dropna(subset=[selected_date_col, selected_amount_col])
 
-    selected_time_period = st.selectbox("Select time period for forecasting", time_period_options)    
+        aggregation_period = st.selectbox("Select Aggregation Period", ["No Aggregation", "Monthly", "Yearly"])
 
-    forecast_df = df_vis[[date_col, amount_col]].copy()    
-    forecast_df[amount_col] = pd.to_numeric(forecast_df[amount_col], errors="coerce")    
-    forecast_df = forecast_df.dropna(subset=[date_col, amount_col])    
+        if aggregation_period != "No Aggregation":
+            if aggregation_period == "Monthly":
+                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='M')).sum(numeric_only=True).reset_index()
+                freq_str = "M"
+                period_type = "months"
+            else:
+                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='Y')).sum(numeric_only=True).reset_index()
+                freq_str = "Y"
+                period_type = "years"
+        else:
+            freq_str = "M"
+            period_type = "months"
 
-    if selected_time_period == "Monthly":    
-        forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")    
-        forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='M')).sum(numeric_only=True).reset_index()    
-        freq_str = "M"    
-        period_type = "months"    
-    elif selected_time_period == "Yearly":    
-        forecast_df[date_col] = pd.to_datetime(forecast_df[date_col], errors="coerce")    
-        forecast_df = forecast_df.groupby(pd.Grouper(key=date_col, freq='Y')).sum(numeric_only=True).reset_index()    
-        freq_str = "Y"    
-        period_type = "years"    
+        forecast_df = forecast_df.rename(columns={selected_date_col: "ds", selected_amount_col: "y"})
 
-    forecast_df = forecast_df.rename(columns={date_col: "ds", amount_col: "y"})    
+        min_data_points = 3
+        if len(forecast_df) >= min_data_points:
+            st.write(f"📈 **Forecasting based on {len(forecast_df)} data points**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if freq_str == "Y":
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 1, 10, 3)
+                else:
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 3, 24, 6)
+            with col2:
+                st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")
 
-    if len(forecast_df) >= 3:    
-        col1, col2 = st.columns(2)    
-        with col1:    
-            horizon = st.slider(f"Forecast Horizon ({period_type})", 1, 24 if freq_str=="M" else 10, 6 if freq_str=="M" else 3)    
-        with col2:    
-            st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")    
+            with st.spinner("🔄 Running forecast model..."):
+                model = Prophet()
+                model.fit(forecast_df)
+                future = model.make_future_dataframe(periods=horizon, freq=freq_str)
+                forecast = model.predict(future)
 
-        with st.spinner("🔄 Running forecast model..."):    
-            model = Prophet()    
-            model.fit(forecast_df)    
-            future = model.make_future_dataframe(periods=horizon, freq=freq_str)    
-            forecast = model.predict(future)    
+            last_date = forecast_df["ds"].max()
+            hist_forecast = forecast[forecast["ds"] <= last_date]
+            future_forecast = forecast[forecast["ds"] > last_date]
 
-        last_date = forecast_df["ds"].max()    
-        hist_forecast = forecast[forecast["ds"] <= last_date]    
-        future_forecast = forecast[forecast["ds"] > last_date]    
+            fig_forecast = px.line(
+                hist_forecast, x="ds", y="yhat",
+                labels={"ds": "Date", "yhat": "Predicted Amount"},
+                title=f"Forecast Analysis - Next {horizon} {period_type.title()}"
+            )
+            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(
+                x=future_forecast["ds"], y=future_forecast["yhat"],
+                mode="lines", name="Forecast", line=dict(color="orange", dash="dash")
+            )
 
-        fig_forecast = px.line(hist_forecast, x="ds", y="yhat", labels={"ds": "Date", "yhat": "Predicted Amount"}, title=f"Forecast Analysis - Next {horizon} {period_type.title()}")    
-        fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))    
-        fig_forecast.add_scatter(x=future_forecast["ds"], y=future_forecast["yhat"], mode="lines", name="Forecast", line=dict(color="orange", dash="dash"))    
+            if show_confidence:
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_upper"],
+                    mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")
+                )
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_lower"],
+                    mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")
+                )
 
-        if show_confidence:    
-            fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"))    
-            fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"))    
+            fig_forecast.add_vrect(
+                x0=last_date, x1=forecast["ds"].max(),
+                fillcolor=forecast_color, opacity=forecast_opacity, line_width=0,
+                annotation_text="Forecast Period", annotation_position="top left"
+            )
 
-        fig_forecast.add_vrect(x0=last_date, x1=forecast["ds"].max(), fillcolor=forecast_color, opacity=forecast_opacity, line_width=0, annotation_text="Forecast Period", annotation_position="top left")    
-        st.plotly_chart(fig_forecast, use_container_width=True)    
+            st.plotly_chart(fig_forecast, use_container_width=True)
 
-        png_bytes_forecast = export_plotly_fig(fig_forecast)    
-        if png_bytes_forecast:    
-            st.download_button("⬇️ Download Forecast Chart (PNG)", data=png_bytes_forecast, file_name="forecast_chart.png", mime="image/png")    
+            png_bytes_forecast = export_plotly_fig(fig_forecast)
+            if png_bytes_forecast:
+                st.download_button(
+                    "⬇️ Download Forecast Chart (PNG)",
+                    data=png_bytes_forecast,
+                    file_name="forecast_chart.png",
+                    mime="image/png"
+                )
 
-        forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()    
-        forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]    
-        forecast_table["Predicted"] = forecast_table["Predicted"].round(2)    
-        forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)    
-        forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)    
-        if freq_str == "Y":    
-            forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')    
-        else:    
-            forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')    
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()
+            forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]
 
-        st.subheader("📅 Forecast Table (Future Predictions)")    
-        st.dataframe(forecast_table, use_container_width=True)    
+            if freq_str == "Y":
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')
+            else:
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')
 
-        col1, col2 = st.columns(2)    
-        with col1:    
-            st.download_button("⬇️ Download Forecast Data (CSV)", data=convert_df_to_csv(forecast_table), file_name="forecast_predictions.csv", mime="text/csv")    
-        with col2:    
-            st.download_button("⬇️ Download Forecast Data (Excel)", data=convert_df_to_excel(forecast_table), file_name="forecast
+            forecast_table["Predicted"] = forecast_table["Predicted"].round(2)
+            forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)
+            forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)
+
+            st.subheader("📅 Forecast Table (Future Predictions)")
+            st.dataframe(forecast_table, use_container_width=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    "⬇️ Download Forecast Data (CSV)",
+                    data=convert_df_to_csv(forecast_table),
+                    file_name="forecast_predictions.csv",
+                    mime="text/csv"
+                )
+            with col2:
+                st.download_button(
+                    "⬇️ Download Forecast Data (Excel)",
+                    data=convert_df_to_excel(forecast_table),
+                    file_name="forecast_predictions.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            with st.expander("📊 Forecast Summary Statistics"):
+                future_avg = future_forecast["yhat"].mean()
+                historical_avg = hist_forecast["yhat"].mean()
+                growth_rate = ((future_avg - historical_avg) / historical_avg) * 100 if historical_avg != 0 else 0
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Historical Average", f"{historical_avg:,.2f}")
+                with col2:
+                    st.metric("Forecast Average", f"{future_avg:,.2f}")
+                with col3:
+                    st.metric("Growth Rate", f"{growth_rate:.2f}%")
+        else:
+            st.warning(f"⚠️ Need at least 3 data points for forecasting.")
+else:
+    st.info("ℹ️ To enable forecasting, include a valid date column and at least one numerical column in your selection.")
