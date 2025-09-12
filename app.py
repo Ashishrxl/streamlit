@@ -30,7 +30,7 @@ button[title="Menu"] {display: none !important;}
 
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
------------------ Helper Functions -----------------
+
 
 def find_col_ci(df: pd.DataFrame, target: str): for c in df.columns: if c.lower() == target.lower(): return c return None
 
@@ -42,11 +42,10 @@ def export_plotly_fig(fig): try: return pio.to_image(fig, format="png", engine="
 
 def export_matplotlib_fig(fig): buf = sys_io.BytesIO() fig.savefig(buf, format="png", bbox_inches="tight") buf.seek(0) return buf.getvalue()
 
------------------ Sidebar Settings -----------------
+
 
 st.sidebar.header("⚙️ Settings") forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500") forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01) show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)
 
------------------ File Upload -----------------
 
 uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"]) if uploaded_file is None: st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.") st.stop()
 
@@ -54,7 +53,7 @@ try: uploaded_df = pd.read_csv(uploaded_file, low_memory=False) except Exception
 
 st.success("✅ File uploaded successfully!")
 
------------------ Derive Tables -----------------
+
 
 id_col = find_col_ci(uploaded_df, "ID") name_col = find_col_ci(uploaded_df, "Name") party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True) if id_col and name_col else pd.DataFrame()
 
@@ -66,7 +65,7 @@ try: party_bill_df = pd.merge( party_df, bill_df, left_on=id_col, right_on=party
 
 try: billindex_col = find_col_ci(uploaded_df, "Billindex") bill_billdetails_df = pd.merge( bill_df, billdetails_df, left_on=bill_col, right_on=billindex_col, how="inner", suffixes=("_bill", "_details") ) if not bill_df.empty and not billdetails_df.empty else pd.DataFrame() except Exception: bill_billdetails_df = pd.DataFrame()
 
------------------ Tables Preview -----------------
+
 
 st.subheader("🗂️ Tables Preview") tables_dict = { "Uploaded Table": uploaded_df, "Party": party_df, "Bill": bill_df, "BillDetails": billdetails_df, "Party + Bill": party_bill_df, "Bill + BillDetails": bill_billdetails_df }
 
@@ -98,13 +97,13 @@ if st.session_state[state_key]:
     else:
         st.info("ℹ️ Not available from the uploaded CSV.")
 
------------------ Select Table -----------------
+
 
 st.subheader("📌 Select Table for Visualization") available_tables = {k: v for k, v in tables_dict.items() if not v.empty} if not available_tables: st.warning("⚠️ No usable tables could be derived from the uploaded CSV.") st.stop()
 
 selected_table_name = st.selectbox("Select one table", list(available_tables.keys())) selected_df = available_tables[selected_table_name].copy()
 
------------------ Time Aggregation if Date Exists -----------------
+
 
 date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date") amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
 
@@ -127,7 +126,7 @@ st.markdown("### 📅 Data Aggregation Options")
 except Exception as e:
     st.warning(f"⚠️ Could not process date grouping: {e}")
 
------------------ Forecasting -----------------
+
 
 st.subheader("🔮 Forecasting (optional)") if date_col_sel and amount_col_sel: try: forecast_df = selected_df[[date_col_sel, amount_col_sel]].copy() forecast_df[date_col_sel] = pd.to_datetime(forecast_df[date_col_sel], errors="coerce") forecast_df[amount_col_sel] = pd.to_numeric(forecast_df[amount_col_sel], errors="coerce") forecast_df = forecast_df.dropna()
 
