@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd 
 import numpy as np 
 import plotly.express as px 
-import plotly.io as pio from prophet 
-import Prophet 
+import plotly.io as pio 
+from prophet import Prophet 
 import seaborn as sns 
-import matplotlib.pyplot as plt from statsmodels.tsa.seasonal 
-import seasonal_decompose 
+import matplotlib.pyplot as plt 
+from statsmodels.tsa.seasonal import seasonal_decompose 
 import io as sys_io
 
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide") st.title("📊 CSV Visualizer with Forecasting (Interactive)")
