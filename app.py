@@ -61,7 +61,7 @@ forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
 forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01)        
 show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bounds)", True)        
     
-uploaded_file = st.file_uploader("Upload your CSV file (joined table)", type=["csv"])        
+uploaded_file = st.file_uploader("Upload your CSV file !", type=["csv"])        
 if uploaded_file is None:        
     st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")        
     st.stop()        
