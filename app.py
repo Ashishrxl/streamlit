@@ -35,7 +35,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 def find_col_ci(df: pd.DataFrame, target: str): 
     for c in df.columns: 
         if c.lower() == target.lower():
-        return c 
+            return c 
     return None
 
 def convert_df_to_csv(df: pd.DataFrame) -> bytes: return df.to_csv(index=False).encode("utf-8")
