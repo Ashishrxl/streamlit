@@ -254,7 +254,7 @@ if not party_bill_df.empty:
             future_forecast = forecast[forecast["ds"] > last_date]
             fig_forecast = px.line(
                 hist_forecast, x="ds", y="yhat",
-                labels={"ds": "Date", "yhat": "Predicted Amount"},
+                labels={"ds": "Date", "yhat": "Amount"},
                 title=f"Forecast Analysis - Next {horizon} {period_type.title()}"
             )
             fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
