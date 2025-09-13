@@ -23,6 +23,17 @@ if 'y_col_selected' not in st.session_state:
 if 'hue_col_selected' not in st.session_state:
     st.session_state.hue_col_selected = None
 
+if 'forecast_section_stage' not in st.session_state:
+    st.session_state.forecast_section_stage = "select_columns"
+if 'forecast_selected_date_col' not in st.session_state:
+    st.session_state.forecast_selected_date_col = None
+if 'forecast_selected_amount_col' not in st.session_state:
+    st.session_state.forecast_selected_amount_col = None
+if 'forecast_aggregation_period' not in st.session_state:
+    st.session_state.forecast_aggregation_period = None
+if 'forecast_submitted' not in st.session_state:
+    st.session_state.forecast_submitted = False
+
 hide_streamlit_style = """
 <style>                      
 #MainMenu, footer, header {visibility: hidden;}                      
@@ -134,12 +145,10 @@ for table_name, table_df in tables_dict.items():
     state_key = f"expand_{table_name.replace(' ', '')}"
     if state_key not in st.session_state:
         st.session_state[state_key] = False
-    
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
     clicked = st.button(btn_label, key=f"btn{table_name}")
     if clicked:
         st.session_state[state_key] = not st.session_state[state_key]
-    
     if st.session_state[state_key]:
         st.write(f"### {table_name} Table (First 20 Rows)")
         if not table_df.empty:
@@ -180,33 +189,27 @@ if date_col_sel:
         selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)
         selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')
         selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')
-        
         numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
         categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]
-        
         st.markdown("### 📅 Data Aggregation Options")
         time_period = st.selectbox(
             "Choose time aggregation period:",
             ["No Aggregation", "Monthly", "Yearly"],
             help="Select how you want to aggregate your data over time"
         )
-        
         if time_period != "No Aggregation":
             grouping_options = ["No Grouping"]
             if name_col_sel:
                 grouping_options.append("Group by Name")
             if categorical_cols:
                 grouping_options.append("Group by Custom Columns")
-            
             grouping_choice = st.selectbox(
                 f"Choose {time_period.lower()} grouping method:",
                 grouping_options,
                 help=f"Select how to group your data within each {time_period.lower()} period"
             )
-            
             period_col = 'Year_Month' if time_period == "Monthly" else 'Year'
             freq_setting = "M" if time_period == "Monthly" else "Y"
-            
             if grouping_choice == "Group by Name" and name_col_sel:
                 grouped_df = selected_df.groupby([period_col, name_col_sel], as_index=False)[numerical_cols].sum()
                 grouped_df[period_col] = grouped_df[period_col].astype(str)
@@ -250,12 +253,10 @@ st.subheader("📋 Selected & Processed Table")
 state_key_processed = "expand_processed_table"
 if state_key_processed not in st.session_state:
     st.session_state[state_key_processed] = False
-
 btn_label_processed = f"Minimise Processed Table" if st.session_state[state_key_processed] else f"Expand Processed Table"
 clicked_processed = st.button(btn_label_processed, key="btn_processed_table")
 if clicked_processed:
     st.session_state[state_key_processed] = not st.session_state[state_key_processed]
-
 if st.session_state[state_key_processed]:
     st.write(f"### {selected_table_name} - Processed Table (First 20 Rows)")
     st.dataframe(selected_df.head(20))
@@ -283,15 +284,12 @@ selected_columns = st.multiselect(
     default=default_cols,
     help="Choose which columns to include in your analysis and visualization"
 )
-
 if not selected_columns:
     st.warning("⚠️ Please select at least one column for visualization.")
     st.stop()
-
 df_vis = selected_df[selected_columns].copy()
 categorical_cols = df_vis.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 numerical_cols = df_vis.select_dtypes(include=[np.number]).columns.tolist()
-
 col1, col2, col3 = st.columns(3)
 with col1:
     st.metric("Total Columns", len(selected_columns))
@@ -299,7 +297,6 @@ with col2:
     st.metric("Numerical Columns", len(numerical_cols))
 with col3:
     st.metric("Categorical Columns", len(categorical_cols))
-
 with st.expander("📋 Column Details"):
     st.write("Categorical columns:", categorical_cols if categorical_cols else "None")
     st.write("Numerical columns:", numerical_cols if numerical_cols else "None")
@@ -430,121 +427,139 @@ with chart_container:
 
 st.subheader("🔮 Forecasting (optional)")
 date_columns = [c for c in df_vis.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
-
 if date_columns and numerical_cols:
-    with st.form("forecasting_form"):
-        selected_date_col = st.selectbox("Select Date Column for Forecasting", date_columns)
-        selected_amount_col = st.selectbox("Select Numerical Column for Forecasting", numerical_cols)
-        forecast_submitted = st.form_submit_button("Generate Forecast")
-    if forecast_submitted and selected_date_col and selected_amount_col:                
-        forecast_df = df_vis[[selected_date_col, selected_amount_col]].copy()                
-        forecast_df[selected_date_col] = pd.to_datetime(forecast_df[selected_date_col], errors="coerce")                
-        forecast_df[selected_amount_col] = pd.to_numeric(forecast_df[selected_amount_col], errors="coerce")                
-        forecast_df = forecast_df.dropna(subset=[selected_date_col, selected_amount_col])                
-        aggregation_period = st.selectbox("Select Aggregation Period", ["No Aggregation", "Monthly", "Yearly"])                
-        if aggregation_period != "No Aggregation":                
-            if aggregation_period == "Monthly":                
-                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='M')).sum(numeric_only=True).reset_index()                
-                freq_str = "M"                
-                period_type = "months"                
-            else:                
-                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='Y')).sum(numeric_only=True).reset_index()                
-                freq_str = "Y"                
-                period_type = "years"                
-        else:                
-            freq_str = "M"                
-            period_type = "months"                
-        forecast_df = forecast_df.rename(columns={selected_date_col: "ds", selected_amount_col: "y"})                
-        min_data_points = 3                
-        if len(forecast_df) >= min_data_points:                
-            st.write(f"📈 **Forecasting based on {len(forecast_df)} data points**")                
-            col1, col2 = st.columns(2)                
-            with col1:                
-                if freq_str == "Y":                
-                    horizon = st.slider(f"Forecast Horizon ({period_type})", 1, 10, 3)                
-                else:                
-                    horizon = st.slider(f"Forecast Horizon ({period_type})", 3, 24, 6)                
-            with col2:                
-                st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")                
-            with st.spinner("🔄 Running forecast model..."):                
-                model = Prophet()                
-                model.fit(forecast_df)                
-                future = model.make_future_dataframe(periods=horizon, freq=freq_str)                
-                forecast = model.predict(future)                
-            last_date = forecast_df["ds"].max()                
-            hist_forecast = forecast[forecast["ds"] <= last_date]                
-            future_forecast = forecast[forecast["ds"] > last_date]                
-            fig_forecast = px.line(                
-                hist_forecast, x="ds", y="yhat",                
-                labels={"ds": "Date", "yhat": "Predicted Amount"},                
-                title=f"Forecast Analysis - Next {horizon} {period_type.title()}"                
-            )                
-            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))                
-            fig_forecast.add_scatter(                
-                x=future_forecast["ds"], y=future_forecast["yhat"],                
-                mode="lines", name="Forecast", line=dict(color="orange", dash="dash")                
-            )                
-            if show_confidence:                
-                fig_forecast.add_scatter(                
-                    x=forecast["ds"], y=forecast["yhat_upper"],                
-                    mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")                
-                )                
-                fig_forecast.add_scatter(                
-                    x=forecast["ds"], y=forecast["yhat_lower"],                
-                    mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")                
-                )                
-            fig_forecast.add_vrect(                
-                x0=last_date, x1=forecast["ds"].max(),                
-                fillcolor=forecast_color, opacity=forecast_opacity, line_width=0,                
-                annotation_text="Forecast Period", annotation_position="top left"                
-            )                
-            st.plotly_chart(fig_forecast, use_container_width=True, key="forecast_chart")                
-            png_bytes_forecast = export_plotly_fig(fig_forecast)                
-            if png_bytes_forecast:                
-                st.download_button(                
-                    "⬇️ Download Forecast Chart (PNG)",                
-                    data=png_bytes_forecast,                
-                    file_name="forecast_chart.png",                
-                    mime="image/png"                
-                )                
-            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()                
-            forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]                
-            if freq_str == "Y":                
-                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')                
-            else:                
-                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')                
-            forecast_table["Predicted"] = forecast_table["Predicted"].round(2)                
-            forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)                
-            forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)                
-            st.subheader("📅 Forecast Table (Future Predictions)")                
-            st.dataframe(forecast_table, use_container_width=True)                
-            col1, col2 = st.columns(2)                
-            with col1:                
-                st.download_button(                
-                    "⬇️ Download Forecast Data (CSV)",                
-                    data=convert_df_to_csv(forecast_table),                
-                    file_name="forecast_predictions.csv",                
-                    mime="text/csv"                
-                )                
-            with col2:                
-                st.download_button(                
-                    "⬇️ Download Forecast Data (Excel)",                
-                    data=convert_df_to_excel(forecast_table),                
-                    file_name="forecast_predictions.xlsx",                
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"                
-                )                
-            with st.expander("📊 Forecast Summary Statistics"):                
-                future_avg = future_forecast["yhat"].mean()                
-                historical_avg = hist_forecast["yhat"].mean()                
-                growth_rate = ((future_avg - historical_avg) / historical_avg) * 100 if historical_avg != 0 else 0                
-                col1, col2, col3 = st.columns(3)                
-                with col1:                
-                    st.metric("Historical Average", f"{historical_avg:,.2f}")                
-                with col2:                
-                    st.metric("Forecast Average", f"{future_avg:,.2f}")                
-                with col3:                
-                    st.metric("Growth Rate", f"{growth_rate:.2f}%")                
-        else:                
+    if st.session_state.forecast_section_stage == "select_columns":
+        with st.form("forecast_column_form"):
+            selected_date_col = st.selectbox("Select Date Column for Forecasting", date_columns, index=0)
+            selected_amount_col = st.selectbox("Select Numerical Column for Forecasting", numerical_cols, index=0)
+            next_step = st.form_submit_button("Next: Select Aggregation")
+        if next_step:
+            st.session_state.forecast_selected_date_col = selected_date_col
+            st.session_state.forecast_selected_amount_col = selected_amount_col
+            st.session_state.forecast_section_stage = "aggregation"
+            st.experimental_rerun()
+    elif st.session_state.forecast_section_stage == "aggregation":
+        with st.form("forecast_aggregation_form"):
+            aggregation_period = st.selectbox("Select Aggregation Period", ["No Aggregation", "Monthly", "Yearly"], index=0)
+            next_step = st.form_submit_button("Next: Run Forecast")
+        if next_step:
+            st.session_state.forecast_aggregation_period = aggregation_period
+            st.session_state.forecast_section_stage = "forecast"
+            st.experimental_rerun()
+    elif st.session_state.forecast_section_stage == "forecast":
+        selected_date_col = st.session_state.forecast_selected_date_col
+        selected_amount_col = st.session_state.forecast_selected_amount_col
+        aggregation_period = st.session_state.forecast_aggregation_period
+        forecast_df = df_vis[[selected_date_col, selected_amount_col]].copy()
+        forecast_df[selected_date_col] = pd.to_datetime(forecast_df[selected_date_col], errors="coerce")
+        forecast_df[selected_amount_col] = pd.to_numeric(forecast_df[selected_amount_col], errors="coerce")
+        forecast_df = forecast_df.dropna(subset=[selected_date_col, selected_amount_col])
+        if aggregation_period != "No Aggregation":
+            if aggregation_period == "Monthly":
+                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='M')).sum(numeric_only=True).reset_index()
+                freq_str = "M"
+                period_type = "months"
+            else:
+                forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='Y')).sum(numeric_only=True).reset_index()
+                freq_str = "Y"
+                period_type = "years"
+        else:
+            freq_str = "M"
+            period_type = "months"
+        forecast_df = forecast_df.rename(columns={selected_date_col: "ds", selected_amount_col: "y"})
+        min_data_points = 3
+        if len(forecast_df) >= min_data_points:
+            st.write(f"📈 **Forecasting based on {len(forecast_df)} data points**")
+            col1, col2 = st.columns(2)
+            with col1:
+                if freq_str == "Y":
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 1, 10, 3)
+                else:
+                    horizon = st.slider(f"Forecast Horizon ({period_type})", 3, 24, 6)
+            with col2:
+                st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")
+            with st.spinner("🔄 Running forecast model..."):
+                model = Prophet()
+                model.fit(forecast_df)
+                future = model.make_future_dataframe(periods=horizon, freq=freq_str)
+                forecast = model.predict(future)
+            last_date = forecast_df["ds"].max()
+            hist_forecast = forecast[forecast["ds"] <= last_date]
+            future_forecast = forecast[forecast["ds"] > last_date]
+            fig_forecast = px.line(
+                hist_forecast, x="ds", y="yhat",
+                labels={"ds": "Date", "yhat": "Predicted Amount"},
+                title=f"Forecast Analysis - Next {horizon} {period_type.title()}"
+            )
+            fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))
+            fig_forecast.add_scatter(
+                x=future_forecast["ds"], y=future_forecast["yhat"],
+                mode="lines", name="Forecast", line=dict(color="orange", dash="dash")
+            )
+            if show_confidence:
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_upper"],
+                    mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")
+                )
+                fig_forecast.add_scatter(
+                    x=forecast["ds"], y=forecast["yhat_lower"],
+                    mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")
+                )
+            fig_forecast.add_vrect(
+                x0=last_date, x1=forecast["ds"].max(),
+                fillcolor=forecast_color, opacity=forecast_opacity, line_width=0,
+                annotation_text="Forecast Period", annotation_position="top left"
+            )
+            st.plotly_chart(fig_forecast, use_container_width=True, key="forecast_chart")
+            png_bytes_forecast = export_plotly_fig(fig_forecast)
+            if png_bytes_forecast:
+                st.download_button(
+                    "⬇️ Download Forecast Chart (PNG)",
+                    data=png_bytes_forecast,
+                    file_name="forecast_chart.png",
+                    mime="image/png"
+                )
+            forecast_table = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(horizon).copy()
+            forecast_table.columns = ["Date", "Predicted", "Lower Bound", "Upper Bound"]
+            if freq_str == "Y":
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y')
+            else:
+                forecast_table["Date"] = forecast_table["Date"].dt.strftime('%Y-%m-%d')
+            forecast_table["Predicted"] = forecast_table["Predicted"].round(2)
+            forecast_table["Lower Bound"] = forecast_table["Lower Bound"].round(2)
+            forecast_table["Upper Bound"] = forecast_table["Upper Bound"].round(2)
+            st.subheader("📅 Forecast Table (Future Predictions)")
+            st.dataframe(forecast_table, use_container_width=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    "⬇️ Download Forecast Data (CSV)",
+                    data=convert_df_to_csv(forecast_table),
+                    file_name="forecast_predictions.csv",
+                    mime="text/csv"
+                )
+            with col2:
+                st.download_button(
+                    "⬇️ Download Forecast Data (Excel)",
+                    data=convert_df_to_excel(forecast_table),
+                    file_name="forecast_predictions.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            with st.expander("📊 Forecast Summary Statistics"):
+                future_avg = future_forecast["yhat"].mean()
+                historical_avg = hist_forecast["yhat"].mean()
+                growth_rate = ((future_avg - historical_avg) / historical_avg) * 100 if historical_avg != 0 else 0
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Historical Average", f"{historical_avg:,.2f}")
+                with col2:
+                    st.metric("Forecast Average", f"{future_avg:,.2f}")
+                with col3:
+                    st.metric("Growth Rate", f"{growth_rate:.2f}%")
+        else:
             st.warning(f"⚠️ Need at least 3 data points for forecasting.")
+        if st.button("Start Over"):
+            st.session_state.forecast_section_stage = "select_columns"
+            st.experimental_rerun()
 else:
     st.info("ℹ️ To enable forecasting, include a valid date column and at least one numerical column in your selection.")
