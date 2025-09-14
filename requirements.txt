@@ -1,11 +1,2 @@
 streamlit
-pandas
-numpy
-plotly
-prophet
-seaborn
-matplotlib
-statsmodels
-openpyxl
-xlsxwriter
-kaleido
+google.generativeai
