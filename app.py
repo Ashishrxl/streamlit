@@ -381,7 +381,7 @@ with st.expander("📊 Visualize Data", expanded=False):
 
 # --- Start of new expandable section for Forecasting ---
 st.markdown("---")
-with st.expander("🔮 Run Forecasting", expanded=False):
+with st.expander("🔮 Forecasting", expanded=False):
     st.subheader("📌 Select Table for Forecasting")
     available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
     if not available_tables:
