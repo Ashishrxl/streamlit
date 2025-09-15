@@ -38,7 +38,7 @@ def convert_df_to_csv(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 def convert_df_to_excel(df: pd.DataFrame) -> bytes:
-    buffer = io.BytesIO()
+    buffer = io.BytesOfa()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     return buffer.getvalue()
@@ -70,7 +70,7 @@ show_confidence = st.sidebar.checkbox("Show confidence interval (upper/lower bou
 
 uploaded_file = st.file_uploader("Upload your CSV file !", type=["csv"])
 if uploaded_file is None:
-    st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")
+    st.info("Upload a CSV to start. The app will let you visualize/forecast.")
     st.stop()
 
 try:
@@ -82,133 +82,55 @@ except Exception as e:
 
 st.success("✅ File uploaded successfully!")
 
-# --- Conditional Logic for Column Renaming ---
 proceed_with_app = False
-if file_name.lower() == 'alldata.csv':
-    proceed_with_app = True
-    st.info("File 'alldata.csv' detected. Proceeding with default column names.")
-else:
+if 'column_check_status' not in st.session_state:
+    st.session_state['column_check_status'] = 'pending'
+
+if st.session_state['column_check_status'] == 'pending':
+    if file_name.lower() == 'alldata.csv':
+        st.info("File 'alldata.csv' detected. Proceeding with default column names.")
+        st.session_state['column_check_status'] = 'ok'
+        st.rerun()
+
     st.warning(f"File '{file_name}' is not 'alldata.csv'. Please confirm or rename columns.")
     st.write("### Current Columns:")
     st.dataframe(pd.DataFrame({"Original Column": uploaded_df.columns.tolist()}))
 
-    col_check_container = st.container()
-    with col_check_container:
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ These column names are correct"):
-                proceed_with_app = True
-                st.session_state['column_renamed'] = False
-        with col2:
-            if st.button("✍️ I need to rename columns"):
-                st.session_state['column_renamed'] = True
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ These column names are correct"):
+            st.session_state['column_check_status'] = 'ok'
+            st.rerun()
+    with col2:
+        if st.button("✍️ I need to rename columns"):
+            st.session_state['column_check_status'] = 'rename'
+            st.rerun()
 
-    if get_session_state('column_renamed', False):
-        st.write("---")
-        st.subheader("✍️ Rename Columns")
-        renamed_cols = {}
-        original_cols = uploaded_df.columns.tolist()
-        
-        rename_cols_container = st.container()
-        with rename_cols_container:
-            for col in original_cols:
-                new_name = st.text_input(f"Rename '{col}' to:", value=col, key=f"rename_{col}")
-                renamed_cols[col] = new_name
-        
-        if st.button("✨ Apply Renaming and Continue"):
-            uploaded_df.rename(columns=renamed_cols, inplace=True)
-            st.success("Columns renamed successfully! Proceeding with the app.")
-            st.session_state['column_renamed'] = False
-            proceed_with_app = True
+elif st.session_state['column_check_status'] == 'rename':
+    st.write("---")
+    st.subheader("✍️ Rename Columns")
+    renamed_cols = {}
+    original_cols = uploaded_df.columns.tolist()
     
-    if not proceed_with_app:
-        st.stop()
-# --- End of Conditional Logic ---
-
-# --- The rest of the app logic, which is now inside the 'if proceed_with_app' block ---
-if proceed_with_app:
-    id_col = find_col_ci(uploaded_df, "ID")
-    name_col = find_col_ci(uploaded_df, "Name")
-    party_df = uploaded_df[[id_col, name_col]].drop_duplicates().reset_index(drop=True) if id_col and name_col else pd.DataFrame()
-
-    bill_col = find_col_ci(uploaded_df, "Bill")
-    partyid_col = find_col_ci(uploaded_df, "PartyId")
-    date_col_master = find_col_ci(uploaded_df, "Date")
-    amount_col_master = find_col_ci(uploaded_df, "Amount")
-    bill_df = (
-        uploaded_df[[bill_col, partyid_col, date_col_master, amount_col_master]].drop_duplicates().reset_index(drop=True)
-        if bill_col and partyid_col and date_col_master and amount_col_master else pd.DataFrame()
-    )
-
-    billdetails_cols = [find_col_ci(uploaded_df, c) for c in ["IndexId", "Billindex", "Item", "Qty", "Rate", "Less"]]
-    billdetails_cols = [c for c in billdetails_cols if c]
-    billdetails_df = uploaded_df[billdetails_cols].drop_duplicates().reset_index(drop=True) if billdetails_cols else pd.DataFrame()
-
-    try:
-        party_bill_df = pd.merge(
-            party_df, bill_df, left_on=id_col, right_on=partyid_col, how="inner", suffixes=("_party", "_bill")
-        ) if not party_df.empty and not bill_df.empty else pd.DataFrame()
-    except Exception:
-        party_bill_df = pd.DataFrame()
-
-    try:
-        billindex_col = find_col_ci(uploaded_df, "Billindex")
-        bill_billdetails_df = pd.merge(
-            bill_df, billdetails_df, left_on=bill_col, right_on=billindex_col, how="inner", suffixes=("_bill", "_details")
-        ) if not bill_df.empty and not billdetails_df.empty else pd.DataFrame()
-    except Exception:
-        bill_billdetails_df = pd.DataFrame()
-
-    st.subheader("🗂️ Tables Preview")
-    tables_dict = {
-        "Uploaded Table": uploaded_df,
-        "Party": party_df,
-        "Bill": bill_df,
-        "BillDetails": billdetails_df,
-        "Party + Bill": party_bill_df,
-        "Bill + BillDetails": bill_billdetails_df
-    }
-
-    for table_name, table_df in tables_dict.items():
-        state_key = f"expand_{table_name.replace(' ', '')}"
-        if state_key not in st.session_state:
-            st.session_state[state_key] = False
-        btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
-        st.button(btn_label, key=f"btn{table_name}", on_click=toggle_state, args=(state_key,))
-
-        if st.session_state[state_key]:
-            st.write(f"### {table_name} Table (First 20 Rows)")
-            if not table_df.empty:
-                st.dataframe(table_df.head(20))
-                with st.expander(f"📖 Show full {table_name} Table"):
-                    st.dataframe(table_df)
-                st.download_button(
-                    f"⬇️ Download {table_name} (CSV)",
-                    data=convert_df_to_csv(table_df),
-                    file_name=f"{table_name.lower().replace(' ', '')}.csv",
-                    mime="text/csv",
-                )
-                st.download_button(
-                    f"⬇️ Download {table_name} (Excel)",
-                    data=convert_df_to_excel(table_df),
-                    file_name=f"{table_name.lower().replace(' ', '')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            else:
-                st.info("ℹ️ Not available from the uploaded CSV.")
-
+    rename_cols_container = st.container()
+    for col in original_cols:
+        new_name = st.text_input(f"Rename '{col}' to:", value=col, key=f"rename_{col}")
+        renamed_cols[col] = new_name
+    
+    if st.button("✨ Apply Renaming and Continue"):
+        uploaded_df.rename(columns=renamed_cols, inplace=True)
+        st.success("Columns renamed successfully! Proceeding with the app.")
+        st.session_state['uploaded_df'] = uploaded_df  # Save the renamed DF
+        st.session_state['column_check_status'] = 'ok'
+        st.rerun()
+else:
+    if 'uploaded_df' in st.session_state:
+        uploaded_df = st.session_state['uploaded_df']
+    
     # --- Start of new expandable section for Visualization ---
     st.markdown("---")
-    with st.expander("📊 Visualize Data", expanded=False):
-        st.subheader("📌 Select Table for Visualization")
-        available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
-        if not available_tables:
-            st.warning("⚠️ No usable tables could be derived from the uploaded CSV.")
-            st.stop()
-
-        selected_table_name = st.selectbox("Select one table", list(available_tables.keys()))
-        selected_df = available_tables[selected_table_name].copy()
-
+    with st.expander("📊 Visualize Data", expanded=True):
+        selected_df = uploaded_df.copy()
         date_col_sel = find_col_ci(selected_df, "date") or find_col_ci(selected_df, "Date")
         amount_col_sel = find_col_ci(selected_df, "amount") or find_col_ci(selected_df, "Amount")
         name_col_sel = find_col_ci(selected_df, "name") or find_col_ci(selected_df, "Name")
@@ -221,6 +143,7 @@ if proceed_with_app:
                 selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')
                 numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()
                 categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]
+                
                 st.markdown("### 📅 Data Aggregation Options")
                 time_period = st.selectbox(
                     "Choose time aggregation period:",
@@ -239,7 +162,6 @@ if proceed_with_app:
                         help=f"Select how to group your data within each {time_period.lower()} period"
                     )
                     period_col = 'Year_Month' if time_period == "Monthly" else 'Year'
-                    freq_setting = "M" if time_period == "Monthly" else "Y"
                     if grouping_choice == "Group by Name" and name_col_sel:
                         grouped_df = selected_df.groupby([period_col, name_col_sel], as_index=False)[numerical_cols].sum()
                         grouped_df[period_col] = grouped_df[period_col].astype(str)
@@ -279,31 +201,9 @@ if proceed_with_app:
                 st.warning(f"⚠️ Could not process date grouping: {e}")
                 st.error(f"Error details: {str(e)}")
 
-        st.subheader("📋 Selected & Processed Table")
-        state_key_processed = "expand_processed_table"
-        if state_key_processed not in st.session_state:
-            st.session_state[state_key_processed] = False
-        btn_label_processed = f"Minimise Processed Table" if st.session_state[state_key_processed] else f"Expand Processed Table"
-        st.button(btn_label_processed, key="btn_processed_table", on_click=toggle_state, args=(state_key_processed,))
-
-        if st.session_state[state_key_processed]:
-            st.write(f"### {selected_table_name} - Processed Table (First 20 Rows)")
-            st.dataframe(selected_df.head(20))
-            with st.expander(f"📖 Show full Processed {selected_table_name} Table"):
-                st.dataframe(selected_df)
-            st.download_button(
-                f"⬇️ Download Processed {selected_table_name} (CSV)",
-                data=convert_df_to_csv(selected_df),
-                file_name=f"processed_{selected_table_name.lower().replace(' ', '')}.csv",
-                mime="text/csv",
-            )
-            st.download_button(
-                f"⬇️ Download Processed {selected_table_name} (Excel)",
-                data=convert_df_to_excel(selected_df),
-                file_name=f"processed_{selected_table_name.lower().replace(' ', '')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-
+        st.subheader("📋 Processed Data Preview")
+        st.dataframe(selected_df.head(20))
+        
         st.subheader("📌 Column Selection for Visualization")
         all_columns = selected_df.columns.tolist()
         default_cols = all_columns.copy() if all_columns else []
@@ -355,7 +255,8 @@ if proceed_with_app:
             "Seaborn Heatmap": (False, False, False),
             "Plotly Heatmap": (True, True, False),
             "Treemap": (True, True, False),
-            "Sunburst": (True, True, False)
+            "Sunburst": (True, True, False),
+            "Time-Series Decomposition": (True, True, False)
         }
 
         chart_type = st.selectbox("Select Chart Type", chart_options)
@@ -399,8 +300,25 @@ if proceed_with_app:
                     fig = px.density_heatmap(df_vis, x=x_col, y=y_col, nbinsx=20, nbinsy=20, title="Plotly Heatmap")
                 else:
                     st.warning("⚠️ Need at least 2 numerical columns for heatmap.")
+            elif chart_type == "Time-Series Decomposition":
+                if date_col_sel and amount_col_sel and len(df_vis) > 12:
+                    df_ts = df_vis[[date_col_sel, amount_col_sel]].copy()
+                    df_ts = df_ts.dropna().set_index(date_col_sel)
+                    result = seasonal_decompose(df_ts, model='additive', period=12)
+                    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 10))
+                    result.observed.plot(ax=ax1, title='Original')
+                    result.trend.plot(ax=ax2, title='Trend')
+                    result.seasonal.plot(ax=ax3, title='Seasonal')
+                    result.resid.plot(ax=ax4, title='Residual')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    png_bytes_mpl = export_matplotlib_fig(fig)
+                    st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_mpl, file_name="ts_decomposition.png", mime="image/png")
+                    plt.close()
+                else:
+                    st.warning("⚠️ Time-Series Decomposition requires a Date column, a numerical column, and at least 12 data points.")
 
-            if fig is not None:        
+            if fig is not None and chart_type != "Time-Series Decomposition":        
                 st.plotly_chart(fig, use_container_width=True)        
                 png_bytes_plotly = export_plotly_fig(fig)        
                 if png_bytes_plotly:        
@@ -434,15 +352,7 @@ if proceed_with_app:
     # --- Start of new expandable section for Forecasting ---
     st.markdown("---")
     with st.expander("🔮 Forecasting", expanded=False):
-        st.subheader("📌 Select Table for Forecasting")
-        available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
-        if not available_tables:
-            st.warning("⚠️ No usable tables could be derived from the uploaded CSV.")
-            st.stop()
-
-        selected_table_name_forecast = st.selectbox("Select one table for forecasting", list(available_tables.keys()), key="forecast_table_select")
-        selected_df_forecast = available_tables[selected_table_name_forecast].copy()
-
+        selected_df_forecast = uploaded_df.copy()
         date_columns = [c for c in selected_df_forecast.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
         numerical_cols = selected_df_forecast.select_dtypes(include=[np.number]).columns.tolist()
 
@@ -473,7 +383,6 @@ if proceed_with_app:
                     freq_str = "M"            
                     period_type = "months"            
 
-                # Store the original aggregated data before Prophet processing
                 original_forecast_df = forecast_df.copy()
 
                 forecast_df = forecast_df.rename(columns={selected_date_col: "ds", selected_amount_col: "y"})            
@@ -507,7 +416,6 @@ if proceed_with_app:
                     )            
                     fig_forecast.update_traces(name="Historical Data", showlegend=True, line=dict(color="blue", dash="solid"))
 
-                    # Add a separate line for the Prophet fitted historical values
                     fig_forecast.add_scatter(            
                         x=hist_forecast["ds"], y=hist_forecast["yhat"],            
                         mode="lines", name="Prophet Fitted", line=dict(color="lightblue", dash="dot")            
