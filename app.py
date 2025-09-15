@@ -347,7 +347,8 @@ if proceed_with_app:
             "Seaborn Heatmap": (False, False, False),
             "Plotly Heatmap": (True, True, False),
             "Treemap": (True, True, False),
-            "Sunburst": (True, True, False)
+            "Sunburst": (True, True, False),
+            "Time-Series Decomposition": (True, True, False)
         }
 
         chart_type = st.selectbox("Select Chart Type", chart_options)
@@ -391,4 +392,168 @@ if proceed_with_app:
                     fig = px.density_heatmap(df_vis, x=x_col, y=y_col, nbinsx=20, nbinsy=20, title="Plotly Heatmap")
                 else:
                     st.warning("⚠️ Need at least 2 numerical columns for heatmap.")
+            elif chart_type == "Seaborn Scatterplot":
+                plt.figure(figsize=(10, 6))
+                sns.scatterplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+                plt.title(f"Seaborn Scatterplot: {x_col} vs {y_col}")
+                st.pyplot(plt.gcf())
+            elif chart_type == "Seaborn Boxplot":
+                plt.figure(figsize=(10, 6))
+                sns.boxplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+                plt.title(f"Seaborn Boxplot: {x_col} vs {y_col}")
+                st.pyplot(plt.gcf())
+            elif chart_type == "Seaborn Violinplot":
+                plt.figure(figsize=(10, 6))
+                sns.violinplot(data=df_vis, x=x_col, y=y_col, hue=hue_col if hue_col else None)
+                plt.title(f"Seaborn Violinplot: {x_col} vs {y_col}")
+                st.pyplot(plt.gcf())
+            elif chart_type == "Seaborn Pairplot":
+                if len(numerical_cols) >= 2:
+                    sns.pairplot(df_vis, hue=hue_col if hue_col else None)
+                    st.pyplot(plt.gcf())
+                else:
+                    st.warning("⚠️ Need at least 2 numerical columns for pairplot.")
+            elif chart_type == "Seaborn Heatmap":
+                if len(numerical_cols) >= 2:
+                    corr = df_vis[numerical_cols].corr()
+                    plt.figure(figsize=(10, 8))
+                    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f")
+                    plt.title("Seaborn Correlation Heatmap")
+                    st.pyplot(plt.gcf())
+                else:
+                    st.warning("⚠️ Need at least 2 numerical columns for heatmap.")
+            elif chart_type == "Treemap":
+                path_cols = st.multiselect("Select hierarchy columns for Treemap", categorical_cols, help="Select columns to define the hierarchy of the treemap")
+                if not path_cols:
+                    st.warning("⚠️ Please select at least one hierarchy column.")
+                else:
+                    values_col = st.selectbox("Select values column", numerical_cols, help="Select the numerical column for the size of the treemap tiles")
+                    if values_col:
+                        fig = px.treemap(df_vis, path=path_cols, values=values_col)
+            elif chart_type == "Sunburst":
+                path_cols = st.multiselect("Select hierarchy columns for Sunburst", categorical_cols, help="Select columns to define the hierarchy of the sunburst chart")
+                if not path_cols:
+                    st.warning("⚠️ Please select at least one hierarchy column.")
+                else:
+                    values_col = st.selectbox("Select values column", numerical_cols, help="Select the numerical column for the size of the sunburst segments")
+                    if values_col:
+                        fig = px.sunburst(df_vis, path=path_cols, values=values_col)
+            elif chart_type == "Time-Series Decomposition":
+                if date_col_sel and y_col and time_period != "No Aggregation":
+                    try:
+                        df_ts = selected_df.copy()
+                        df_ts[date_col_sel] = pd.to_datetime(df_ts[date_col_sel])
+                        df_ts.set_index(date_col_sel, inplace=True)
+                        result = seasonal_decompose(df_ts[y_col], model='additive', period=12 if time_period == "Monthly" else 1)
+                        
+                        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(12, 12), sharex=True)
+                        result.observed.plot(ax=ax1, title='Observed')
+                        result.trend.plot(ax=ax2, title='Trend')
+                        result.seasonal.plot(ax=ax3, title='Seasonal')
+                        result.resid.plot(ax=ax4, title='Residual')
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not perform time-series decomposition. Please check your data. Error: {e}")
+                else:
+                    st.warning("⚠️ Please ensure 'Date' and a numerical Y-axis column are selected and a time aggregation (Monthly/Yearly) is chosen to perform decomposition.")
+            
+            if fig and chart_type not in ["Seaborn Scatterplot", "Seaborn Boxplot", "Seaborn Violinplot", "Seaborn Pairplot", "Seaborn Heatmap", "Time-Series Decomposition"]:
+                st.plotly_chart(fig, use_container_width=True)
 
+                download_col1, download_col2 = st.columns(2)
+                with download_col1:
+                    download_img = export_plotly_fig(fig)
+                    if download_img:
+                        st.download_button("⬇️ Download Chart as PNG", download_img, file_name=f"{chart_type.lower().replace(' ', '_')}.png", mime="image/png")
+                with download_col2:
+                    json_data = fig.to_json()
+                    st.download_button("⬇️ Download Chart as JSON", json_data, file_name=f"{chart_type.lower().replace(' ', '_')}.json", mime="application/json")
+        except Exception as e:
+            st.error(f"❌ An error occurred while generating the chart: {e}")
+            st.info("Please check your column selections and data types.")
+            
+        st.markdown("---")
+
+        if date_col_sel and amount_col_sel:
+            st.subheader("🔮 Forecasting with Prophet")
+            st.info("Prophet works best with time-series data. Ensure you have a 'Date' and a numerical 'Amount' column. The date column should be in a recognized format.")
+
+            try:
+                df_forecast = selected_df[[date_col_sel, amount_col_sel]].dropna().copy()
+                df_forecast.columns = ["ds", "y"]
+                df_forecast["ds"] = pd.to_datetime(df_forecast["ds"])
+
+                if df_forecast.empty:
+                    st.warning("⚠️ The selected 'Date' and 'Amount' columns contain no valid data for forecasting.")
+                    st.stop()
+
+                freq = st.selectbox(
+                    "Select Data Frequency:",
+                    ['D', 'W', 'M', 'Q', 'Y'],
+                    index=['D', 'W', 'M', 'Q', 'Y'].index(freq_setting) if 'freq_setting' in locals() else 0,
+                    help="D: Daily, W: Weekly, M: Monthly, Q: Quarterly, Y: Yearly. This helps Prophet identify seasonality."
+                )
+
+                st.markdown("#### Forecasting Parameters")
+                forecast_periods = st.slider(
+                    "Number of periods to forecast",
+                    min_value=1, max_value=365, value=90 if freq == 'D' else 12, step=1,
+                    help="Number of future periods (days, months, etc.) to predict."
+                )
+
+                show_yearly = st.checkbox("Show Yearly Seasonality", True)
+                show_weekly = st.checkbox("Show Weekly Seasonality", True)
+                show_daily = st.checkbox("Show Daily Seasonality", False)
+                
+                if st.button("📈 Run Forecasting"):
+                    with st.spinner("⏳ Running Prophet... This may take a moment..."):
+                        m = Prophet(
+                            yearly_seasonality=show_yearly,
+                            weekly_seasonality=show_weekly,
+                            daily_seasonality=show_daily
+                        )
+                        m.fit(df_forecast)
+                        future = m.make_future_dataframe(periods=forecast_periods, freq=freq)
+                        forecast = m.predict(future)
+
+                        st.success("✅ Forecasting complete!")
+                        st.write("### 🔮 Forecasted Data")
+                        st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(forecast_periods))
+                        st.download_button(
+                            "⬇️ Download Forecast Data (CSV)",
+                            data=convert_df_to_csv(forecast),
+                            file_name="forecast_data.csv",
+                            mime="text/csv",
+                        )
+
+                        fig_forecast = px.line(df_forecast, x='ds', y='y', title='Actual vs. Forecasted Data')
+                        fig_forecast.add_scatter(x=forecast['ds'], y=forecast['yhat'], mode='lines', name='Forecast', line=dict(color=forecast_color))
+                        if show_confidence:
+                            fig_forecast.add_traces(
+                                px.area(forecast, x='ds', y='yhat_lower', custom_data=[forecast['yhat_upper']]).update_traces(
+                                    name='Confidence Interval',
+                                    mode='lines',
+                                    fill='tonexty',
+                                    fillcolor=forecast_color,
+                                    opacity=forecast_opacity,
+                                    line=dict(width=0),
+                                    hovertemplate='Lower Bound: %{y}<br>Upper Bound: %{customdata[0]}<extra></extra>'
+                                ).data
+                            )
+                        st.plotly_chart(fig_forecast, use_container_width=True)
+
+                        st.write("### 📊 Seasonality and Trend Components")
+                        fig_components = m.plot_components(forecast)
+                        st.pyplot(fig_components)
+                        st.download_button(
+                            "⬇️ Download Components Chart (PNG)",
+                            data=export_matplotlib_fig(fig_components),
+                            file_name="prophet_components.png",
+                            mime="image/png"
+                        )
+            except Exception as e:
+                st.error(f"❌ An error occurred during forecasting: {e}")
+                st.info("Please check that the 'Date' column is a valid date format and the 'Amount' column is numeric.")
+        else:
+            st.warning("⚠️ Forecasting requires both a 'Date' and a numerical 'Amount' column to be available in the data.")
