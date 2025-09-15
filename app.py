@@ -146,7 +146,7 @@ for table_name, table_df in tables_dict.items():
 
 # --- Start of new expandable section for Visualization ---
 st.markdown("---")
-with st.expander("📊 Visualize Data", expanded=True):
+with st.expander("📊 Visualize Data", expanded=False):
     st.subheader("📌 Select Table for Visualization")
     available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
     if not available_tables:
