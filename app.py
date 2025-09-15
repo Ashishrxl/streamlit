@@ -13,9 +13,8 @@ st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", l
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 hide_streamlit_style = """
-
 <style>                  
-#MainMenu, footer, header {visibility: hidden;}                  
+#MainMenu, footer {visibility: hidden;}                  
 footer {display: none !important;}                  
 header {display: none !important;}                  
 #MainMenu {display: none !important;}                  
@@ -147,7 +146,7 @@ for table_name, table_df in tables_dict.items():
 
 # --- Start of new expandable section for Visualization ---
 st.markdown("---")
-with st.expander("📊 Visualize Data", expanded=False):
+with st.expander("📊 Visualize Data", expanded=True):
     st.subheader("📌 Select Table for Visualization")
     available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
     if not available_tables:
@@ -383,14 +382,26 @@ with st.expander("📊 Visualize Data", expanded=False):
 # --- Start of new expandable section for Forecasting ---
 st.markdown("---")
 with st.expander("🔮 Run Forecasting", expanded=False):
-    st.subheader("🔮 Forecasting (optional)")
-    date_columns = [c for c in df_vis.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
+    st.subheader("📌 Select Table for Forecasting")
+    available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
+    if not available_tables:
+        st.warning("⚠️ No usable tables could be derived from the uploaded CSV.")
+        st.stop()
+
+    selected_table_name_forecast = st.selectbox("Select one table for forecasting", list(available_tables.keys()), key="forecast_table_select")
+    selected_df_forecast = available_tables[selected_table_name_forecast].copy()
+    
+    date_columns = [c for c in selected_df_forecast.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
+    numerical_cols = selected_df_forecast.select_dtypes(include=[np.number]).columns.tolist()
+
     if date_columns and numerical_cols:
+        st.markdown("---")
+        st.subheader("🔮 Forecasting Options")
         selected_date_col = st.selectbox("Select Date Column for Forecasting", date_columns)
         selected_amount_col = st.selectbox("Select Numerical Column for Forecasting", numerical_cols)
 
         if selected_date_col and selected_amount_col:            
-            forecast_df = df_vis[[selected_date_col, selected_amount_col]].copy()            
+            forecast_df = selected_df_forecast[[selected_date_col, selected_amount_col]].copy()            
             forecast_df[selected_date_col] = pd.to_datetime(forecast_df[selected_date_col], errors="coerce")            
             forecast_df[selected_amount_col] = pd.to_numeric(forecast_df[selected_amount_col], errors="coerce")            
             forecast_df = forecast_df.dropna(subset=[selected_date_col, selected_amount_col])            
@@ -517,7 +528,6 @@ with st.expander("🔮 Run Forecasting", expanded=False):
                         st.metric("Growth Rate", f"{growth_rate:.2f}%")            
             else:            
                 st.warning(f"⚠️ Need at least 3 data points for forecasting.")
-
     else:
-        st.info("ℹ️ To enable forecasting, include a valid date column and at least one numerical column in your selection.")
+        st.info("ℹ️ The selected table does not contain a valid date column and/or a numerical column for forecasting.")
 # --- End of new expandable section for Forecasting ---
