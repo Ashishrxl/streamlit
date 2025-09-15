@@ -38,7 +38,7 @@ def convert_df_to_csv(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 def convert_df_to_excel(df: pd.DataFrame) -> bytes:
-    buffer = io.BytesOfa()
+    buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     return buffer.getvalue()
