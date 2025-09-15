@@ -55,6 +55,10 @@ def export_matplotlib_fig(fig):
     buf.seek(0)
     return buf.getvalue()
 
+# Callback function to toggle the state
+def toggle_state(key):
+    st.session_state[key] = not st.session_state[key]
+
 st.sidebar.header("⚙️ Settings")
 forecast_color = st.sidebar.color_picker("Forecast highlight color", "#FFA500")
 forecast_opacity = st.sidebar.slider("Forecast highlight opacity", 0.05, 1.0, 0.12, step=0.01)
@@ -120,9 +124,10 @@ for table_name, table_df in tables_dict.items():
     if state_key not in st.session_state:
         st.session_state[state_key] = False
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
-    clicked = st.button(btn_label, key=f"btn{table_name}")
-    if clicked:
-        st.session_state[state_key] = not st.session_state[state_key]
+    
+    # Use on_click callback to update state
+    st.button(btn_label, key=f"btn{table_name}", on_click=toggle_state, args=(state_key,))
+
     if st.session_state[state_key]:
         st.write(f"### {table_name} Table (First 20 Rows)")
         if not table_df.empty:
@@ -231,9 +236,10 @@ with st.expander("📊 Visualize Data", expanded=False):
     if state_key_processed not in st.session_state:
         st.session_state[state_key_processed] = False
     btn_label_processed = f"Minimise Processed Table" if st.session_state[state_key_processed] else f"Expand Processed Table"
-    clicked_processed = st.button(btn_label_processed, key="btn_processed_table")
-    if clicked_processed:
-        st.session_state[state_key_processed] = not st.session_state[state_key_processed]
+    
+    # Use on_click callback here as well
+    st.button(btn_label_processed, key="btn_processed_table", on_click=toggle_state, args=(state_key_processed,))
+
     if st.session_state[state_key_processed]:
         st.write(f"### {selected_table_name} - Processed Table (First 20 Rows)")
         st.dataframe(selected_df.head(20))
@@ -390,7 +396,7 @@ with st.expander("🔮 Forecasting", expanded=False):
 
     selected_table_name_forecast = st.selectbox("Select one table for forecasting", list(available_tables.keys()), key="forecast_table_select")
     selected_df_forecast = available_tables[selected_table_name_forecast].copy()
-    
+
     date_columns = [c for c in selected_df_forecast.columns if "date" in c.lower() or c.lower() in ["year_month", "year"]]
     numerical_cols = selected_df_forecast.select_dtypes(include=[np.number]).columns.tolist()
 
@@ -454,13 +460,13 @@ with st.expander("🔮 Forecasting", expanded=False):
                     title=f"Forecast Analysis - Next {horizon} {period_type.title()}"            
                 )            
                 fig_forecast.update_traces(name="Historical Data", showlegend=True, line=dict(color="blue", dash="solid"))
-                
+
                 # Add a separate line for the Prophet fitted historical values
                 fig_forecast.add_scatter(            
                     x=hist_forecast["ds"], y=hist_forecast["yhat"],            
                     mode="lines", name="Prophet Fitted", line=dict(color="lightblue", dash="dot")            
                 )
-                
+
                 fig_forecast.add_scatter(            
                     x=future_forecast["ds"], y=future_forecast["yhat"],            
                     mode="lines", name="Forecast", line=dict(color="orange", dash="dash")            
