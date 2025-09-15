@@ -146,7 +146,7 @@ for table_name, table_df in tables_dict.items():
 
 # --- Start of new expandable section for Visualization ---
 st.markdown("---")
-with st.expander("📊 Visualize Data", expanded=False):
+with st.expander("📊 Visualize Data", expanded=True):
     st.subheader("📌 Select Table for Visualization")
     available_tables = {k: v for k, v in tables_dict.items() if not v.empty}
     if not available_tables:
@@ -421,6 +421,9 @@ with st.expander("🔮 Run Forecasting", expanded=False):
                 freq_str = "M"            
                 period_type = "months"            
 
+            # Store the original aggregated data before Prophet processing
+            original_forecast_df = forecast_df.copy()
+
             forecast_df = forecast_df.rename(columns={selected_date_col: "ds", selected_amount_col: "y"})            
 
             min_data_points = 3            
@@ -446,11 +449,18 @@ with st.expander("🔮 Run Forecasting", expanded=False):
                 future_forecast = forecast[forecast["ds"] > last_date]            
 
                 fig_forecast = px.line(            
-                    hist_forecast, x="ds", y="yhat",            
-                    labels={"ds": "Date", "yhat": "Predicted Amount"},            
+                    original_forecast_df, x=selected_date_col, y=selected_amount_col,            
+                    labels={selected_date_col: "Date", selected_amount_col: "Actual Amount"},            
                     title=f"Forecast Analysis - Next {horizon} {period_type.title()}"            
                 )            
-                fig_forecast.update_traces(selector=dict(mode="lines"), line=dict(color="blue", dash="solid"))            
+                fig_forecast.update_traces(name="Historical Data", showlegend=True, line=dict(color="blue", dash="solid"))
+                
+                # Add a separate line for the Prophet fitted historical values
+                fig_forecast.add_scatter(            
+                    x=hist_forecast["ds"], y=hist_forecast["yhat"],            
+                    mode="lines", name="Prophet Fitted", line=dict(color="lightblue", dash="dot")            
+                )
+                
                 fig_forecast.add_scatter(            
                     x=future_forecast["ds"], y=future_forecast["yhat"],            
                     mode="lines", name="Forecast", line=dict(color="orange", dash="dash")            
@@ -459,11 +469,11 @@ with st.expander("🔮 Run Forecasting", expanded=False):
                 if show_confidence:            
                     fig_forecast.add_scatter(            
                         x=forecast["ds"], y=forecast["yhat_upper"],            
-                        mode="lines", name="Upper Bound", line=dict(dash="dot", color="green")            
+                        mode="lines", name="Upper Bound", line=dict(dash="dot", color="green"), showlegend=True            
                     )            
                     fig_forecast.add_scatter(            
                         x=forecast["ds"], y=forecast["yhat_lower"],            
-                        mode="lines", name="Lower Bound", line=dict(dash="dot", color="red")            
+                        mode="lines", name="Lower Bound", line=dict(dash="dot", color="red"), showlegend=True            
                     )            
 
                 fig_forecast.add_vrect(            
