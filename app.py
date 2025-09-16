@@ -531,7 +531,7 @@ st.success("✅ File uploaded successfully!")
 if file_name.lower() == "alldata.csv":
     run_app_logic(uploaded_df, is_alldata=True)
 else:
-    st.warning("⚠️ This is not 'alldata.csv'. Please confirm the column names for analysis.")
+    st.warning("⚠️ Please confirm the column names for analysis.")
     st.subheader("📋 Confirm Column Names")
     
     col_confirm = st.radio("Are the column names correct for analysis?", ["Yes", "No, I want to rename them"])
