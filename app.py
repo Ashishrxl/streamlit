@@ -530,7 +530,7 @@ if file_name.lower() == "alldata.csv":
         st.error(f"❌ Error reading CSV: {e}")
         st.stop()
 else:
-    st.warning("⚠️ This file is not the 'alldata.csv' template. Please confirm its structure.")
+    st.warning("⚠️ Please confirm its structure.")
     st.subheader("📋 Confirm File Structure")
 
     header_option = st.radio("Does your CSV file have a header row?", ["Yes", "No"])
