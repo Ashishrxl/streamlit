@@ -338,7 +338,7 @@ def run_app_logic(uploaded_df, is_alldata):
                 png_bytes_plotly = export_plotly_fig(fig)
                 if png_bytes_plotly:
                     st.download_button("⬇️ Download Chart (PNG)", data=png_bytes_plotly, file_name="plotly_chart.png", mime="image/png")
-            
+
             if chart_type.startswith("Seaborn"):
                 plt.figure(figsize=(10, 6))
                 if chart_type == "Seaborn Scatterplot":
@@ -519,41 +519,72 @@ if uploaded_file is None:
     st.info("Upload a CSV to start. The app will derive tables and let you visualize/forecast.")
     st.stop()
 
-try:
-    file_name = uploaded_file.name
-    uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
-except Exception as e:
-    st.error(f"❌ Error reading CSV: {e}")
-    st.stop()
-
-st.success("✅ File uploaded successfully!")
+file_name = uploaded_file.name
 
 if file_name.lower() == "alldata.csv":
-    run_app_logic(uploaded_df, is_alldata=True)
+    try:
+        uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
+        st.success("✅ File uploaded successfully!")
+        run_app_logic(uploaded_df, is_alldata=True)
+    except Exception as e:
+        st.error(f"❌ Error reading CSV: {e}")
+        st.stop()
 else:
-    st.warning("⚠️ Please confirm the column names for analysis.")
-    st.subheader("📋 Confirm Column Names")
-    
-    col_confirm = st.radio("Are the column names correct for analysis?", ["Yes", "No, I want to rename them"])
+    st.warning("⚠️ This file is not the 'alldata.csv' template. Please confirm its structure.")
+    st.subheader("📋 Confirm File Structure")
 
-    if col_confirm == "Yes":
-        st.success("Column names confirmed. Proceeding with visualization and forecasting.")
-        run_app_logic(uploaded_df, is_alldata=False)
-    
-    elif col_confirm == "No, I want to rename them":
-        st.info("Please provide the new column names.")
-        new_cols_dict = {}
-        original_cols = uploaded_df.columns.tolist()
-        
-        for col in original_cols:
-            new_name = st.text_input(f"Rename column '{col}':", value=col)
-            new_cols_dict[col] = new_name
+    header_option = st.radio("Does your CSV file have a header row?", ["Yes", "No"])
+
+    if header_option == "Yes":
+        try:
+            uploaded_df = pd.read_csv(uploaded_file, low_memory=False)
+            st.success("✅ File loaded with header successfully!")
+            st.info("Now, please confirm the column names for analysis.")
             
-        if st.button("Apply Renaming and Analyze"):
-            try:
-                renamed_df = uploaded_df.rename(columns=new_cols_dict)
-                st.success("Columns renamed successfully! Analyzing the new data structure.")
-                run_app_logic(renamed_df, is_alldata=False)
-            except Exception as e:
-                st.error(f"❌ Failed to rename columns: {e}")
+            col_confirm = st.radio("Are the column names correct?", ["Yes", "No, I want to rename them"])
 
+            if col_confirm == "Yes":
+                st.success("Column names confirmed. Proceeding with visualization and forecasting.")
+                run_app_logic(uploaded_df, is_alldata=False)
+            elif col_confirm == "No, I want to rename them":
+                st.info("Please provide the new column names.")
+                new_cols_dict = {}
+                original_cols = uploaded_df.columns.tolist()
+
+                for col in original_cols:
+                    new_name = st.text_input(f"Rename column '{col}':", value=col)
+                    new_cols_dict[col] = new_name
+
+                if st.button("Apply Renaming and Analyze"):
+                    try:
+                        renamed_df = uploaded_df.rename(columns=new_cols_dict)
+                        st.success("Columns renamed successfully! Analyzing the new data structure.")
+                        run_app_logic(renamed_df, is_alldata=False)
+                    except Exception as e:
+                        st.error(f"❌ Failed to rename columns: {e}")
+        except Exception as e:
+            st.error(f"❌ Error reading CSV with header: {e}")
+            st.stop()
+    elif header_option == "No":
+        try:
+            uploaded_df = pd.read_csv(uploaded_file, header=None, low_memory=False)
+            st.success("✅ File loaded without header successfully!")
+            st.info("Please rename the generic columns to meaningful names.")
+            
+            new_cols_dict = {}
+            original_cols = uploaded_df.columns.tolist()
+
+            for col in original_cols:
+                new_name = st.text_input(f"Rename generic column '{col}' (e.g., Column 0):", value="")
+                new_cols_dict[col] = new_name
+
+            if st.button("Apply Renaming and Analyze"):
+                try:
+                    renamed_df = uploaded_df.rename(columns=new_cols_dict)
+                    st.success("Columns renamed successfully! Analyzing the new data structure.")
+                    run_app_logic(renamed_df, is_alldata=False)
+                except Exception as e:
+                    st.error(f"❌ Failed to rename columns: {e}")
+        except Exception as e:
+            st.error(f"❌ Error reading CSV without header: {e}")
+            st.stop()
