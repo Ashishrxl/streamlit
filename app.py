@@ -133,7 +133,7 @@ for table_name, table_df in tables_dict.items():
         if not table_df.empty:
             st.dataframe(table_df.head(20))
             with st.expander(f"📖 Show full {table_name} Table"):
-                st.markdown("<br>, unsafe_allow_html=True") # Added gap here
+                st.markdown("<br>", unsafe_allow_html=True) # Added gap here
                 st.dataframe(table_df)
             st.download_button(
                 f"⬇️ Download {table_name} (CSV)",
