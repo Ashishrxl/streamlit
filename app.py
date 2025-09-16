@@ -124,7 +124,7 @@ for table_name, table_df in tables_dict.items():
     if state_key not in st.session_state:
         st.session_state[state_key] = False
     btn_label = f"Minimise {table_name} Table" if st.session_state[state_key] else f"Expand {table_name} Table"
-    
+
     # Use on_click callback to update state
     st.button(btn_label, key=f"btn{table_name}", on_click=toggle_state, args=(state_key,))
 
@@ -133,6 +133,7 @@ for table_name, table_df in tables_dict.items():
         if not table_df.empty:
             st.dataframe(table_df.head(20))
             with st.expander(f"📖 Show full {table_name} Table"):
+                st.markdown("<br>") # Added gap here
                 st.dataframe(table_df)
             st.download_button(
                 f"⬇️ Download {table_name} (CSV)",
@@ -236,7 +237,7 @@ with st.expander("📊 Visualize Data", expanded=False):
     if state_key_processed not in st.session_state:
         st.session_state[state_key_processed] = False
     btn_label_processed = f"Minimise Processed Table" if st.session_state[state_key_processed] else f"Expand Processed Table"
-    
+
     # Use on_click callback here as well
     st.button(btn_label_processed, key="btn_processed_table", on_click=toggle_state, args=(state_key_processed,))
 
@@ -244,6 +245,7 @@ with st.expander("📊 Visualize Data", expanded=False):
         st.write(f"### {selected_table_name} - Processed Table (First 20 Rows)")
         st.dataframe(selected_df.head(20))
         with st.expander(f"📖 Show full Processed {selected_table_name} Table"):
+            st.markdown("<br>") # Added gap here
             st.dataframe(selected_df)
         st.download_button(
             f"⬇️ Download Processed {selected_table_name} (CSV)",
