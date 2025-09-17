@@ -31,7 +31,7 @@ if uploaded_file is not None:
         llm,
         df,
         verbose=True,
-        agent_type=AgentType.CONVERSATIONAL_REACT_DESCRIPTION
+        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION  # Fix applied here
     )
 
     # Chat input for user queries
