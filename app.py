@@ -6,18 +6,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS: Hide only unwanted items, KEEP sidebar toggle ---
+# --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
 hide_streamlit_style = """
 <style>
-#MainMenu {visibility: hidden;}         /* Hide hamburger menu */
-footer {visibility: hidden;}            /* Hide footer */
-[data-testid="stStatusWidget"] {display: none;}  /* Hide status */
-[data-testid="stToolbar"] {display: none;}       /* Hide deploy/share toolbar */
-a[href^="https://github.com"] {display: none !important;}   /* Hide GitHub link */
-a[href^="https://streamlit.io"] {display: none !important;} /* Hide Streamlit link */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
 
-/* DO NOT hide <header>, only hide its right-side elements */
-header [data-testid="stHeaderActionElements"] {display: none;}
+/* The following specifically targets and hides all child elements of the header's right side,
+   while preserving the header itself and, by extension, the sidebar toggle button. */
+header > div:nth-child(2) {
+    display: none;
+}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
