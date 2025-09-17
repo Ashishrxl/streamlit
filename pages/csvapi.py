@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain.agents import AgentType
 
 # Set your Google API key as a Streamlit secret
-# Go to "Manage app > Settings > Secrets" in Streamlit Cloud
-# and add your GEMINI_API_KEY
 GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
-# Initialize the Gemini model with a low temperature for consistent output
+# Initialize the Gemini model
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-flash",
     temperature=0.1,
@@ -25,22 +24,22 @@ if uploaded_file is not None:
     # Read the CSV into a pandas DataFrame
     df = pd.read_csv(uploaded_file)
     st.success("File uploaded successfully!")
-    st.dataframe(df.head()) # Display the first few rows
+    st.dataframe(df.head())
 
-    # Create the pandas DataFrame agent
-    agent = create_pandas_dataframe_agent(llm, df, verbose=True)
+    # Create the pandas DataFrame agent with the correct agent type
+    agent = create_pandas_dataframe_agent(
+        llm,
+        df,
+        verbose=True,
+        agent_type=AgentType.CONVERSATIONAL_REACT_DESCRIPTION
+    )
 
     # Chat input for user queries
     prompt = st.chat_input("Ask a question about your data...")
     if prompt:
         st.write(f"Thinking about: {prompt}")
-        
-        # Use a try-except block to handle potential errors from the agent
         try:
-            # Invoke the agent with the user's prompt
             response = agent.invoke(prompt)
-            # Display the final response from the agent
             st.write(response["output"])
-            
         except Exception as e:
             st.error(f"An error occurred: {e}")
