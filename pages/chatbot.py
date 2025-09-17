@@ -16,7 +16,7 @@ st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 # Use Streamlit secrets for API key
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # FIX: Corrected model name
 except Exception as e:
     st.error(f"Error configuring Gemini API: {e}. Please ensure GOOGLE_API_KEY is set in your Streamlit secrets.")
@@ -575,12 +575,12 @@ def run_app_logic(uploaded_df, is_alldata):
                         response_text = response.text.strip()
                         
                         # Try to parse the JSON
-                        if response_text.startswith('{') and response_text.endswith('}'):
+                        try:
                             data = json.loads(response_text)
                             answer = data.get("answer", "I couldn't find an answer.")
                             filters = data.get("filters", [])
-                        else:
-                            # Fallback for non-JSON responses
+                        except json.JSONDecodeError:
+                            # If it's not a valid JSON, use the full text as the answer
                             answer = response_text
                             filters = []
 
@@ -629,10 +629,6 @@ def run_app_logic(uploaded_df, is_alldata):
                                     # For simplicity here, we'll just acknowledge it.
                                 else:
                                     st.info("ℹ️ Select filters and press 'Apply Filters' to continue.")
-
-                    except json.JSONDecodeError:
-                        st.error("⚠️ The AI response was not in the expected format. Please try rephrasing your question.")
-                        st.session_state.chat_messages.append({"role": "assistant", "content": "I'm sorry, I couldn't understand the response. Could you please rephrase your question?"})
                     except Exception as e:
                         st.error(f"❌ An error occurred during chat processing: {e}")
                         st.session_state.chat_messages.append({"role": "assistant", "content": "An error occurred while processing your request."})
