@@ -16,8 +16,8 @@ st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 # Use Streamlit secrets for API key
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-pro')
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    gemini_model = genai.GenerativeModel('gemini-pro')  # Renamed for clarity
 except Exception as e:
     st.error(f"Error configuring Gemini API: {e}. Please ensure GOOGLE_API_KEY is set in your Streamlit secrets.")
     st.stop()
@@ -430,10 +430,10 @@ def run_app_logic(uploaded_df, is_alldata):
                         st.write(f"**Data range:** {forecast_df['ds'].min().strftime('%Y-%m-%d')} to {forecast_df['ds'].max().strftime('%Y-%m-%d')}")
 
                     with st.spinner("🔄 Running forecast model..."):
-                        model = Prophet()
-                        model.fit(forecast_df)
-                        future = model.make_future_dataframe(periods=horizon, freq=freq_str)
-                        forecast = model.predict(future)
+                        prophet_model = Prophet()  # Renamed variable
+                        prophet_model.fit(forecast_df)
+                        future = prophet_model.make_future_dataframe(periods=horizon, freq=freq_str)
+                        forecast = prophet_model.predict(future)
 
                     last_date = forecast_df["ds"].max()
                     hist_forecast = forecast[forecast["ds"] <= last_date]
@@ -567,7 +567,7 @@ def run_app_logic(uploaded_df, is_alldata):
             with st.chat_message("assistant"):
                 with st.spinner("Analyzing data..."):
                     try:
-                        response = model.generate_content(full_prompt)
+                        response = gemini_model.generate_content(full_prompt)  # Used corrected variable
                         response_text = response.text.strip()
                         
                         # Try to parse the JSON
@@ -595,20 +595,20 @@ def run_app_logic(uploaded_df, is_alldata):
                                     
                                     if column and filter_type and options:
                                         if filter_type == "categorical":
-                                            if selected_df_chat[column].dtype in ['object', 'category', 'bool']:
+                                            if column in selected_df_chat.columns and selected_df_chat[column].dtype in ['object', 'category', 'bool']:
                                                 all_options = sorted(selected_df_chat[column].unique().tolist())
                                                 selected_options = st.multiselect(f"Select {column}", all_options, default=options)
                                                 if selected_options:
                                                     st.session_state.new_filters[column] = selected_options
                                         elif filter_type == "numerical":
-                                            if selected_df_chat[column].dtype in ['int64', 'float64']:
-                                                min_val = selected_df_chat[column].min()
-                                                max_val = selected_df_chat[column].max()
-                                                selected_range = st.slider(f"Select {column} range", float(min_val), float(max_val), (float(options[0]), float(options[1])))
+                                            if column in selected_df_chat.columns and selected_df_chat[column].dtype in ['int64', 'float64']:
+                                                min_val = float(selected_df_chat[column].min())
+                                                max_val = float(selected_df_chat[column].max())
+                                                selected_range = st.slider(f"Select {column} range", min_val, max_val, (float(options[0]), float(options[1])))
                                                 st.session_state.new_filters[column] = selected_range
                                         elif filter_type == "date":
                                             try:
-                                                if pd.api.types.is_datetime64_any_dtype(selected_df_chat[column]):
+                                                if column in selected_df_chat.columns and pd.api.types.is_datetime64_any_dtype(selected_df_chat[column]):
                                                     start_date = pd.to_datetime(options[0]).date()
                                                     end_date = pd.to_datetime(options[1]).date()
                                                     selected_date_range = st.date_input(f"Select {column} range", [start_date, end_date])
