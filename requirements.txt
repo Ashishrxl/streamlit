@@ -9,3 +9,4 @@ statsmodels
 openpyxl
 xlsxwriter
 kaleido
+google-generativeai
