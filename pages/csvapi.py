@@ -6,11 +6,11 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 # Set your Google API key as a Streamlit secret
 # Go to "Manage app > Settings > Secrets" in Streamlit Cloud
 # and add your GEMINI_API_KEY
-GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 # Initialize the Gemini model with a low temperature for consistent output
 llm = ChatGoogleGenerativeAI(
-    model="gemini-pro",
+    model="gemini-1.5-Flash",
     temperature=0.1,
     google_api_key=GOOGLE_API_KEY
 )
