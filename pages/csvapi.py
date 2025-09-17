@@ -10,7 +10,7 @@ GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 # Initialize the Gemini model with a low temperature for consistent output
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-Flash",
+    model="gemini-1.5-flash",
     temperature=0.1,
     google_api_key=GOOGLE_API_KEY
 )
