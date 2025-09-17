@@ -16,7 +16,7 @@ st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 # Use Streamlit secrets for API key
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # Renamed for clarity
 except Exception as e:
     st.error(f"Error configuring Gemini API: {e}. Please ensure GOOGLE_API_KEY is set in your Streamlit secrets.")
