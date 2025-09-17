@@ -10,3 +10,5 @@ openpyxl
 xlsxwriter
 kaleido
 google-generativeai
+langchain-google-genai
+langchain-experimental
