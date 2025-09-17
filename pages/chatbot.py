@@ -529,6 +529,10 @@ def run_app_logic(uploaded_df, is_alldata):
         
         selected_table_name_chat = st.selectbox("Select one table to chat with", list(available_tables_chat.keys()), key="chat_table_select")
         selected_df_chat = available_tables_chat[selected_table_name_chat].copy()
+        # Display the preview of the selected table
+        st.write(f"### Preview of '{selected_table_name_chat}'")
+        st.dataframe(selected_df_chat.head(10)) # Shows the first 10 rows
+        
 
         # Initialize chat history for this section
         if "chat_messages" not in st.session_state:
