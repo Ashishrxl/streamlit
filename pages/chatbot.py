@@ -518,7 +518,7 @@ def run_app_logic(uploaded_df, is_alldata):
         else:
             st.info("ℹ️ The selected table does not contain a valid date column and/or a numerical column for forecasting.")
 
-    # --- Chat with CSV Section ---
+    # --- Chat with CSV Section (UPDATED) ---
     st.markdown("---")
     with st.expander("🤖 Chat with your CSV", expanded=False):
         st.subheader("📌 Select Table for Chat")
@@ -550,81 +550,170 @@ def run_app_logic(uploaded_df, is_alldata):
             columns_info = ", ".join(selected_df_chat.columns)
             df_sample_str = selected_df_chat.head(5).to_string()
             
+            # Ask Gemini to produce Python code. We request code only and specifically ask for a python code block.
             full_prompt = f"""
-            You are a data analyst assistant. Your task is to analyze a pandas DataFrame and answer the user's questions about it.
-            The DataFrame has the following columns and their data types:
+            You are a data analyst assistant. The user uploaded a pandas DataFrame with these columns:
             {selected_df_chat.dtypes.to_string()}
-            Here are the first 5 rows of the DataFrame to give you context:
+            Here are the first 5 rows:
             {df_sample_str}
-            
-            Based on this information, provide a concise answer. Additionally, suggest relevant filters in a JSON object. The JSON should have a key 'answer' for the text, and a key 'filters' which is a list of objects. Each object should have keys 'column' and 'type' (e.g., 'categorical', 'numerical', 'date'), and 'options' (a list of values or a range [min, max]). The filters should be directly related to the user's question.
-            
-            If no filters are relevant, the 'filters' list should be empty.
 
-            User's question: {prompt}
+            The user asked: {prompt}
+
+            Produce a Python-only answer that performs the requested analysis on a pandas DataFrame named `df`.
+            - Output must contain a single fenced Python code block (```python ... ```).
+            - Do NOT include any import statements (assume pd, np, px, plt, sns are available).
+            - Use `df` as the variable for the table.
+            - Put the final result into one of these variables: `result`, `df_out`, `fig`, or `output`.
+            - Keep code short and focused (prefer <40 lines).
+            - Do NOT use file, network, or system operations (no open(), no subprocess, no os, no sys).
+            - If visualization is appropriate, produce a Plotly figure object named `fig`.
             """
 
             with st.chat_message("assistant"):
-                with st.spinner("Analyzing data..."):
+                with st.spinner("Analyzing data and requesting Python code from Gemini..."):
                     try:
-                        response = gemini_model.generate_content(full_prompt)  # Used corrected variable
+                        response = gemini_model.generate_content(full_prompt)
                         response_text = response.text.strip()
-                        
-                        # Try to parse the JSON
-                        if response_text.startswith('{') and response_text.endswith('}'):
-                            data = json.loads(response_text)
-                            answer = data.get("answer", "I couldn't find an answer.")
-                            filters = data.get("filters", [])
+                        st.session_state.chat_messages.append({"role": "assistant", "content": "I generated code — attempting to run it safely."})
+
+                        # Extract Python code block from Gemini's response
+                        import re, ast
+                        code_block = None
+                        # Look for ```python ... ``` first
+                        m = re.search(r"```python(.*?)```", response_text, flags=re.DOTALL | re.IGNORECASE)
+                        if not m:
+                            # fallback to any triple backtick block
+                            m = re.search(r"```(?:.*?)\n(.*?)```", response_text, flags=re.DOTALL)
+                        if m:
+                            code_block = m.group(1).strip()
                         else:
-                            # Fallback for non-JSON responses
-                            answer = response_text
-                            filters = []
+                            # Also accept inline code without fences (last resort)
+                            # take everything after the first "```" or after "```" absence, take the response as plain code
+                            code_block = response_text
 
-                        st.markdown(answer)
-                        st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                        st.markdown("**Generated code (preview):**")
+                        st.code(code_block, language="python")
 
-                        # Display and process filters
-                        if filters:
-                            st.markdown("### Refine Results")
-                            with st.form("filter_form"):
-                                st.session_state.new_filters = {}
-                                for filter_info in filters:
-                                    column = filter_info.get("column")
-                                    filter_type = filter_info.get("type")
-                                    options = filter_info.get("options", [])
-                                    
-                                    if column and filter_type and options:
-                                        if filter_type == "categorical":
-                                            if column in selected_df_chat.columns and selected_df_chat[column].dtype in ['object', 'category', 'bool']:
-                                                all_options = sorted(selected_df_chat[column].unique().tolist())
-                                                selected_options = st.multiselect(f"Select {column}", all_options, default=options)
-                                                if selected_options:
-                                                    st.session_state.new_filters[column] = selected_options
-                                        elif filter_type == "numerical":
-                                            if column in selected_df_chat.columns and selected_df_chat[column].dtype in ['int64', 'float64']:
-                                                min_val = float(selected_df_chat[column].min())
-                                                max_val = float(selected_df_chat[column].max())
-                                                selected_range = st.slider(f"Select {column} range", min_val, max_val, (float(options[0]), float(options[1])))
-                                                st.session_state.new_filters[column] = selected_range
-                                        elif filter_type == "date":
-                                            try:
-                                                if column in selected_df_chat.columns and pd.api.types.is_datetime64_any_dtype(selected_df_chat[column]):
-                                                    start_date = pd.to_datetime(options[0]).date()
-                                                    end_date = pd.to_datetime(options[1]).date()
-                                                    selected_date_range = st.date_input(f"Select {column} range", [start_date, end_date])
-                                                    if len(selected_date_range) == 2:
-                                                        st.session_state.new_filters[column] = selected_date_range
-                                            except (pd.errors.ParserError, ValueError):
-                                                st.warning(f"Could not parse date column '{column}' for filtering.")
-                                                
-                                submitted = st.form_submit_button("Apply Filters")
-                                if submitted and st.session_state.new_filters:
-                                    st.success("Filters applied. Your next query will be on the filtered data.")
-                                    # This is where you would apply the filter and store the new df for the next conversation.
-                                    # For simplicity here, we'll just acknowledge it.
+                        # --- Safety checks using AST ---
+                        unsafe = False
+                        unsafe_reasons = []
+                        try:
+                            tree = ast.parse(code_block)
+                            for node in ast.walk(tree):
+                                # Reject imports
+                                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                                    unsafe = True
+                                    unsafe_reasons.append("Import statements are not allowed.")
+                                # Reject calls to dangerous builtins / functions
+                                if isinstance(node, ast.Call):
+                                    # if function is a simple name
+                                    if isinstance(node.func, ast.Name):
+                                        func_name = node.func.id
+                                        if func_name in {"open", "exec", "eval", "compile", "__import__", "input"}:
+                                            unsafe = True
+                                            unsafe_reasons.append(f"Use of builtin `{func_name}` is not allowed.")
+                                    # if function is an attribute like os.system, subprocess.Popen
+                                    if isinstance(node.func, ast.Attribute):
+                                        # get attribute chain root if possible
+                                        root = node.func
+                                        while isinstance(root, ast.Attribute):
+                                            root = root.value
+                                        if isinstance(root, ast.Name):
+                                            root_name = root.id
+                                            if root_name in {"os", "sys", "subprocess", "shutil", "socket", "pathlib"}:
+                                                unsafe = True
+                                                unsafe_reasons.append(f"Calls to module `{root_name}` are not allowed.")
+                                # Reject use of Name nodes that access dunders
+                                if isinstance(node, ast.Name):
+                                    if node.id.startswith("__"):
+                                        unsafe = True
+                                        unsafe_reasons.append("Access to dunder names is not allowed.")
+                                # Reject attribute access like os.*, sys.*, subprocess.* early
+                                if isinstance(node, ast.Attribute):
+                                    if isinstance(node.value, ast.Name) and node.value.id in {"os", "sys", "subprocess", "shutil", "socket", "pathlib"}:
+                                        unsafe = True
+                                        unsafe_reasons.append(f"Attribute access to `{node.value.id}` is not allowed.")
+                        except Exception as e:
+                            unsafe = True
+                            unsafe_reasons.append(f"Failed to parse code: {e}")
+
+                        if unsafe:
+                            st.error("⚠️ The generated code was blocked by safety checks and will NOT be executed.")
+                            st.markdown("**Reason(s):** " + "; ".join(unsafe_reasons))
+                            st.info("You can copy the code, inspect/modify it, and run it locally if you trust it.")
+                            # append assistant message that code wasn't executed
+                            st.session_state.chat_messages.append({"role": "assistant", "content": "Generated code was blocked by safety checks and was not executed."})
+                        else:
+                            # Execute code in a restricted namespace
+                            st.info("✅ Code passed safety checks. Executing in a restricted environment...")
+                            # Prepare restricted environment
+                            safe_builtins = {
+                                "len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "round": round, "sorted": sorted
+                            }
+                            # Bind a copy of the dataframe (df) to the environment
+                            exec_globals = {
+                                "__builtins__": safe_builtins,
+                                "pd": pd, "np": np, "px": px, "plt": plt, "sns": sns,
+                                "df": selected_df_chat.copy()
+                            }
+                            exec_locals = {}
+
+                            try:
+                                exec(compile(code_block, "<generated_code>", "exec"), exec_globals, exec_locals)
+                                # look for expected output variables
+                                output_obj = None
+                                for name in ("result", "df_out", "fig", "output"):
+                                    if name in exec_locals:
+                                        output_obj = exec_locals[name]
+                                        output_name = name
+                                        break
+                                    if name in exec_globals:
+                                        output_obj = exec_globals[name]
+                                        output_name = name
+                                        break
+
+                                if output_obj is None:
+                                    st.warning("The code executed but did not set a recognized output variable (result, df_out, fig, output). Showing full local namespace:")
+                                    # show some local variables keys
+                                    st.write({k: type(v).__name__ for k, v in exec_locals.items() if not k.startswith("__")})
+                                    st.session_state.chat_messages.append({"role": "assistant", "content": "Code executed but no output variable was found."})
                                 else:
-                                    st.info("ℹ️ Select filters and press 'Apply Filters' to continue.")
-
+                                    # Display results depending on type
+                                    if isinstance(output_obj, pd.DataFrame):
+                                        st.subheader("📄 DataFrame result")
+                                        st.dataframe(output_obj)
+                                        st.download_button("⬇️ Download result (CSV)", data=convert_df_to_csv(output_obj), file_name="chat_code_result.csv", mime="text/csv")
+                                    elif hasattr(output_obj, "to_dict") and not isinstance(output_obj, (str, bytes)):
+                                        # Generic display for things like dicts, series
+                                        try:
+                                            st.subheader("🔎 Result (object)")
+                                            st.write(output_obj)
+                                        except Exception:
+                                            st.write(repr(output_obj))
+                                    else:
+                                        # Plotly figure (plotly.graph_objs._figure.Figure)
+                                        try:
+                                            import plotly.graph_objs as go
+                                            if isinstance(output_obj, go.Figure):
+                                                st.subheader("📈 Plotly figure result")
+                                                st.plotly_chart(output_obj, use_container_width=True)
+                                            else:
+                                                # Matplotlib figure
+                                                if hasattr(output_obj, "savefig") or hasattr(output_obj, "get_size_inches"):
+                                                    st.subheader("📉 Matplotlib figure result")
+                                                    st.pyplot(output_obj)
+                                                else:
+                                                    st.subheader("📎 Result")
+                                                    st.write(output_obj)
+                                        except Exception:
+                                            # fallback
+                                            st.subheader("📎 Result (fallback)")
+                                            st.write(output_obj)
+                                    # store assistant message summarizing success
+                                    st.session_state.chat_messages.append({"role": "assistant", "content": f"Code executed successfully and produced `{output_name}`."})
+                            except Exception as e:
+                                st.error(f"❌ Error while executing generated code: {e}")
+                                st.session_state.chat_messages.append({"role": "assistant", "content": "There was an error when executing the generated code."})
                     except json.JSONDecodeError:
                         st.error("⚠️ The AI response was not in the expected format. Please try rephrasing your question.")
                         st.session_state.chat_messages.append({"role": "assistant", "content": "I'm sorry, I couldn't understand the response. Could you please rephrase your question?"})
