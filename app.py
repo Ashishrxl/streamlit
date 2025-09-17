@@ -6,16 +6,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS to hide all Streamlit UI except sidebar toggle + your content ---
+# --- CSS: Hide extras but KEEP sidebar toggle ---
 hide_streamlit_style = """
 <style>
-#MainMenu {visibility: hidden;} /* Hide hamburger menu */
+#MainMenu {visibility: hidden;} /* Hide main menu */
 footer {visibility: hidden;} /* Hide footer */
-[data-testid="stStatusWidget"] {display: none;} /* Hide 'Running' status */
-[data-testid="stToolbar"] {display: none;} /* Hide toolbar (Deploy button etc.) */
-a[href^="https://github.com/streamlit"] {display: none !important;} /* Hide GitHub link */
+[data-testid="stStatusWidget"] {display: none;} /* Hide running status */
+[data-testid="stToolbar"] {display: none;} /* Hide deploy/share toolbar */
+a[href^="https://github.com"] {display: none !important;} /* Hide GitHub link */
 a[href^="https://streamlit.io"] {display: none !important;} /* Hide Streamlit link */
-header [data-testid="stHeaderActionElements"] {display: none;} /* Hide extra header buttons, keep sidebar toggle */
+/* Keep header, but hide extra right-side elements only */
+header [data-testid="stHeaderActionElements"] {display: none;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -24,6 +25,6 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 st.title("🌐 Welcome to My App")
 st.write("Use the sidebar to navigate to other pages.")
 
-# ✅ Sidebar content (remains visible)
+# ✅ Sidebar content
 st.sidebar.title("📌 Navigation")
 st.sidebar.info("👉 Use the selector above to switch pages.\n\nYou’re currently on **Home**.")
