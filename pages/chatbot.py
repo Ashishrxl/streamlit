@@ -10,13 +10,14 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import io
 import google.generativeai as genai
 import json
+import re
 
 st.set_page_config(page_title="CSV Visualizer with Forecasting (Interactive)", layout="wide")
 st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 # Use Streamlit secrets for API key
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini API: {e}. Please ensure GOOGLE_API_KEY is set in your Streamlit secrets.")
@@ -528,15 +529,15 @@ def run_app_logic(uploaded_df, is_alldata):
             st.stop()
         
         selected_table_name_chat = st.selectbox("Select one table to chat with", list(available_tables_chat.keys()), key="chat_table_select")
-        selected_df_chat = available_tables_chat[selected_table_name_chat].copy()
+        df = available_tables_chat[selected_table_name_chat].copy()
         
         # Display the preview of the selected table
         st.write(f"### Preview of '{selected_table_name_chat}'")
-        st.dataframe(selected_df_chat.head(10)) # Shows the first 10 rows
+        st.dataframe(df.head(10))
         
         # Initialize chat history for this section
         if "chat_messages" not in st.session_state:
-            st.session_state.chat_messages = [{"role": "assistant", "content": "Hello! I can help you analyze this data. What would you like to know?"}]
+            st.session_state.chat_messages = [{"role": "assistant", "content": "Hello! I can help you analyze this data. Ask a question like, 'What's the average of the Amount column?' or 'Show me the top 5 bills by total amount.' I will write and run Python code to get the answer."}]
         
         # Display chat messages from history on app rerun
         for message in st.session_state.chat_messages:
@@ -544,40 +545,67 @@ def run_app_logic(uploaded_df, is_alldata):
                 st.markdown(message["content"])
 
         # Accept user input
-        if prompt := st.chat_input("Ask me about the data (e.g., 'What's the average amount?')"):
+        if prompt := st.chat_input("Ask me about the data..."):
             # Add user message to chat history
             st.session_state.chat_messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
             
-            # Prepare the prompt for Gemini, explicitly asking for no JSON
-            df_sample_str = selected_df_chat.head(5).to_string()
+            # Prepare the prompt for Gemini to generate code
+            df_info = f"DataFrame columns:\n{df.columns.tolist()}\n\nDataFrame dtypes:\n{df.dtypes.to_string()}\n\nFirst 5 rows:\n{df.head().to_string()}"
             
-            full_prompt = f"""
-            You are a data analyst assistant. Your task is to analyze a pandas DataFrame and answer the user's questions about it.
-            The DataFrame has the following columns and their data types:
-            {selected_df_chat.dtypes.to_string()}
-            Here are the first 5 rows of the DataFrame to give you context:
-            {df_sample_str}
+            code_prompt = f"""
+You are a Python data analyst assistant. Your task is to write a single, clean block of Python code to answer a user's question about a pandas DataFrame named `df`.
+
+The user's DataFrame has the following structure:
+{df_info}
+
+The user's question is: "{prompt}"
+
+Write a Python script that completes the following steps:
+1. Perform the necessary data analysis on the `df` DataFrame.
+2. The final result should be stored in a variable named `result`.
+3. Do not include any print statements. The system will automatically display the content of the `result` variable.
+4. **DO NOT** use any special characters or markdown formatting (e.g., ```python) in your response. Just provide the code.
+
+For example, if the user asks "What's the average of the Amount column?", your response should be:
+result = df['Amount'].mean()
+"""
             
-            Based on this information, provide a concise and direct answer to the user's question. **DO NOT include any JSON objects, code, or special formatting.** Respond in simple plain text.
-
-            User's question: {prompt}
-            """
-
             with st.chat_message("assistant"):
-                with st.spinner("Analyzing data..."):
+                with st.spinner("Analyzing data and generating code..."):
                     try:
-                        response = gemini_model.generate_content(full_prompt)
-                        # The response is now expected to be plain text.
-                        answer = response.text.strip()
-                        
-                        st.markdown(answer)
-                        st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                        # Generate the Python code from the AI
+                        code_response = gemini_model.generate_content(code_prompt)
+                        generated_code = code_response.text.strip()
 
+                        # Capture the output of the executed code
+                        output_capture = io.StringIO()
+                        
+                        # Use a dictionary for the execution environment
+                        exec_globals = {'df': df, 'result': None, 'pd': pd, 'np': np, 'io': io, 'sys': sys}
+                        
+                        # Execute the generated code
+                        exec(generated_code, exec_globals)
+                        
+                        # Get the result from the execution environment
+                        analysis_result = exec_globals.get('result', 'No result variable was set by the code.')
+                        
+                        st.text(f"Generated Code:\n{generated_code}")
+                        st.subheader("Result:")
+                        
+                        if isinstance(analysis_result, (pd.DataFrame, pd.Series)):
+                            st.dataframe(analysis_result)
+                        else:
+                            st.write(analysis_result)
+                            
+                        # Store the result in chat history
+                        st.session_state.chat_messages.append({"role": "assistant", "content": f"Generated Code:\n```python\n{generated_code}\n```\n\nResult:\n{str(analysis_result)}"})
+                        
                     except Exception as e:
-                        st.error(f"❌ An error occurred during chat processing: {e}")
-                        st.session_state.chat_messages.append({"role": "assistant", "content": "An error occurred while processing your request."})
+                        error_message = f"An error occurred while running the code: {e}"
+                        st.error(error_message)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": error_message})
 
 # --- Main App Logic ---
 st.sidebar.header("⚙️ Settings")
