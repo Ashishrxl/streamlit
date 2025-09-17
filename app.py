@@ -6,16 +6,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS: Hide extras but KEEP sidebar toggle ---
+# --- CSS: Hide only unwanted items, KEEP sidebar toggle ---
 hide_streamlit_style = """
 <style>
-#MainMenu {visibility: hidden;} /* Hide main menu */
-footer {visibility: hidden;} /* Hide footer */
-[data-testid="stStatusWidget"] {display: none;} /* Hide running status */
-[data-testid="stToolbar"] {display: none;} /* Hide deploy/share toolbar */
-a[href^="https://github.com"] {display: none !important;} /* Hide GitHub link */
+#MainMenu {visibility: hidden;}         /* Hide hamburger menu */
+footer {visibility: hidden;}            /* Hide footer */
+[data-testid="stStatusWidget"] {display: none;}  /* Hide status */
+[data-testid="stToolbar"] {display: none;}       /* Hide deploy/share toolbar */
+a[href^="https://github.com"] {display: none !important;}   /* Hide GitHub link */
 a[href^="https://streamlit.io"] {display: none !important;} /* Hide Streamlit link */
-/* Keep header, but hide extra right-side elements only */
+
+/* DO NOT hide <header>, only hide its right-side elements */
 header [data-testid="stHeaderActionElements"] {display: none;}
 </style>
 """
