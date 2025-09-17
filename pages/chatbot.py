@@ -16,8 +16,8 @@ st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 
 # Use Streamlit secrets for API key
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # FIX: Corrected model name
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"Error configuring Gemini API: {e}. Please ensure GOOGLE_API_KEY is set in your Streamlit secrets.")
     st.stop()
@@ -550,8 +550,7 @@ def run_app_logic(uploaded_df, is_alldata):
             with st.chat_message("user"):
                 st.markdown(prompt)
             
-            # Prepare the prompt for Gemini
-            columns_info = ", ".join(selected_df_chat.columns)
+            # Prepare the prompt for Gemini, explicitly asking for no JSON
             df_sample_str = selected_df_chat.head(5).to_string()
             
             full_prompt = f"""
@@ -561,9 +560,7 @@ def run_app_logic(uploaded_df, is_alldata):
             Here are the first 5 rows of the DataFrame to give you context:
             {df_sample_str}
             
-            Based on this information, provide a concise answer. Additionally, suggest relevant filters in a JSON object. The JSON should have a key 'answer' for the text, and a key 'filters' which is a list of objects. Each object should have keys 'column' and 'type' (e.g., 'categorical', 'numerical', 'date'), and 'options' (a list of values or a range [min, max]). The filters should be directly related to the user's question.
-            
-            If no filters are relevant, the 'filters' list should be empty.
+            Based on this information, provide a concise and direct answer to the user's question. **DO NOT include any JSON objects, code, or special formatting.** Respond in simple plain text.
 
             User's question: {prompt}
             """
@@ -572,63 +569,12 @@ def run_app_logic(uploaded_df, is_alldata):
                 with st.spinner("Analyzing data..."):
                     try:
                         response = gemini_model.generate_content(full_prompt)
-                        response_text = response.text.strip()
+                        # The response is now expected to be plain text.
+                        answer = response.text.strip()
                         
-                        # Try to parse the JSON
-                        try:
-                            data = json.loads(response_text)
-                            answer = data.get("answer", "I couldn't find an answer.")
-                            filters = data.get("filters", [])
-                        except json.JSONDecodeError:
-                            # If it's not a valid JSON, use the full text as the answer
-                            answer = response_text
-                            filters = []
-
                         st.markdown(answer)
                         st.session_state.chat_messages.append({"role": "assistant", "content": answer})
 
-                        # Display and process filters
-                        if filters:
-                            st.markdown("### Refine Results")
-                            with st.form("filter_form"):
-                                st.session_state.new_filters = {}
-                                for filter_info in filters:
-                                    column = filter_info.get("column")
-                                    filter_type = filter_info.get("type")
-                                    options = filter_info.get("options", [])
-                                    
-                                    if column and filter_type and options:
-                                        if column in selected_df_chat.columns:
-                                            if filter_type == "categorical":
-                                                if selected_df_chat[column].dtype in ['object', 'category', 'bool']:
-                                                    all_options = sorted(selected_df_chat[column].unique().tolist())
-                                                    selected_options = st.multiselect(f"Select {column}", all_options, default=options)
-                                                    if selected_options:
-                                                        st.session_state.new_filters[column] = selected_options
-                                            elif filter_type == "numerical":
-                                                if selected_df_chat[column].dtype in ['int64', 'float64']:
-                                                    min_val = float(selected_df_chat[column].min())
-                                                    max_val = float(selected_df_chat[column].max())
-                                                    selected_range = st.slider(f"Select {column} range", min_val, max_val, (float(options[0]), float(options[1])))
-                                                    st.session_state.new_filters[column] = selected_range
-                                            elif filter_type == "date":
-                                                try:
-                                                    if pd.api.types.is_datetime64_any_dtype(selected_df_chat[column]):
-                                                        start_date = pd.to_datetime(options[0]).date()
-                                                        end_date = pd.to_datetime(options[1]).date()
-                                                        selected_date_range = st.date_input(f"Select {column} range", [start_date, end_date])
-                                                        if len(selected_date_range) == 2:
-                                                            st.session_state.new_filters[column] = selected_date_range
-                                                except (pd.errors.ParserError, ValueError):
-                                                    st.warning(f"Could not parse date column '{column}' for filtering.")
-                                                
-                                submitted = st.form_submit_button("Apply Filters")
-                                if submitted and st.session_state.new_filters:
-                                    st.success("Filters applied. Your next query will be on the filtered data.")
-                                    # This is where you would apply the filter and store the new df for the next conversation.
-                                    # For simplicity here, we'll just acknowledge it.
-                                else:
-                                    st.info("ℹ️ Select filters and press 'Apply Filters' to continue.")
                     except Exception as e:
                         st.error(f"❌ An error occurred during chat processing: {e}")
                         st.session_state.chat_messages.append({"role": "assistant", "content": "An error occurred while processing your request."})
