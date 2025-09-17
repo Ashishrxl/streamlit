@@ -6,12 +6,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS to hide footer/header ---
+# --- CSS to hide footer/header/extra links ---
 hide_streamlit_style = """
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header .decoration {visibility: hidden;}
+#MainMenu {visibility: hidden;} /* Hides hamburger menu */
+footer {visibility: hidden;} /* Hides footer */
+header .decoration {visibility: hidden;} /* Hides top decoration */
+a[href="https://github.com/streamlit/streamlit"] {display: none;} /* Hides GitHub link */
+footer:after {content:'';} /* Removes 'Made with Streamlit' text */
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
