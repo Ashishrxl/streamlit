@@ -23,7 +23,7 @@ header > div:nth-child(2) {
 }
 </style>
 """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ---- Home Page ----
 st.title("🌐 Welcome to My App")
