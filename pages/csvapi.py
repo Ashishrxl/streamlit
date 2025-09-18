@@ -29,13 +29,12 @@ if uploaded_file is not None:
     # Create the pandas DataFrame agent with the recommended agent type for Gemini
     # It's crucial to also add allow_dangerous_code=True for the agent to work.
     agent = create_pandas_dataframe_agent(
-        llm,
-        df,
-        verbose=True,
-        agent_type=AgentType.TOOL_CALLING,  # Recommended fix
-        allow_dangerous_code=True
-    )
-
+    llm,
+    df,
+    verbose=True,
+    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    allow_dangerous_code=True
+)
     # Chat input for user queries
     prompt = st.chat_input("Ask a question about your data...")
     if prompt:
