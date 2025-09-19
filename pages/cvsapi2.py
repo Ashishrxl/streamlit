@@ -532,7 +532,7 @@ def run_app_logic(uploaded_df, is_alldata):
         st.write(f"### Preview of '{selected_table_name_chat}'")            
         st.dataframe(selected_df_chat.head())            
             
-        # Create the pandas DataFrame agent with the recommended agent type for Gemini            
+        # Create the pandas DataFrame agent            
         agent = create_pandas_dataframe_agent(            
             llm,            
             selected_df_chat,            
@@ -545,11 +545,48 @@ def run_app_logic(uploaded_df, is_alldata):
         prompt = st.chat_input("Ask a question about your data...")            
         if prompt:            
             st.write(f"Thinking about: {prompt}")            
-            try:            
-                response = agent.invoke(prompt)            
-                st.write(response["output"])            
-            except Exception as e:            
-                st.error(f"An error occurred: {e}")
+            
+            # Check if user is asking for a chart
+            chart_keywords = ['chart', 'plot', 'graph', 'visualize', 'bar chart', 'line chart', 'histogram']
+            is_chart_request = any(keyword in prompt.lower() for keyword in chart_keywords)
+            
+            if is_chart_request:
+                st.info("🎯 Chart request detected! Let me create a visualization for you.")
+                
+                # Extract chart type and columns from prompt
+                if 'bar chart' in prompt.lower():
+                    if 'date' in prompt.lower() and 'amount' in prompt.lower():
+                        # Find date and amount columns
+                        date_col = find_col_ci(selected_df_chat, "date") or find_col_ci(selected_df_chat, "Date")
+                        amount_col = find_col_ci(selected_df_chat, "amount") or find_col_ci(selected_df_chat, "Amount")
+                        
+                        if date_col and amount_col:
+                            # Create monthly aggregation
+                            chart_df = selected_df_chat.copy()
+                            chart_df[date_col] = pd.to_datetime(chart_df[date_col], errors="coerce")
+                            chart_df['Year_Month'] = chart_df[date_col].dt.to_period('M').astype(str)
+                            
+                            monthly_data = chart_df.groupby('Year_Month')[amount_col].sum().reset_index()
+                            
+                            # Create bar chart
+                            fig = px.bar(monthly_data, x='Year_Month', y=amount_col, 
+                                       title='Monthly Amount Aggregation')
+                            st.plotly_chart(fig, width='stretch')
+                            
+                            st.success("✅ Bar chart created showing monthly aggregated amounts!")
+                        else:
+                            st.error("❌ Could not find 'date' and 'amount' columns in the data.")
+                    else:
+                        st.info("ℹ️ Please specify which columns to use for the chart.")
+                else:
+                    st.info("ℹ️ Currently supports bar charts. Please specify 'bar chart' in your request.")
+            else:
+                # Handle regular data analysis questions
+                try:            
+                    response = agent.invoke(prompt)            
+                    st.write(response["output"])            
+                except Exception as e:            
+                    st.error(f"An error occurred: {e}")
 
 # --- Main App Logic ---
 
