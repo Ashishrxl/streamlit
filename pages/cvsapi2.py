@@ -168,8 +168,7 @@ def run_app_logic(uploaded_df, is_alldata):
             try:            
                 selected_df[date_col_sel] = pd.to_datetime(selected_df[date_col_sel], errors="coerce")            
                 selected_df = selected_df.sort_values(by=date_col_sel).reset_index(drop=True)            
-                # Fixed: Changed 'M' to 'ME' for monthly period
-                selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('ME')            
+                selected_df['Year_Month'] = selected_df[date_col_sel].dt.to_period('M')            
                 selected_df['Year'] = selected_df[date_col_sel].dt.to_period('Y')            
                 numerical_cols = selected_df.select_dtypes(include=[np.number]).columns.tolist()            
                 categorical_cols = [c for c in selected_df.columns if c not in numerical_cols + ['Year_Month', 'Year', date_col_sel]]            
@@ -195,8 +194,7 @@ def run_app_logic(uploaded_df, is_alldata):
                     )            
             
                     period_col = 'Year_Month' if time_period == "Monthly" else 'Year'            
-                    # Fixed: Changed 'M' to 'ME' for monthly frequency
-                    freq_setting = "ME" if time_period == "Monthly" else "Y"            
+                    freq_setting = "M" if time_period == "Monthly" else "Y"            
             
                     if grouping_choice == "Group by Name" and name_col_sel:            
                         grouped_df = selected_df.groupby([period_col, name_col_sel], as_index=False)[numerical_cols].sum()            
@@ -405,17 +403,15 @@ def run_app_logic(uploaded_df, is_alldata):
                 aggregation_period = st.selectbox("Select Aggregation Period", ["No Aggregation", "Monthly", "Yearly"])            
                 if aggregation_period != "No Aggregation":            
                     if aggregation_period == "Monthly":            
-                        # Fixed: Changed 'M' to 'ME' for monthly frequency
-                        forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='ME')).sum(numeric_only=True).reset_index()            
-                        freq_str = "ME"            
+                        forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='M')).sum(numeric_only=True).reset_index()            
+                        freq_str = "M"            
                         period_type = "months"            
                     else:            
                         forecast_df = forecast_df.groupby(pd.Grouper(key=selected_date_col, freq='Y')).sum(numeric_only=True).reset_index()            
                         freq_str = "Y"            
                         period_type = "years"            
                 else:            
-                    # Fixed: Changed 'M' to 'ME' for monthly frequency default
-                    freq_str = "ME"            
+                    freq_str = "M"            
                     period_type = "months"            
             
                 original_forecast_df = forecast_df.copy()            
