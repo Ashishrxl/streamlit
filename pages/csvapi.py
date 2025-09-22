@@ -512,7 +512,7 @@ def run_app_logic(uploaded_df, is_alldata):
             st.info("ℹ️ The selected table does not contain a valid date column and/or a numerical column for forecasting.")
 
     # --- Chat with CSV Section (UPDATED) ---
-""'
+"""
     st.markdown("---")
     with st.expander("🤖 Chat with your CSV", expanded=False):
         st.subheader("📌 Select Table for Chat")
@@ -549,7 +549,7 @@ def run_app_logic(uploaded_df, is_alldata):
 """
 
     st.markdown("---")
-    with st.expander("🤖 Chat with your CSV", expanded=False):
+    with st.expander("🤖 Chat with your CSV22", expanded=False):
         st.subheader("📌 Select Table for Chat")
         available_tables_chat = {k: v for k, v in tables_dict.items() if not v.empty}
         if not available_tables_chat:
