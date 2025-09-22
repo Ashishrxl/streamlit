@@ -540,7 +540,7 @@ def run_app_logic(uploaded_df, is_alldata):
                 selected_df_chat,            
                 verbose=False,  # Reduced verbosity for cleaner output            
                 agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,            
-                allow_dangerous_code=False,  # IMPROVED: Better security            
+                allow_dangerous_code=True,  # IMPROVED: Better security            
                 return_intermediate_steps=False  # Cleaner output            
             )            
 
