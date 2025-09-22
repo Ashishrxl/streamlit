@@ -546,7 +546,8 @@ def run_app_logic(uploaded_df, is_alldata):
             except Exception as e:
                 st.error(f"An error occurred: {e}")
 
-st.markdown("---")
+
+    st.markdown("---")
 with st.expander("🤖 Chat with your CSV 222", expanded=False):
     st.subheader("📌 Select Table for Chat")
     available_tables_chat = {k: v for k, v in tables_dict.items() if not v.empty}
