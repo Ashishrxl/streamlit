@@ -512,7 +512,6 @@ def run_app_logic(uploaded_df, is_alldata):
             st.info("ℹ️ The selected table does not contain a valid date column and/or a numerical column for forecasting.")
 
     # --- Chat with CSV Section (UPDATED) ---
-    """
     st.markdown("---")
     with st.expander("🤖 Chat with your CSV", expanded=False):
         st.subheader("📌 Select Table for Chat")
@@ -546,88 +545,6 @@ def run_app_logic(uploaded_df, is_alldata):
                 st.write(response["output"])
             except Exception as e:
                 st.error(f"An error occurred: {e}")
-    """
-    st.markdown("---")
-    with st.expander("🤖 Chat with your CSV22", expanded=False):
-        st.subheader("📌 Select Table for Chat")
-        available_tables_chat = {k: v for k, v in tables_dict.items() if not v.empty}
-        if not available_tables_chat:
-            st.warning("⚠️ No usable tables could be derived from the uploaded CSV.")
-            st.stop()
-
-        selected_table_name_chat = st.selectbox(
-        "Select one table to chat with",
-        list(available_tables_chat.keys()),
-        key="chat_table_select"
-    )
-        selected_df_chat = available_tables_chat[selected_table_name_chat].copy()
-
-    # Display preview of the selected table
-        st.write(f"### Preview of '{selected_table_name_chat}'")
-        st.dataframe(selected_df_chat.head())
-
-    # 🔎 Let user choose one or more columns to filter/search
-        selected_columns = st.multiselect(
-        "Select one or more columns to filter/search (optional)",
-        list(selected_df_chat.columns),
-        key="chat_columns_select"
-    )
-
-    # "Clear Filters" button
-        if st.button("🧹 Clear Filters"):
-            st.session_state.chat_columns_select = []  # reset selected columns
-            for col in selected_df_chat.columns:
-                st.session_state.pop(f"{col}_multiselect", None)
-                st.session_state.pop(f"{col}_search", None)
-
-        filtered_df_chat = selected_df_chat.copy()
-
-        for col in selected_columns:
-            unique_values = filtered_df_chat[col].dropna().unique()
-
-            if len(unique_values) <= 50:
-            # ✅ Multi-select if column has few unique values
-                selected_values = st.multiselect(
-                f"Choose values from '{col}'",
-                options=unique_values,
-                key=f"{col}_multiselect"
-            )
-                if selected_values:
-                    filtered_df_chat = filtered_df_chat[filtered_df_chat[col].isin(selected_values)]
-            else:
-            # 🔍 Free text search if too many unique values
-                search_value = st.text_input(
-                f"Type to search in '{col}'",
-                key=f"{col}_search"
-            )
-                if search_value:
-                    filtered_df_chat = filtered_df_chat[
-                    filtered_df_chat[col].astype(str).str.contains(search_value, case=False, na=False)
-                ]
-
-    # Show filtered preview
-        st.write("### Filtered Data Preview")
-        st.dataframe(filtered_df_chat.head())
-
-    # Create pandas DataFrame agent on filtered data
-        agent = create_pandas_dataframe_agent(
-        llm,
-        filtered_df_chat,
-        verbose=True,
-        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        allow_dangerous_code=True
-    )
-
-    # Chat input
-        prompt = st.chat_input("Ask a question about your data...")
-        if prompt:
-            st.write(f"Thinking about: {prompt}")
-            try:
-                response = agent.invoke(prompt)
-                st.write(response["output"])
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
- 
 
 # --- Main App Logic ---
 st.sidebar.header("⚙️ Settings")
@@ -705,4 +622,3 @@ else:
         except Exception as e:
             st.error(f"❌ Error reading CSV without header: {e}")
             st.stop()
-
