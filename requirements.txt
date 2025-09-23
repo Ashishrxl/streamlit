@@ -34,3 +34,4 @@ soundfile
 
 ffmpeg-python
 requests
+pyaudioop
