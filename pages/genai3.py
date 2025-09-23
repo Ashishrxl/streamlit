@@ -1,66 +1,60 @@
 import streamlit as st
 import base64
 import tempfile
-import requests
 import io
-from google import genai
-from pydub import AudioSegment
+import numpy as np
 import asyncio
+import soundfile as sf
+from google import genai
+import requests
 
-# -------------------------
-# App Config
-# -------------------------
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify with Gemini")
 st.caption("Record or upload a line → Transcribe with Gemini 1.5 Flash → Sing it back with Gemini 2.5 TTS")
 
-# Sidebar: Singing style
+# Sidebar
 singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
 
 audio_bytes = None
 tmp_path = None
 
 # -------------------------
-# Helper: Convert to WAV
+# Helper: Convert audio to WAV bytes
 # -------------------------
-def convert_to_wav(input_bytes, input_format):
-    """Convert audio bytes to WAV format using pydub."""
-    audio = AudioSegment.from_file(io.BytesIO(input_bytes), format=input_format)
-    tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-    audio.export(tmp_wav, format="wav")
-    return tmp_wav
+def convert_to_wav_bytes(file_bytes):
+    """
+    Convert MP3/M4A/WAV audio bytes to WAV bytes using soundfile + audioread
+    """
+    with io.BytesIO(file_bytes) as f:
+        data, samplerate = sf.read(f, always_2d=True)
+    out_bytes = io.BytesIO()
+    sf.write(out_bytes, data, samplerate, format='WAV')
+    return out_bytes.getvalue()
 
 # -------------------------
-# Step 1: Record/Upload Audio
+# Step 1: Upload audio
 # -------------------------
-audio = st.audio_input("Record your audio")
-if audio:
-    audio_bytes = audio.getvalue()
+uploaded = st.file_uploader("Upload audio (WAV/MP3/M4A)", type=["wav","mp3","m4a"])
+if uploaded:
+    file_bytes = uploaded.read()
+    ext = uploaded.name.split('.')[-1].lower()
+    if ext != "wav":
+        audio_bytes = convert_to_wav_bytes(file_bytes)
+    else:
+        audio_bytes = file_bytes
+
     tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     with open(tmp_path, "wb") as f:
         f.write(audio_bytes)
     st.audio(tmp_path, format="audio/wav")
 
-uploaded = st.file_uploader("Or upload your audio file", type=["wav", "mp3", "m4a"])
-if uploaded:
-    file_bytes = uploaded.read()
-    file_ext = uploaded.name.split(".")[-1].lower()
-    if file_ext != "wav":
-        tmp_path = convert_to_wav(file_bytes, file_ext)
-    else:
-        tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-        with open(tmp_path, "wb") as f:
-            f.write(file_bytes)
-    audio_bytes = open(tmp_path, "rb").read()
-    st.audio(tmp_path, format="audio/wav")
-
 # -------------------------
-# Helper: Gemini 2.5 TTS
+# Helper: Gemini TTS
 # -------------------------
 async def synthesize_speech(ssml_text, voice="alloy"):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
     headers = {
-        "Authorization": f"Bearer {st.secrets['GOOGLE_API_KEY']}",
+        "Authorization": f"Bearer {st.secrets['gemini_api_key']}",
         "Content-Type": "application/json",
     }
     data = {"input": {"ssml": ssml_text}, "voice": voice, "audioFormat": "wav"}
@@ -73,7 +67,7 @@ async def synthesize_speech(ssml_text, voice="alloy"):
     return base64.b64decode(audio_base64)
 
 # -------------------------
-# Step 2 & 3: Async Transcribe & TTS with Progress
+# Step 2 & 3: Transcribe & TTS with progress
 # -------------------------
 async def transcribe_and_sing():
     client = genai.Client()
@@ -81,11 +75,11 @@ async def transcribe_and_sing():
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
-    # Estimate audio duration
-    audio_segment = AudioSegment.from_file(tmp_path, format="wav")
-    duration = audio_segment.duration_seconds
-    step_transcribe = 50 / max(duration, 1)
-    step_tts = 50 / max(duration, 1)
+    # Estimate duration
+    data, samplerate = sf.read(tmp_path, always_2d=True)
+    duration = len(data)/samplerate
+    step_transcribe = 50/max(duration,1)
+    step_tts = 50/max(duration,1)
 
     # --- Transcription ---
     progress_text.text("Transcribing with Gemini 1.5 Flash...")
@@ -102,6 +96,7 @@ async def transcribe_and_sing():
         st.error(f"Transcription failed: {e}")
         return
 
+    # Simulate progress for transcription
     for i in range(int(duration)):
         progress_bar.progress(min(int((i+1)*step_transcribe),50))
         await asyncio.sleep(0.05)
@@ -112,14 +107,14 @@ async def transcribe_and_sing():
     # --- TTS ---
     progress_text.text(f"Generating singing-style voice ({singing_style}) with Gemini 2.5 TTS...")
     ssml = f"<speak><prosody rate='95%' pitch='+2st'>Sing these words in a {singing_style} style: {transcript}</prosody></speak>"
-    
+
     tts_task = asyncio.create_task(synthesize_speech(ssml))
     for i in range(int(duration)):
         progress_bar.progress(min(50 + int((i+1)*step_tts), 100))
         await asyncio.sleep(0.05)
     vocal_bytes = await tts_task
 
-    # Complete progress
+    # Complete
     progress_bar.progress(100)
     progress_text.text("🎶 Your sung version is ready!")
 
