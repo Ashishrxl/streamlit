@@ -7,6 +7,9 @@ from google import genai
 from pydub import AudioSegment
 import asyncio
 
+# -------------------------
+# App Config
+# -------------------------
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify with Gemini")
 st.caption("Record or upload a line → Transcribe with Gemini 1.5 Flash → Sing it back with Gemini 2.5 TTS")
@@ -21,6 +24,7 @@ tmp_path = None
 # Helper: Convert to WAV
 # -------------------------
 def convert_to_wav(input_bytes, input_format):
+    """Convert audio bytes to WAV format using pydub."""
     audio = AudioSegment.from_file(io.BytesIO(input_bytes), format=input_format)
     tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     audio.export(tmp_wav, format="wav")
@@ -51,7 +55,7 @@ if uploaded:
     st.audio(tmp_path, format="audio/wav")
 
 # -------------------------
-# Helper: Gemini TTS
+# Helper: Gemini 2.5 TTS
 # -------------------------
 async def synthesize_speech(ssml_text, voice="alloy"):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
@@ -69,7 +73,7 @@ async def synthesize_speech(ssml_text, voice="alloy"):
     return base64.b64decode(audio_base64)
 
 # -------------------------
-# Step 2 & 3: Async Transcribe & TTS with Real Progress
+# Step 2 & 3: Async Transcribe & TTS with Progress
 # -------------------------
 async def transcribe_and_sing():
     client = genai.Client()
@@ -77,13 +81,13 @@ async def transcribe_and_sing():
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
-    # Estimate total duration of audio (seconds)
+    # Estimate audio duration
     audio_segment = AudioSegment.from_file(tmp_path, format="wav")
     duration = audio_segment.duration_seconds
-    step_transcribe = 50 / max(duration, 1)  # 50% of bar for transcription
-    step_tts = 50 / max(duration, 1)         # 50% for TTS
+    step_transcribe = 50 / max(duration, 1)
+    step_tts = 50 / max(duration, 1)
 
-    # Transcription step
+    # --- Transcription ---
     progress_text.text("Transcribing with Gemini 1.5 Flash...")
     try:
         resp = client.models.generate_content(
@@ -98,7 +102,6 @@ async def transcribe_and_sing():
         st.error(f"Transcription failed: {e}")
         return
 
-    # Increment progress for transcription
     for i in range(int(duration)):
         progress_bar.progress(min(int((i+1)*step_transcribe),50))
         await asyncio.sleep(0.05)
@@ -106,11 +109,10 @@ async def transcribe_and_sing():
     st.success("✅ Transcription complete!")
     st.write(transcript)
 
-    # TTS step
+    # --- TTS ---
     progress_text.text(f"Generating singing-style voice ({singing_style}) with Gemini 2.5 TTS...")
     ssml = f"<speak><prosody rate='95%' pitch='+2st'>Sing these words in a {singing_style} style: {transcript}</prosody></speak>"
     
-    # Run TTS async and update progress
     tts_task = asyncio.create_task(synthesize_speech(ssml))
     for i in range(int(duration)):
         progress_bar.progress(min(50 + int((i+1)*step_tts), 100))
@@ -130,6 +132,6 @@ async def transcribe_and_sing():
     with open(vocal_path, "rb") as f:
         st.download_button("Download Vocal", f, file_name="singified.wav", mime="audio/wav")
 
-# Trigger async function
+# --- Trigger ---
 if audio_bytes is not None and st.button("🎶 Transcribe & Sing"):
     asyncio.run(transcribe_and_sing())
