@@ -33,3 +33,4 @@ google-genai
 soundfile
 
 ffmpeg-python
+requests
