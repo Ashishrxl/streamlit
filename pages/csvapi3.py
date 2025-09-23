@@ -10,7 +10,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 import io
 import google.generativeai as genai
 import json
-from core import run_app_logic
+from coree import run_app_logic
 
 # New imports for LangChain agent
 from langchain_google_genai import ChatGoogleGenerativeAI
