@@ -30,9 +30,9 @@ kaleido>=0.2.1
 
 
 streamlit-audiorecorder
-pydub
+audioread
 google-genai
 soundfile
 
-ffmpeg-python
+
 requests
