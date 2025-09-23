@@ -1,4 +1,4 @@
---upgrade pip
+
 
 # streamlit>=1.10.0
 # pandas
