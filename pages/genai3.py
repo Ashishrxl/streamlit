@@ -54,7 +54,7 @@ if uploaded:
 async def synthesize_speech(ssml_text, voice="alloy"):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
     headers = {
-        "Authorization": f"Bearer {st.secrets['gemini_api_key']}",
+        "Authorization": f"Bearer {st.secrets['GOOGLE_API_KEY']}",
         "Content-Type": "application/json",
     }
     data = {"input": {"ssml": ssml_text}, "voice": voice, "audioFormat": "wav"}
