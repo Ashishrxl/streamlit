@@ -7,7 +7,7 @@ import streamlit as st
 def synthesize_speech(text, voice="en-US-Standard-B", speaking_rate=1.0):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
     headers = {
-        "Authorization": f"Bearer {st.secrets['gemini_api_key']}",
+        "Authorization": f"Bearer {st.secrets['GOOGLE_API_KEY']}",
         "Content-Type": "application/json",
     }
     data = {
