@@ -6,7 +6,7 @@ st.set_page_config(page_title="Google Generative AI Models", layout="wide")
 st.title("🔍 Google Generative AI Models Explorer")
 
 # API Key Input (secured with password type input)
-api_key = st.secrets[GOOGLE_API_KEY]
+api_key = st.secrets["GOOGLE_API_KEY"]
 
 if api_key:
     try:
