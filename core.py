@@ -9,6 +9,7 @@ from data_utils import (
     export_matplotlib_fig,
     toggle_state
 )
+from config import setup_api
 from modules.chat_section import chat_with_csv_section
 import plotly.express as px
 import matplotlib.pyplot as plt
@@ -459,4 +460,5 @@ def run_app_logic(
             st.info("ℹ️ The selected table does not contain a valid date column and/or a numerical column for forecasting.")
 
     # -- Modular call to Chat Section --
+    setup_api()
     chat_with_csv_section(tables_dict, llm=llm)
