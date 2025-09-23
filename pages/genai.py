@@ -20,10 +20,11 @@ if api_key:
         if models:
             for m in models:
                 with st.expander(f"📌 {m.name}", expanded=False):
-                    st.markdown(f"**Description:** {m.description}")
-                    st.markdown(f"**Input Methods:** {m.input_methods}")
-                    st.markdown(f"**Output Methods:** {m.output_methods}")
-                    st.markdown(f"**Supported Generation Methods:** {m.supported_generation_methods}")
+                    st.markdown(f"**Display Name:** {getattr(m, 'display_name', 'N/A')}")
+                    st.markdown(f"**Description:** {getattr(m, 'description', 'N/A')}")
+                    st.markdown(f"**Input Token Limit:** {getattr(m, 'input_token_limit', 'N/A')}")
+                    st.markdown(f"**Output Token Limit:** {getattr(m, 'output_token_limit', 'N/A')}")
+                    st.markdown(f"**Supported Generation Methods:** {getattr(m, 'supported_generation_methods', 'N/A')}")
         else:
             st.warning("No models found.")
 
