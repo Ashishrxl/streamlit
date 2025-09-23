@@ -18,18 +18,24 @@ st.write("### Step 1: Record or Upload your voice (WAV/MP3/M4A)")
 audio_bytes = None
 tmp_path = None
 
-# --- Upload file ---
-uploaded = st.file_uploader("Upload your audio file", type=["wav", "mp3", "m4a"])
+# --- Record using browser ---
+audio = st.audio_input("Record your audio")
+
+if audio:
+    audio_bytes = audio.getvalue()
+    st.audio(audio_bytes, format="audio/wav")
+    tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    with open(tmp_path, "wb") as f:
+        f.write(audio_bytes)
+
+# --- Upload file as fallback ---
+uploaded = st.file_uploader("Or upload your audio file", type=["wav", "mp3", "m4a"])
 if uploaded:
     audio_bytes = uploaded.read()
     st.audio(audio_bytes, format="audio/wav")
     tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     with open(tmp_path, "wb") as f:
         f.write(audio_bytes)
-
-# --- Record using browser ---
-if st.button("🎙 Record Voice (browser)"):
-    st.info("Recording feature not natively available without extra components. Please upload an audio file for now.")
 
 # -------------------------
 # Step 2: Transcribe & Step 3: TTS
