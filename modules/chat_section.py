@@ -28,7 +28,7 @@ def chat_with_csv_section(tables_dict, llm):
                 selected_df_chat,
                 verbose=False,
                 agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                allow_dangerous_code=False,
+                allow_dangerous_code=True,
                 return_intermediate_steps=False
             )
 
