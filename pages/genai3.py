@@ -26,6 +26,8 @@ if 'current_style' not in st.session_state:
     st.session_state.current_style = None
 if 'current_voice' not in st.session_state:
     st.session_state.current_voice = None
+if 'recording_state' not in st.session_state:
+    st.session_state.recording_state = "idle"  # idle, recording, recorded
 
 # Sidebar
 singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
@@ -66,27 +68,27 @@ with tab1:
         type=["wav", "mp3", "m4a", "ogg", "flac"],
         help="Supported formats: WAV, MP3, M4A, OGG, FLAC (Max 200MB)"
     )
-    
+
     if uploaded:
         st.success(f"✅ Uploaded: {uploaded.name} ({uploaded.size / 1024 / 1024:.2f} MB)")
         file_bytes = uploaded.read()
         ext = uploaded.name.split('.')[-1].lower()
-        
+
         if ext != "wav":
             with st.spinner("Converting audio to WAV..."):
                 audio_bytes = convert_to_wav_bytes(file_bytes)
         else:
             audio_bytes = file_bytes
-        
+
         if audio_bytes:
             tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp_path = tmp_file.name
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
-            
+
             # Store original path in session state
             st.session_state.original_path = tmp_path
-            
+
             # Show audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
@@ -95,15 +97,11 @@ with tab1:
 
 with tab2:
     st.markdown("**Record audio directly in your browser**")
-    
-    # Simple recording interface
-    if st.button("🎙️ Start Recording (Click and speak, then click Stop)"):
-        st.info("🔴 Recording... Click 'Stop Recording' when done")
-    
-    # Note: For actual recording, you would need streamlit-audio-recorder
+
+    # Check if audio_recorder_streamlit is available
     try:
         from audio_recorder_streamlit import audio_recorder
-        
+
         recorded_audio = audio_recorder(
             text="Click to record",
             recording_color="#e8b62c",
@@ -111,28 +109,60 @@ with tab2:
             icon_name="microphone-lines",
             icon_size="2x",
         )
-        
+
         if recorded_audio is not None:
             st.success("✅ Audio recorded successfully!")
             audio_bytes = recorded_audio
-            
+
             tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp_path = tmp_file.name
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
-            
+
             # Store original path in session state
             st.session_state.original_path = tmp_path
-            
+
             # Show recorded audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
             st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz")
             st.audio(tmp_path, format="audio/wav")
-            
+
     except ImportError:
-        st.warning("📝")
-        st.code("", language="bash")
+        st.warning("⚠️ Audio recording requires the `streamlit-audio-recorder` package.")
+        st.info("Install it with: `pip install streamlit-audio-recorder`")
+        
+        # Alternative manual recording interface with proper start/stop buttons
+        
+        st.markdown("**Alternative Recording Method:**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.session_state.recording_state == "idle":
+                if st.button("🎙️ Start Recording", type="primary"):
+                    st.session_state.recording_state = "recording"
+                    st.experimental_rerun()
+            
+            elif st.session_state.recording_state == "recording":
+                if st.button("⏹️ Stop Recording", type="secondary"):
+                    st.session_state.recording_state = "recorded"
+                    st.experimental_rerun()
+        
+        with col2:
+            if st.session_state.recording_state in ["recording", "recorded"]:
+                if st.button("🗑️ Clear Recording"):
+                    st.session_state.recording_state = "idle"
+                    st.experimental_rerun()
+        
+        # Show recording status
+        if st.session_state.recording_state == "recording":
+            st.error("🔴 **Recording in progress...** Click 'Stop Recording' when finished")
+            st.info("💡 **Note:** This is a placeholder interface. For actual recording functionality, please install `streamlit-audio-recorder`")
+        
+        elif st.session_state.recording_state == "recorded":
+            st.success("✅ **Recording completed!**")
+            st.info("💡 **Note:** To enable actual audio recording, install `streamlit-audio-recorder` package")
 
 # -------------------------
 # Additional Upload Options
@@ -151,7 +181,8 @@ with col1:
         st.session_state.generation_complete = False
         st.session_state.current_style = None
         st.session_state.current_voice = None
-        st.rerun()
+        st.session_state.recording_state = "idle"
+        st.experimental_rerun()
 
 with col2:
     if (audio_bytes or st.session_state.original_path) and st.button("ℹ️ Audio Info"):
@@ -160,7 +191,7 @@ with col2:
             data, samplerate = sf.read(path_to_check, always_2d=True)
             duration = len(data) / samplerate
             file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
-            
+
             st.info(f"""
             **Audio Information:**
             - Duration: {duration:.2f} seconds
@@ -177,7 +208,7 @@ with col3:
         st.session_state.generation_complete = False
         st.session_state.current_style = None
         st.session_state.current_voice = None
-        st.rerun()
+        st.experimental_rerun()
 
 # -------------------------
 # Helper: Corrected Gemini TTS using official API
@@ -191,7 +222,7 @@ async def synthesize_speech(text_prompt, voice_name="Kore"):
         "x-goog-api-key": st.secrets['GOOGLE_API_KEY'],
         "Content-Type": "application/json"
     }
-    
+
     data = {
         "contents": [{
             "parts": [{
@@ -209,19 +240,19 @@ async def synthesize_speech(text_prompt, voice_name="Kore"):
             }
         }
     }
-    
+
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
         None, lambda: requests.post(url, headers=headers, json=data)
     )
     response.raise_for_status()
-    
+
     response_json = response.json()
     audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
-    
+
     if audio_base64 is None:
         raise ValueError("No audio returned.")
-    
+
     return base64.b64decode(audio_base64)
 
 # -------------------------
@@ -287,20 +318,20 @@ async def transcribe_and_sing():
     for i in range(int(max(duration, 1))):
         progress_bar.progress(min(int((i + 1) * step_transcribe), 50))
         await asyncio.sleep(0.05)
-        
+
     st.success("✅ Transcription complete!")
 
     # --- TTS with natural language prompt ---
     progress_text.text(f"🎵 Generating... {singing_style}")
-    
+
     tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {transcript}"
-    
+
     try:
         tts_task = asyncio.create_task(synthesize_speech(tts_prompt, voice_name=voice_option))
         for i in range(int(max(duration, 1))):
             progress_bar.progress(min(50 + int((i + 1) * step_tts), 100))
             await asyncio.sleep(0.05)
-        
+
         pcm_data = await tts_task
         vocal_bytes = pcm_to_wav(pcm_data)
 
@@ -312,13 +343,13 @@ async def transcribe_and_sing():
         vocal_path = vocal_file.name
         with open(vocal_path, "wb") as f:
             f.write(vocal_bytes)
-        
+
         # Store results in session state
         st.session_state.vocal_path = vocal_path
         st.session_state.generation_complete = True
         st.session_state.current_style = singing_style
         st.session_state.current_voice = voice_option
-        
+
     except Exception as e:
         st.error(f"❌ Generation failed: {e}")
         progress_text.text("❌ Generation failed")
@@ -331,14 +362,14 @@ def display_results():
     if st.session_state.transcript:
         st.subheader("📝 Transcription Results")
         st.write(f"**Transcribed Text:** {st.session_state.transcript}")
-    
+
     if st.session_state.generation_complete and st.session_state.vocal_path:
         st.subheader("🎶 Generated Singing Voice")
         st.success(f"🎤 Generated {st.session_state.current_style} style with {st.session_state.current_voice} voice!")
-        
+
         # Display audio player
         st.audio(st.session_state.vocal_path, format="audio/wav")
-        
+
         # Download buttons
         col1, col2 = st.columns(2)
         with col1:
@@ -379,7 +410,7 @@ else:
 # Always Display Results if Available
 # -------------------------
 display_results()
-    
+
 # -------------------------
 # Instructions
 # -------------------------
@@ -394,5 +425,5 @@ st.markdown("""
 **Supported Formats:** WAV, MP3, M4A, OGG, FLAC  
 **Max File Size:** 200MB  
 **Best Results:** Clear speech, minimal background noise
-""")
 
+**For Recording:** Install `streamlit-audio-recorder` package for full recording functionality:
