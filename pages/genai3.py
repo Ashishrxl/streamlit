@@ -94,10 +94,10 @@ with tab1:
             st.audio(tmp_path, format="audio/wav")
 
 with tab2:
-    st.markdown("**Record audio directly in your browser**")
+    st.markdown("")
     
     # Option 1: Native Streamlit Audio Input (Recommended)
-    st.markdown("**Option 1: Native Streamlit Audio Input** (Recommended)")
+    st.markdown("")
     recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
     
     if recorded_audio_native is not None:
