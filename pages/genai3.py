@@ -426,4 +426,4 @@ st.markdown("""
 **Max File Size:** 200MB  
 **Best Results:** Clear speech, minimal background noise
 
-**For Recording:** Install `streamlit-audio-recorder` package for full recording functionality:
+**For Recording:** Install `streamlit-audio-recorder` package for full recording functionality:""")
