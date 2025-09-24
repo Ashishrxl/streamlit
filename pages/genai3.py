@@ -112,8 +112,8 @@ with tab2:
             st.audio(tmp_path, format="audio/wav")
             
     except ImportError:
-        st.warning("📝 To enable recording, install: `pip install streamlit-audio-recorder`")
-        st.code("pip install streamlit-audio-recorder", language="bash")
+        st.warning("📝 To enable recording,")
+        st.code("pip", language="bash")
 
 # -------------------------
 # Additional Upload Options
@@ -314,7 +314,3 @@ st.markdown("""
 **Max File Size:** 200MB  
 **Best Results:** Clear speech, minimal background noise
 """)
-
-# Footer
-st.markdown("---")
-st.markdown("**Powered by Gemini 1.5 Flash (Transcription) + Gemini 2.5 TTS (Singing)**")
