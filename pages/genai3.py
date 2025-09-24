@@ -10,8 +10,8 @@ import wave
 import numpy as np
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
-st.title("🎤 Singify with Gemini")
-st.caption("Record or upload a line → Transcribe with Gemini 1.5 Flash → Sing it back with Gemini 2.5 TTS")
+st.title("🎤 Singify")
+st.caption("Record or upload a line → Transcribe......")
 
 # Sidebar
 singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
@@ -216,7 +216,7 @@ async def transcribe_and_sing():
     step_tts = 50 / max(duration, 1)
 
     # --- Transcription ---
-    progress_text.text("🔤 Transcribing with Gemini 1.5 Flash...")
+    progress_text.text("🔤 Transcribing ...")
     try:
         resp = client.models.generate_content(
             model="gemini-1.5-flash",
@@ -238,10 +238,10 @@ async def transcribe_and_sing():
         await asyncio.sleep(0.05)
         
     st.success("✅ Transcription complete!")
-    st.write(f"**Transcribed Text:** {transcript}")
+    
 
     # --- TTS with natural language prompt ---
-    progress_text.text(f"🎵 Generating {singing_style} style voice with Gemini 2.5 TTS...")
+    progress_text.text(f"🎵 Generating.... {singing_style}")
     
     tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {transcript}"
     
@@ -286,7 +286,7 @@ async def transcribe_and_sing():
                 )
                 
     except Exception as e:
-        st.error(f"❌ TTS generation failed: {e}")
+        st.error(f"❌ Generation failed: {e}")
         progress_text.text("❌ Generation failed")
 
 # -------------------------
