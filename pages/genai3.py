@@ -10,8 +10,22 @@ import wave
 import numpy as np
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
-st.title("🎤 Singify")
-st.caption("Record or upload a line → Transcribe......")
+st.title("🎤 Singify with Gemini")
+st.caption("Record or upload a line → Transcribe with Gemini 1.5 Flash → Sing it back with Gemini 2.5 TTS")
+
+# Initialize session state
+if 'transcript' not in st.session_state:
+    st.session_state.transcript = None
+if 'vocal_path' not in st.session_state:
+    st.session_state.vocal_path = None
+if 'original_path' not in st.session_state:
+    st.session_state.original_path = None
+if 'generation_complete' not in st.session_state:
+    st.session_state.generation_complete = False
+if 'current_style' not in st.session_state:
+    st.session_state.current_style = None
+if 'current_voice' not in st.session_state:
+    st.session_state.current_voice = None
 
 # Sidebar
 singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
@@ -70,6 +84,9 @@ with tab1:
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
             
+            # Store original path in session state
+            st.session_state.original_path = tmp_path
+            
             # Show audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
@@ -84,7 +101,6 @@ with tab2:
         st.info("🔴 Recording... Click 'Stop Recording' when done")
     
     # Note: For actual recording, you would need streamlit-audio-recorder
-    # pip install streamlit-audio-recorder
     try:
         from audio_recorder_streamlit import audio_recorder
         
@@ -105,6 +121,9 @@ with tab2:
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
             
+            # Store original path in session state
+            st.session_state.original_path = tmp_path
+            
             # Show recorded audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
@@ -112,35 +131,53 @@ with tab2:
             st.audio(tmp_path, format="audio/wav")
             
     except ImportError:
-        st.warning("📝 To enable recording,")
-        st.code("pip", language="bash")
+        st.warning("📝 To enable recording, install: `pip install streamlit-audio-recorder`")
+        st.code("pip install streamlit-audio-recorder", language="bash")
 
 # -------------------------
 # Additional Upload Options
 # -------------------------
 st.subheader("📎 Additional Options")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🗑️ Clear Audio"):
         audio_bytes = None
         tmp_path = None
+        # Clear session state
+        st.session_state.transcript = None
+        st.session_state.vocal_path = None
+        st.session_state.original_path = None
+        st.session_state.generation_complete = False
+        st.session_state.current_style = None
+        st.session_state.current_voice = None
         st.rerun()
 
 with col2:
-    if audio_bytes and st.button("ℹ️ Audio Info"):
-        data, samplerate = sf.read(tmp_path, always_2d=True)
-        duration = len(data) / samplerate
-        file_size = len(audio_bytes) / 1024 / 1024
-        
-        st.info(f"""
-        **Audio Information:**
-        - Duration: {duration:.2f} seconds
-        - Sample Rate: {samplerate} Hz
-        - Channels: {data.shape[1]}
-        - File Size: {file_size:.2f} MB
-        - Format: WAV
-        """)
+    if (audio_bytes or st.session_state.original_path) and st.button("ℹ️ Audio Info"):
+        path_to_check = tmp_path if tmp_path else st.session_state.original_path
+        if path_to_check:
+            data, samplerate = sf.read(path_to_check, always_2d=True)
+            duration = len(data) / samplerate
+            file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
+            
+            st.info(f"""
+            **Audio Information:**
+            - Duration: {duration:.2f} seconds
+            - Sample Rate: {samplerate} Hz
+            - Channels: {data.shape[1]}
+            - File Size: {file_size:.2f} MB
+            - Format: WAV
+            """)
+
+with col3:
+    if st.session_state.generation_complete and st.button("🆕 Generate New"):
+        st.session_state.transcript = None
+        st.session_state.vocal_path = None
+        st.session_state.generation_complete = False
+        st.session_state.current_style = None
+        st.session_state.current_voice = None
+        st.rerun()
 
 # -------------------------
 # Helper: Corrected Gemini TTS using official API
@@ -209,25 +246,39 @@ async def transcribe_and_sing():
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
+    # Use tmp_path or stored original_path
+    audio_path = tmp_path if tmp_path else st.session_state.original_path
+    if not audio_path:
+        st.error("No audio file available")
+        return
+
+    # Read audio for processing
+    if audio_bytes:
+        current_audio_bytes = audio_bytes
+    else:
+        with open(audio_path, "rb") as f:
+            current_audio_bytes = f.read()
+
     # Estimate duration
-    data, samplerate = sf.read(tmp_path, always_2d=True)
+    data, samplerate = sf.read(audio_path, always_2d=True)
     duration = len(data) / samplerate
     step_transcribe = 50 / max(duration, 1)
     step_tts = 50 / max(duration, 1)
 
     # --- Transcription ---
-    progress_text.text("🔤 Transcribing ...")
+    progress_text.text("🔤 Transcribing with Gemini 1.5 Flash...")
     try:
         resp = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=[
                 {"role": "user", "parts": [
                     {"text": "Please transcribe this speech accurately."},
-                    {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(audio_bytes).decode()}}
+                    {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(current_audio_bytes).decode()}}
                 ]}
             ]
         )
         transcript = resp.text.strip()
+        st.session_state.transcript = transcript  # Store in session state
     except Exception as e:
         st.error(f"❌ Transcription failed: {e}")
         return
@@ -238,10 +289,9 @@ async def transcribe_and_sing():
         await asyncio.sleep(0.05)
         
     st.success("✅ Transcription complete!")
-    
 
     # --- TTS with natural language prompt ---
-    progress_text.text(f"🎵 Generating.... {singing_style}")
+    progress_text.text(f"🎵 Generating {singing_style} style voice with Gemini 2.5 TTS...")
     
     tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {transcript}"
     
@@ -257,48 +307,78 @@ async def transcribe_and_sing():
         progress_bar.progress(100)
         progress_text.text("🎶 Your sung version is ready!")
 
-        # Save vocal
+        # Save vocal and store in session state
         vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         vocal_path = vocal_file.name
         with open(vocal_path, "wb") as f:
             f.write(vocal_bytes)
+        
+        # Store results in session state
+        st.session_state.vocal_path = vocal_path
+        st.session_state.generation_complete = True
+        st.session_state.current_style = singing_style
+        st.session_state.current_voice = voice_option
+        
+    except Exception as e:
+        st.error(f"❌ TTS generation failed: {e}")
+        progress_text.text("❌ Generation failed")
 
-        st.success("🎤 Generated singing voice!")
-        st.audio(vocal_path, format="audio/wav")
+# -------------------------
+# Display Results (Persistent)
+# -------------------------
+def display_results():
+    """Display results from session state"""
+    if st.session_state.transcript:
+        st.subheader("📝 Transcription Results")
+        st.write(f"**Transcribed Text:** {st.session_state.transcript}")
+    
+    if st.session_state.generation_complete and st.session_state.vocal_path:
+        st.subheader("🎶 Generated Singing Voice")
+        st.success(f"🎤 Generated {st.session_state.current_style} style with {st.session_state.current_voice} voice!")
+        
+        # Display audio player
+        st.audio(st.session_state.vocal_path, format="audio/wav")
         
         # Download buttons
         col1, col2 = st.columns(2)
         with col1:
-            with open(vocal_path, "rb") as f:
+            with open(st.session_state.vocal_path, "rb") as f:
                 st.download_button(
                     "📥 Download Sung Version", 
-                    f, 
-                    file_name=f"singified_{singing_style.lower()}.wav", 
-                    mime="audio/wav"
+                    f.read(), 
+                    file_name=f"singified_{st.session_state.current_style.lower()}.wav", 
+                    mime="audio/wav",
+                    key="download_sung"
                 )
         with col2:
-            with open(tmp_path, "rb") as f:
-                st.download_button(
-                    "📥 Download Original", 
-                    f, 
-                    file_name="original_audio.wav", 
-                    mime="audio/wav"
-                )
-                
-    except Exception as e:
-        st.error(f"❌ Generation failed: {e}")
-        progress_text.text("❌ Generation failed")
+            if st.session_state.original_path:
+                with open(st.session_state.original_path, "rb") as f:
+                    st.download_button(
+                        "📥 Download Original", 
+                        f.read(), 
+                        file_name="original_audio.wav", 
+                        mime="audio/wav",
+                        key="download_original"
+                    )
 
 # -------------------------
 # Main Process Button
 # -------------------------
 st.subheader("🚀 Generate Singing Voice")
 
-if audio_bytes is not None:
-    if st.button("🎶 Transcribe & Sing", type="primary"):
-        asyncio.run(transcribe_and_sing())
+if audio_bytes is not None or st.session_state.original_path:
+    if not st.session_state.generation_complete:
+        if st.button("🎶 Transcribe & Sing", type="primary"):
+            asyncio.run(transcribe_and_sing())
+    else:
+        st.info("✅ Generation already completed! Results shown below.")
 else:
     st.warning("⚠️ Please upload or record an audio file first!")
+
+# -------------------------
+# Always Display Results if Available
+# -------------------------
+display_results()
     
 # -------------------------
 # Instructions
@@ -309,8 +389,13 @@ st.markdown("""
 2. Choose your preferred **singing style** and **voice** from the sidebar
 3. Click **"Transcribe & Sing"** to process
 4. Download your **sung version** and **original audio**
+5. Use **"Generate New"** to create different versions
 
 **Supported Formats:** WAV, MP3, M4A, OGG, FLAC  
 **Max File Size:** 200MB  
 **Best Results:** Clear speech, minimal background noise
 """)
+
+# Footer
+st.markdown("---")
+st.markdown("**Powered by Gemini 1.5 Flash (Transcription) + Gemini 2.5 TTS (Singing)**")
