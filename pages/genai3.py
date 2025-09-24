@@ -34,7 +34,7 @@ def convert_to_wav_bytes(file_bytes):
 # -------------------------
 # Step 1: Upload audio
 # -------------------------
-uploaded = st.file_uploader("Upload audio (WAV/MP3/M4A)", type=["wav","mp3","m4a"])
+uploaded = st.file_uploader("Upload audio (WAV/MP3/M4A)", type=["wav", "mp3", "m4a"])
 if uploaded:
     file_bytes = uploaded.read()
     ext = uploaded.name.split('.')[-1].lower()
@@ -43,7 +43,8 @@ if uploaded:
     else:
         audio_bytes = file_bytes
 
-    tmp_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_path = tmp_file.name
     with open(tmp_path, "wb") as f:
         f.write(audio_bytes)
     st.audio(tmp_path, format="audio/wav")
@@ -55,11 +56,17 @@ async def synthesize_speech(ssml_text, voice="alloy"):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
     headers = {
         "Authorization": f"Bearer {st.secrets['GOOGLE_API_KEY']}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
-    data = {"input": {"ssml": ssml_text}, "voice": voice, "audioFormat": "wav"}
+    data = {
+        "input": {"ssml": ssml_text},
+        "voice": voice,
+        "audioFormat": "wav"
+    }
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, lambda: requests.post(url, headers=headers, json=data))
+    response = await loop.run_in_executor(
+        None, lambda: requests.post(url, headers=headers, json=data)
+    )
     response.raise_for_status()
     audio_base64 = response.json().get("audio")
     if audio_base64 is None:
@@ -71,25 +78,27 @@ async def synthesize_speech(ssml_text, voice="alloy"):
 # -------------------------
 async def transcribe_and_sing():
     client = genai.Client()
-    
+
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
     # Estimate duration
     data, samplerate = sf.read(tmp_path, always_2d=True)
-    duration = len(data)/samplerate
-    step_transcribe = 50/max(duration,1)
-    step_tts = 50/max(duration,1)
+    duration = len(data) / samplerate
+    step_transcribe = 50 / max(duration, 1)
+    step_tts = 50 / max(duration, 1)
 
     # --- Transcription ---
     progress_text.text("Transcribing with Gemini 1.5 Flash...")
     try:
         resp = client.models.generate_content(
             model="gemini-1.5-flash",
-            contents=[{"role": "user", "parts":[
-                {"text": "Please transcribe this speech."},
-                {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(audio_bytes).decode()}}
-            ]}]
+            contents=[
+                {"role": "user", "parts": [
+                    {"text": "Please transcribe this speech."},
+                    {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(audio_bytes).decode()}}
+                ]}
+            ]
         )
         transcript = resp.text
     except Exception as e:
@@ -98,9 +107,8 @@ async def transcribe_and_sing():
 
     # Simulate progress for transcription
     for i in range(int(duration)):
-        progress_bar.progress(min(int((i+1)*step_transcribe),50))
+        progress_bar.progress(min(int((i + 1) * step_transcribe), 50))
         await asyncio.sleep(0.05)
-
     st.success("✅ Transcription complete!")
     st.write(transcript)
 
@@ -110,16 +118,16 @@ async def transcribe_and_sing():
 
     tts_task = asyncio.create_task(synthesize_speech(ssml))
     for i in range(int(duration)):
-        progress_bar.progress(min(50 + int((i+1)*step_tts), 100))
+        progress_bar.progress(min(50 + int((i + 1) * step_tts), 100))
         await asyncio.sleep(0.05)
     vocal_bytes = await tts_task
 
-    # Complete
     progress_bar.progress(100)
     progress_text.text("🎶 Your sung version is ready!")
 
     # Save vocal
-    vocal_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    vocal_path = vocal_file.name
     with open(vocal_path, "wb") as f:
         f.write(vocal_bytes)
 
