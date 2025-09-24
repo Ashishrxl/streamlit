@@ -10,8 +10,8 @@ import wave
 import numpy as np
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
-st.title("🎤 Singify with Gemini")
-st.caption("Record or upload a line → Transcribe with Gemini 1.5 Flash → Sing it back with Gemini 2.5 TTS")
+st.title("🎤 Singify")
+st.caption("Record or upload a line → Transcribe....")
 
 # Initialize session state
 if 'transcript' not in st.session_state:
@@ -131,8 +131,8 @@ with tab2:
             st.audio(tmp_path, format="audio/wav")
             
     except ImportError:
-        st.warning("📝 To enable recording, install: `pip install streamlit-audio-recorder`")
-        st.code("pip install streamlit-audio-recorder", language="bash")
+        st.warning("📝")
+        st.code("", language="bash")
 
 # -------------------------
 # Additional Upload Options
@@ -220,7 +220,7 @@ async def synthesize_speech(text_prompt, voice_name="Kore"):
     audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
     
     if audio_base64 is None:
-        raise ValueError("No audio returned from Gemini TTS.")
+        raise ValueError("No audio returned.")
     
     return base64.b64decode(audio_base64)
 
@@ -266,7 +266,7 @@ async def transcribe_and_sing():
     step_tts = 50 / max(duration, 1)
 
     # --- Transcription ---
-    progress_text.text("🔤 Transcribing with Gemini 1.5 Flash...")
+    progress_text.text("🔤 Transcribing...")
     try:
         resp = client.models.generate_content(
             model="gemini-1.5-flash",
@@ -291,7 +291,7 @@ async def transcribe_and_sing():
     st.success("✅ Transcription complete!")
 
     # --- TTS with natural language prompt ---
-    progress_text.text(f"🎵 Generating {singing_style} style voice with Gemini 2.5 TTS...")
+    progress_text.text(f"🎵 Generating... {singing_style}")
     
     tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {transcript}"
     
@@ -320,7 +320,7 @@ async def transcribe_and_sing():
         st.session_state.current_voice = voice_option
         
     except Exception as e:
-        st.error(f"❌ TTS generation failed: {e}")
+        st.error(f"❌ Generation failed: {e}")
         progress_text.text("❌ Generation failed")
 
 # -------------------------
@@ -344,7 +344,7 @@ def display_results():
         with col1:
             with open(st.session_state.vocal_path, "rb") as f:
                 st.download_button(
-                    "📥 Download Sung Version", 
+                    "📥 Download New Version", 
                     f.read(), 
                     file_name=f"singified_{st.session_state.current_style.lower()}.wav", 
                     mime="audio/wav",
@@ -354,7 +354,7 @@ def display_results():
             if st.session_state.original_path:
                 with open(st.session_state.original_path, "rb") as f:
                     st.download_button(
-                        "📥 Download Original", 
+                        "📥 Download Old Version", 
                         f.read(), 
                         file_name="original_audio.wav", 
                         mime="audio/wav",
@@ -396,6 +396,3 @@ st.markdown("""
 **Best Results:** Clear speech, minimal background noise
 """)
 
-# Footer
-st.markdown("---")
-st.markdown("**Powered by Gemini 1.5 Flash (Transcription) + Gemini 2.5 TTS (Singing)**")
