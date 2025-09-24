@@ -171,7 +171,7 @@ with tab2:
         
         elif st.session_state.recording_state == "recorded":
             st.success("✅ **Recording completed!**")
-            st.info("💡 **Note:** To enable actual audio recording, install `streamlit-audio-recorder` package")
+            st.info("💡 **Note:** This is a placeholder recording. To enable actual audio recording, install `streamlit-audio-recorder` package")
 
 # -------------------------
 # Additional Upload Options
@@ -197,7 +197,7 @@ with col1:
             st.stop()
 
 with col2:
-    if (audio_bytes or st.session_state.original_path) and st.button("ℹ️ Audio Info"):
+    if (audio_bytes or st.session_state.original_path or st.session_state.recording_state == "recorded") and st.button("ℹ️ Audio Info"):
         path_to_check = tmp_path if tmp_path else st.session_state.original_path
         if path_to_check:
             data, samplerate = sf.read(path_to_check, always_2d=True)
@@ -212,6 +212,10 @@ with col2:
             - File Size: {file_size:.2f} MB
             - Format: WAV
             """)
+        else:
+            st.info("**Placeholder Recording Information:**
+- This is a demo recording interface
+- Install `streamlit-audio-recorder` for actual recording")
 
 with col3:
     if st.session_state.generation_complete and st.button("🆕 Generate New"):
@@ -294,6 +298,12 @@ async def transcribe_and_sing():
 
     # Use tmp_path or stored original_path
     audio_path = tmp_path if tmp_path else st.session_state.original_path
+    
+    # Handle placeholder recording case
+    if not audio_path and st.session_state.recording_state == "recorded":
+        st.error("❌ This is a placeholder recording. Please install `streamlit-audio-recorder` for actual recording functionality.")
+        return
+    
     if not audio_path:
         st.error("No audio file available")
         return
@@ -412,10 +422,15 @@ def display_results():
 # -------------------------
 st.subheader("🚀 Generate Singing Voice")
 
-if audio_bytes is not None or st.session_state.original_path:
+# Modified condition to include placeholder recording state
+if audio_bytes is not None or st.session_state.original_path or st.session_state.recording_state == "recorded":
     if not st.session_state.generation_complete:
         if st.button("🎶 Transcribe & Sing", type="primary"):
-            asyncio.run(transcribe_and_sing())
+            # Handle placeholder recording case
+            if st.session_state.recording_state == "recorded" and not st.session_state.original_path:
+                st.warning("⚠️ This is a placeholder recording interface. Please install `streamlit-audio-recorder` for actual recording functionality, or upload an audio file instead.")
+            else:
+                asyncio.run(transcribe_and_sing())
     else:
         st.info("✅ Generation already completed! Results shown below.")
 else:
