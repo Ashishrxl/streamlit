@@ -2,11 +2,11 @@ import streamlit as st
 import base64
 import tempfile
 import io
-import numpy as np
 import asyncio
 import soundfile as sf
 from google import genai
 import requests
+import wave
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify with Gemini")
@@ -50,28 +50,64 @@ if uploaded:
     st.audio(tmp_path, format="audio/wav")
 
 # -------------------------
-# Helper: Gemini TTS
+# Helper: Corrected Gemini TTS using official API
 # -------------------------
-async def synthesize_speech(ssml_text, voice="alloy"):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateSpeech"
+async def synthesize_speech(text_prompt, voice_name="Kore"):
+    """
+    Correct Gemini TTS API call using official documentation structure
+    """
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
     headers = {
-        "Authorization": f"Bearer {st.secrets['GOOGLE_API_KEY']}",
+        "x-goog-api-key": st.secrets['GOOGLE_API_KEY'],  # Correct header format
         "Content-Type": "application/json"
     }
+    
+    # Correct request structure per official documentation
     data = {
-        "input": {"ssml": ssml_text},
-        "voice": voice,
-        "audioFormat": "wav"
+        "contents": [{
+            "parts": [{
+                "text": text_prompt
+            }]
+        }],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": voice_name
+                    }
+                }
+            }
+        }
     }
+    
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
         None, lambda: requests.post(url, headers=headers, json=data)
     )
     response.raise_for_status()
-    audio_base64 = response.json().get("audio")
+    
+    # Extract audio data from correct response structure
+    response_json = response.json()
+    audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+    
     if audio_base64 is None:
         raise ValueError("No audio returned from Gemini TTS.")
+    
     return base64.b64decode(audio_base64)
+
+# -------------------------
+# Helper: Convert PCM to WAV
+# -------------------------
+def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
+    """Convert raw PCM data to WAV format"""
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width) 
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
+    return wav_buffer.getvalue()
 
 # -------------------------
 # Step 2 & 3: Transcribe & TTS with progress
@@ -112,15 +148,19 @@ async def transcribe_and_sing():
     st.success("✅ Transcription complete!")
     st.write(transcript)
 
-    # --- TTS ---
+    # --- TTS with natural language prompt ---
     progress_text.text(f"Generating singing-style voice ({singing_style}) with Gemini 2.5 TTS...")
-    ssml = f"<speak><prosody rate='95%' pitch='+2st'>Sing these words in a {singing_style} style: {transcript}</prosody></speak>"
-
-    tts_task = asyncio.create_task(synthesize_speech(ssml))
+    
+    # Use natural language prompt for style control
+    tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and expression: {transcript}"
+    
+    tts_task = asyncio.create_task(synthesize_speech(tts_prompt))
     for i in range(int(duration)):
         progress_bar.progress(min(50 + int((i + 1) * step_tts), 100))
         await asyncio.sleep(0.05)
-    vocal_bytes = await tts_task
+    
+    pcm_data = await tts_task
+    vocal_bytes = pcm_to_wav(pcm_data)  # Convert PCM to WAV
 
     progress_bar.progress(100)
     progress_text.text("🎶 Your sung version is ready!")
