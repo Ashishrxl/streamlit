@@ -428,10 +428,4 @@ st.markdown("""
 
 **Supported Formats:** WAV, MP3, M4A, OGG, FLAC  
 **Max File Size:** 200MB  
-**Best Results:** Clear speech, minimal background noise
-
-**Recording Options:**
-- **Native Streamlit Audio Input**: Built-in, works everywhere (recommended)
-- **Enhanced Audio Recorder**: Better controls, requires package installation
-
-**For Enhanced Recording Features:**""")
+**Best Results:** Clear speech, minimal background noise""")
