@@ -26,8 +26,6 @@ if 'current_style' not in st.session_state:
     st.session_state.current_style = None
 if 'current_voice' not in st.session_state:
     st.session_state.current_voice = None
-if 'recording_state' not in st.session_state:
-    st.session_state.recording_state = "idle"  # idle, recording, recorded
 
 # Sidebar
 singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
@@ -97,81 +95,83 @@ with tab1:
 
 with tab2:
     st.markdown("**Record audio directly in your browser**")
+    
+    # Option 1: Native Streamlit Audio Input (Recommended)
+    st.markdown("**Option 1: Native Streamlit Audio Input** (Recommended)")
+    recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
+    
+    if recorded_audio_native is not None:
+        st.success("✅ Audio recorded successfully with native recorder!")
+        
+        # Read the audio bytes
+        audio_bytes = recorded_audio_native.read()
+        recorded_audio_native.seek(0)
+        
+        # Save to tmp file
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp_path = tmp_file.name
+        with open(tmp_path, "wb") as f:
+            f.write(audio_bytes)
 
-    # Check if audio_recorder_streamlit is available
+        st.session_state.original_path = tmp_path
+
+        try:
+            data, samplerate = sf.read(tmp_path, always_2d=True)
+            duration = len(data) / samplerate
+            st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz")
+            st.audio(tmp_path, format="audio/wav")
+        except Exception as e:
+            st.warning(f"Could not read audio properties: {e}")
+            st.audio(recorded_audio_native, format="audio/wav")
+
+    st.markdown("---")
+
+    # Option 2: Enhanced recorder from streamlit-audio-recorder package
+    st.markdown("**Option 2: Enhanced Audio Recorder** (Alternative)")
+
     try:
-        from audio_recorder_streamlit import audio_recorder
+        from streamlit_audio_recorder import audio_recorder
 
-        recorded_audio = audio_recorder(
+        recorded_audio_enhanced = audio_recorder(
             text="Click to record",
             recording_color="#e8b62c",
             neutral_color="#6aa36f",
-            icon_name="microphone-lines",
+            icon_name="microphone",
             icon_size="2x",
+            key="enhanced_recorder"
         )
 
-        if recorded_audio is not None:
-            st.success("✅ Audio recorded successfully!")
-            audio_bytes = recorded_audio
+        if recorded_audio_enhanced is not None:
+            st.success("✅ Audio recorded successfully with enhanced recorder!")
+            audio_bytes = recorded_audio_enhanced
 
             tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp_path = tmp_file.name
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
 
-            # Store original path in session state
             st.session_state.original_path = tmp_path
 
-            # Show recorded audio info
-            data, samplerate = sf.read(tmp_path, always_2d=True)
-            duration = len(data) / samplerate
-            st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz")
-            st.audio(tmp_path, format="audio/wav")
+            try:
+                data, samplerate = sf.read(tmp_path, always_2d=True)
+                duration = len(data) / samplerate
+                st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz")
+                st.audio(tmp_path, format="audio/wav")
+            except Exception as e:
+                st.warning(f"Could not read audio properties: {e}")
+                st.audio(recorded_audio_enhanced, format="audio/wav")
 
     except ImportError:
-        st.warning("⚠️ Audio recording requires the `streamlit-audio-recorder` package.")
-        st.info("Install it with: `pip install streamlit-audio-recorder`")
-        
-        # Alternative manual recording interface with proper start/stop buttons
-        
-        st.markdown("**Alternative Recording Method:**")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.session_state.recording_state == "idle":
-                if st.button("🎙️ Start Recording", type="primary"):
-                    st.session_state.recording_state = "recording"
-                    try:
-                        st.experimental_rerun()
-                    except AttributeError:
-                        st.stop()
-            
-            elif st.session_state.recording_state == "recording":
-                if st.button("⏹️ Stop Recording", type="secondary"):
-                    st.session_state.recording_state = "recorded"
-                    try:
-                        st.experimental_rerun()
-                    except AttributeError:
-                        st.stop()
-        
-        with col2:
-            if st.session_state.recording_state in ["recording", "recorded"]:
-                if st.button("🗑️ Clear Recording"):
-                    st.session_state.recording_state = "idle"
-                    try:
-                        st.experimental_rerun()
-                    except AttributeError:
-                        st.stop()
-        
-        # Show recording status
-        if st.session_state.recording_state == "recording":
-            st.error("🔴 **Recording in progress...** Click 'Stop Recording' when finished")
-            st.info("💡 **Note:** This is a placeholder interface. For actual recording functionality, please install `streamlit-audio-recorder`")
-        
-        elif st.session_state.recording_state == "recorded":
-            st.success("✅ **Recording completed!**")
-            st.info("💡 **Note:** This is a placeholder recording. To enable actual audio recording, install `streamlit-audio-recorder` package")
+        st.warning("⚠️ Enhanced audio recording package `streamlit-audio-recorder` not found.")
+        st.info(
+            """
+            To enable enhanced recording, install it with:
+            ```
+            pip install streamlit-audio-recorder
+            ```
+            For now, please use the native Streamlit audio input above.
+            """
+        )
 
 # -------------------------
 # Additional Upload Options
@@ -190,30 +190,27 @@ with col1:
         st.session_state.generation_complete = False
         st.session_state.current_style = None
         st.session_state.current_voice = None
-        st.session_state.recording_state = "idle"
-        try:
-            st.experimental_rerun()
-        except AttributeError:
-            st.stop()
+        st.rerun()
 
 with col2:
-    if (audio_bytes or st.session_state.original_path or st.session_state.recording_state == "recorded") and st.button("ℹ️ Audio Info"):
+    if (audio_bytes or st.session_state.original_path) and st.button("ℹ️ Audio Info"):
         path_to_check = tmp_path if tmp_path else st.session_state.original_path
         if path_to_check:
-            data, samplerate = sf.read(path_to_check, always_2d=True)
-            duration = len(data) / samplerate
-            file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
+            try:
+                data, samplerate = sf.read(path_to_check, always_2d=True)
+                duration = len(data) / samplerate
+                file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
 
-            st.info(f"""
-            **Audio Information:**
-            - Duration: {duration:.2f} seconds
-            - Sample Rate: {samplerate} Hz
-            - Channels: {data.shape[1]}
-            - File Size: {file_size:.2f} MB
-            - Format: WAV
-            """)
-        else:
-            st.info("- This is a demo recording interface- Install `streamlit-audio-recorder` for actual recording")
+                st.info(f"""
+                **Audio Information:**
+                - Duration: {duration:.2f} seconds
+                - Sample Rate: {samplerate} Hz
+                - Channels: {data.shape[1]}
+                - File Size: {file_size:.2f} MB
+                - Format: WAV
+                """)
+            except Exception as e:
+                st.error(f"Error reading audio info: {e}")
 
 with col3:
     if st.session_state.generation_complete and st.button("🆕 Generate New"):
@@ -222,10 +219,7 @@ with col3:
         st.session_state.generation_complete = False
         st.session_state.current_style = None
         st.session_state.current_voice = None
-        try:
-            st.experimental_rerun()
-        except AttributeError:
-            st.stop()
+        st.rerun()
 
 # -------------------------
 # Helper: Corrected Gemini TTS using official API
@@ -296,12 +290,7 @@ async def transcribe_and_sing():
 
     # Use tmp_path or stored original_path
     audio_path = tmp_path if tmp_path else st.session_state.original_path
-    
-    # Handle placeholder recording case
-    if not audio_path and st.session_state.recording_state == "recorded":
-        st.error("❌ This is a placeholder recording. Please install `streamlit-audio-recorder` for actual recording functionality.")
-        return
-    
+
     if not audio_path:
         st.error("No audio file available")
         return
@@ -420,15 +409,10 @@ def display_results():
 # -------------------------
 st.subheader("🚀 Generate Singing Voice")
 
-# Modified condition to include placeholder recording state
-if audio_bytes is not None or st.session_state.original_path or st.session_state.recording_state == "recorded":
+if audio_bytes is not None or st.session_state.original_path:
     if not st.session_state.generation_complete:
         if st.button("🎶 Transcribe & Sing", type="primary"):
-            # Handle placeholder recording case
-            if st.session_state.recording_state == "recorded" and not st.session_state.original_path:
-                st.warning("⚠️ This is a placeholder recording interface. Please install `streamlit-audio-recorder` for actual recording functionality, or upload an audio file instead.")
-            else:
-                asyncio.run(transcribe_and_sing())
+            asyncio.run(transcribe_and_sing())
     else:
         st.info("✅ Generation already completed! Results shown below.")
 else:
@@ -444,7 +428,7 @@ display_results()
 # -------------------------
 st.subheader("📋 How to Use")
 st.markdown("""
-1. **Upload** an audio file or **record** your voice
+1. **Upload** an audio file or **record** your voice using either recording option
 2. Choose your preferred **singing style** and **voice** from the sidebar
 3. Click **"Transcribe & Sing"** to process
 4. Download your **sung version** and **original audio**
@@ -454,4 +438,8 @@ st.markdown("""
 **Max File Size:** 200MB  
 **Best Results:** Clear speech, minimal background noise
 
-**For Recording:** Install `streamlit-audio-recorder` package for full recording functionality:""")
+**Recording Options:**
+- **Native Streamlit Audio Input**: Built-in, works everywhere (recommended)
+- **Enhanced Audio Recorder**: Better controls, requires package installation
+
+**For Enhanced Recording Features:**""")
