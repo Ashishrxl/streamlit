@@ -36,3 +36,4 @@ soundfile
 
 
 requests
+streamlit-audio-recorder
