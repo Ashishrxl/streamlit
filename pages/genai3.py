@@ -163,15 +163,7 @@ with tab2:
 
     except ImportError:
         st.warning("")
-        # st.info(
-            """
-            To enable enhanced recording, install it with:
-            ```
-            pip install streamlit-audio-recorder
-            ```
-            For now, please use the native Streamlit audio input above.
-            """
-        )
+        
 
 # -------------------------
 # Additional Upload Options
