@@ -213,9 +213,7 @@ with col2:
             - Format: WAV
             """)
         else:
-            st.info("
-- This is a demo recording interface
-- Install `streamlit-audio-recorder` for actual recording")
+            st.info("- This is a demo recording interface- Install `streamlit-audio-recorder` for actual recording")
 
 with col3:
     if st.session_state.generation_complete and st.button("🆕 Generate New"):
