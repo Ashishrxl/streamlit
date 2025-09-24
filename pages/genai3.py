@@ -213,7 +213,7 @@ with col2:
             - Format: WAV
             """)
         else:
-            st.info("**Placeholder Recording Information:**
+            st.info("
 - This is a demo recording interface
 - Install `streamlit-audio-recorder` for actual recording")
 
