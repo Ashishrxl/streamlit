@@ -127,7 +127,7 @@ with tab2:
     st.markdown("---")
 
     # Option 2: Enhanced recorder from streamlit-audio-recorder package
-    st.markdown("**Option 2: Enhanced Audio Recorder** (Alternative)")
+    st.markdown("")
 
     try:
         from streamlit_audio_recorder import audio_recorder
@@ -162,8 +162,8 @@ with tab2:
                 st.audio(recorded_audio_enhanced, format="audio/wav")
 
     except ImportError:
-        st.warning("⚠️ Enhanced audio recording package `streamlit-audio-recorder` not found.")
-        st.info(
+        st.warning("")
+        # st.info(
             """
             To enable enhanced recording, install it with:
             ```
