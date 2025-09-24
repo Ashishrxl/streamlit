@@ -142,18 +142,27 @@ with tab2:
             if st.session_state.recording_state == "idle":
                 if st.button("🎙️ Start Recording", type="primary"):
                     st.session_state.recording_state = "recording"
-                    st.experimental_rerun()
+                    try:
+                        st.experimental_rerun()
+                    except AttributeError:
+                        st.stop()
             
             elif st.session_state.recording_state == "recording":
                 if st.button("⏹️ Stop Recording", type="secondary"):
                     st.session_state.recording_state = "recorded"
-                    st.experimental_rerun()
+                    try:
+                        st.experimental_rerun()
+                    except AttributeError:
+                        st.stop()
         
         with col2:
             if st.session_state.recording_state in ["recording", "recorded"]:
                 if st.button("🗑️ Clear Recording"):
                     st.session_state.recording_state = "idle"
-                    st.experimental_rerun()
+                    try:
+                        st.experimental_rerun()
+                    except AttributeError:
+                        st.stop()
         
         # Show recording status
         if st.session_state.recording_state == "recording":
@@ -182,7 +191,10 @@ with col1:
         st.session_state.current_style = None
         st.session_state.current_voice = None
         st.session_state.recording_state = "idle"
-        st.experimental_rerun()
+        try:
+            st.experimental_rerun()
+        except AttributeError:
+            st.stop()
 
 with col2:
     if (audio_bytes or st.session_state.original_path) and st.button("ℹ️ Audio Info"):
@@ -208,7 +220,10 @@ with col3:
         st.session_state.generation_complete = False
         st.session_state.current_style = None
         st.session_state.current_voice = None
-        st.experimental_rerun()
+        try:
+            st.experimental_rerun()
+        except AttributeError:
+            st.stop()
 
 # -------------------------
 # Helper: Corrected Gemini TTS using official API
