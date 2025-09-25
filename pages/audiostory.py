@@ -1,17 +1,10 @@
-import streamlit as st 
-import google.generativeai as genai
-
---- CONFIG ---
+import streamlit as st import google.generativeai as genai
 
 GEMMA_MODEL = "gemma-3-12b-it" IMAGEN_MODEL = "imagen-3.0-generate-002" TTS_MODEL = "gemini-2.5-flash-preview-tts"
-
-Load API key from Streamlit secrets
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 st.set_page_config(page_title="AI Roleplay + Comics", layout="wide") st.title("🎭 AI Roleplay + Comics Generator")
-
---- USER INPUTS ---
 
 genre = st.text_input("Enter story genre", "Cyberpunk mystery") characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") length = st.selectbox("Story length", ["Short", "Medium", "Long"]) add_audio = st.checkbox("Generate character voices (TTS)")
 
