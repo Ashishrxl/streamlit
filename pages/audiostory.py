@@ -16,7 +16,11 @@ characters = st.text_area("List characters (comma separated)", "Detective, Hacke
 length = st.selectbox("Story length", ["Short", "Medium", "Long"]) 
 add_audio = st.checkbox("Generate character voices (TTS)")
 
-if st.button("Generate Story & Comics"): with st.spinner("✨ Writing story with Gemma..."): prompt = f"Write a {length} {genre} roleplay story with characters: {characters}. Split into scenes with dialogue." story_model = genai.GenerativeModel(GEMMA_MODEL) story_resp = story_model.generate_content(prompt) story = story_resp.text st.session_state.story = story
+if st.button("Generate Story & Comics"): 
+
+    with st.spinner("✨ Writing story with Gemma..."): 
+        prompt = f"Write a {length} {genre} roleplay story with characters: {characters}. Split into scenes with dialogue." 
+story_model = genai.GenerativeModel(GEMMA_MODEL) story_resp = story_model.generate_content(prompt) story = story_resp.text st.session_state.story = story
 
 st.subheader("📖 Story Script")
 st.write(story)
