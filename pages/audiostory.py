@@ -8,9 +8,13 @@ TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-st.set_page_config(page_title="AI Roleplay + Comics", layout="wide") st.title("🎭 AI Roleplay + Comics Generator")
+st.set_page_config(page_title="AI Roleplay + Comics", layout="wide") 
+st.title("🎭 AI Roleplay + Comics Generator")
 
-genre = st.text_input("Enter story genre", "Cyberpunk mystery") characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") length = st.selectbox("Story length", ["Short", "Medium", "Long"]) add_audio = st.checkbox("Generate character voices (TTS)")
+genre = st.text_input("Enter story genre", "Cyberpunk mystery") 
+characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") 
+length = st.selectbox("Story length", ["Short", "Medium", "Long"]) 
+add_audio = st.checkbox("Generate character voices (TTS)")
 
 if st.button("Generate Story & Comics"): with st.spinner("✨ Writing story with Gemma..."): prompt = f"Write a {length} {genre} roleplay story with characters: {characters}. Split into scenes with dialogue." story_model = genai.GenerativeModel(GEMMA_MODEL) story_resp = story_model.generate_content(prompt) story = story_resp.text st.session_state.story = story
 
