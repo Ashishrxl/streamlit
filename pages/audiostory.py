@@ -1,4 +1,5 @@
-import streamlit as st import google.generativeai as genai
+import streamlit as st 
+import google.generativeai as genai
 
 GEMMA_MODEL = "gemma-3-12b-it" IMAGEN_MODEL = "imagen-3.0-generate-002" TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
