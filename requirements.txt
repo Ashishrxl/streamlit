@@ -1,4 +1,4 @@
-fpdf
+reportlab
 
 # streamlit>=1.10.0
 # pandas
