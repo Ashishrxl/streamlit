@@ -40,7 +40,7 @@ voice_choice = st.selectbox("Select voice", voice_options[language])
 
 add_audio = st.checkbox("Generate audio of full story")
 
-# --- Utility ---
+# --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -80,11 +80,11 @@ def map_language_code(language):
     codes = {
         "English": "en-US",
         "Hindi": "hi-IN",
-        "Bhojpuri": "bh-IN"  # Gemini may fallback to hi-IN for Bhojpuri
+        "Bhojpuri": "bh-IN"  # Fallback to hi-IN if not supported
     }
     return codes.get(language, "en-US")
 
-# --- Main button: Generate story + audio ---
+# --- Main: Generate Story + Audio ---
 if st.button("Generate Story & Audio"):
     # Story generation
     story_progress = st.progress(0, text="Generating story...")
@@ -105,15 +105,12 @@ if st.button("Generate Story & Audio"):
 
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
-    st.session_state["story"] = story
+    st.session_state["story"] = story  # store story persistently
 
     running = False
     thread.join()
     story_progress.progress(100, text="Story generated ✅")
     story_placeholder.write("✅ Story ready!")
-
-    st.subheader("Story Script")
-    st.write(st.session_state["story"])
 
     # Audio generation
     if add_audio:
@@ -163,9 +160,14 @@ if st.button("Generate Story & Audio"):
             else:
                 pcm = bytes(data)
             wav_bytes = pcm_to_wav_bytes(pcm)
-            st.session_state["audio_bytes"] = wav_bytes
+            st.session_state["audio_bytes"] = wav_bytes  # store audio persistently
 
-# Persistent audio player + download button
+# --- Display story persistently ---
+if "story" in st.session_state:
+    st.subheader("Story Script")
+    st.write(st.session_state["story"])
+
+# --- Display audio persistently ---
 if "audio_bytes" in st.session_state:
     st.audio(st.session_state["audio_bytes"], format="audio/wav")
     st.download_button(
