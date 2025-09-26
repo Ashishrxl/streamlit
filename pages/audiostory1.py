@@ -7,6 +7,7 @@ import threading
 
 from google import genai
 from google.genai import types
+from fpdf import FPDF  # for PDF generation
 
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
@@ -80,11 +81,25 @@ def map_language_code(language):
     codes = {
         "English": "en-US",
         "Hindi": "hi-IN",
-        "Bhojpuri": "bh-IN"  # Fallback to hi-IN if not supported
+        "Bhojpuri": "bh-IN"  # fallback to hi-IN
     }
     return codes.get(language, "en-US")
 
-# --- Main: Generate Story + Audio ---
+# --- PDF generation ---
+def generate_pdf(text, title="AI Roleplay Story"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.multi_cell(0, 10, title)
+    pdf.ln(5)
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 8, text)
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    return buf
+
+# --- Main button: Generate story + audio ---
 if st.button("Generate Story & Audio"):
     # Story generation
     story_progress = st.progress(0, text="Generating story...")
@@ -166,6 +181,13 @@ if st.button("Generate Story & Audio"):
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
+    pdf_buffer = generate_pdf(st.session_state["story"])
+    st.download_button(
+        label="Download Story as PDF",
+        data=pdf_buffer,
+        file_name="story.pdf",
+        mime="application/pdf"
+    )
 
 # --- Display audio persistently ---
 if "audio_bytes" in st.session_state:
