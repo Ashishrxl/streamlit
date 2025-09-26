@@ -7,7 +7,10 @@ import threading
 
 from google import genai
 from google.genai import types
-from fpdf import FPDF  # for PDF generation
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
@@ -85,21 +88,35 @@ def map_language_code(language):
     }
     return codes.get(language, "en-US")
 
-# --- PDF generation ---
-def generate_pdf(text, title="AI Roleplay Story"):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.multi_cell(0, 10, title)
-    pdf.ln(5)
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 8, text)
+# --- PDF generation using reportlab ---
+def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
-    pdf.output(buf)
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    # Register a TTF font for Unicode support
+    pdfmetrics.registerFont(TTFont("DejaVu", "DejaVuSans.ttf"))
+
+    y = height - 50
+    c.setFont("DejaVu", 18)
+    c.drawString(50, y, title)
+    y -= 30
+
+    c.setFont("DejaVu", 12)
+    for line in text.split("\n"):
+        if y < 50:  # new page
+            c.showPage()
+            c.setFont("DejaVu", 12)
+            y = height - 50
+        c.drawString(50, y, line)
+        y -= 18
+
+    c.showPage()
+    c.save()
     buf.seek(0)
     return buf
 
-# --- Main button: Generate story + audio ---
+# --- Main: Generate story + audio ---
 if st.button("Generate Story & Audio"):
     # Story generation
     story_progress = st.progress(0, text="Generating story...")
@@ -120,7 +137,7 @@ if st.button("Generate Story & Audio"):
 
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
-    st.session_state["story"] = story  # store story persistently
+    st.session_state["story"] = story  # persistent
 
     running = False
     thread.join()
@@ -175,13 +192,13 @@ if st.button("Generate Story & Audio"):
             else:
                 pcm = bytes(data)
             wav_bytes = pcm_to_wav_bytes(pcm)
-            st.session_state["audio_bytes"] = wav_bytes  # store audio persistently
+            st.session_state["audio_bytes"] = wav_bytes
 
 # --- Display story persistently ---
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
-    pdf_buffer = generate_pdf(st.session_state["story"])
+    pdf_buffer = generate_pdf_reportlab(st.session_state["story"])
     st.download_button(
         label="Download Story as PDF",
         data=pdf_buffer,
@@ -200,4 +217,3 @@ if "audio_bytes" in st.session_state:
     )
 
 st.markdown("---")
-st.caption("Built with Gemma + Gemini TTS")
