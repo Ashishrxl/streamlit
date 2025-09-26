@@ -11,7 +11,8 @@ TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
-st.set_page_config(page_title="AI Roleplay Story", layout="wide") st.title("AI Roleplay Story Generator")
+st.set_page_config(page_title="AI Roleplay Story", layout="wide") 
+st.title("AI Roleplay Story Generator")
 
 genre = st.text_input("Enter story genre", "Cyberpunk mystery") 
 characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") 
