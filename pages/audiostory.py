@@ -6,7 +6,8 @@ import base64
 from google import genai 
 from google.genai import types
 
-GEMMA_MODEL = "gemma-3-12b-it" TTS_MODEL = "gemini-2.5-flash-preview-tts"
+GEMMA_MODEL = "gemma-3-12b-it" 
+TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
