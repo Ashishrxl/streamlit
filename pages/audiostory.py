@@ -2,6 +2,7 @@ import streamlit as st
 import io
 import wave
 import base64
+import json
 
 from google import genai
 from google.genai import types
@@ -50,13 +51,22 @@ if st.button("Generate Story & Audio"):
                 )
             )
             tts_resp = client.models.generate_content(model=TTS_MODEL, contents=[story], config=config)
+
+            # Debug output
+            st.subheader("Debug: Raw TTS Response")
+            try:
+                st.json(tts_resp.to_dict())  # if the object has .to_dict()
+            except Exception:
+                st.write(tts_resp)
+
             data = None
             if hasattr(tts_resp, "candidates") and tts_resp.candidates:
                 candidate = tts_resp.candidates[0]
-                if hasattr(candidate, "content") and candidate.content:
-                    part = candidate.content[0]
-                    if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
-                        data = part.inline_data.data
+                if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                    for part in candidate.content.parts:
+                        if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
+                            data = part.inline_data.data
+                            break
 
             if data:
                 if isinstance(data, str):
