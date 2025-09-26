@@ -19,6 +19,7 @@ st.title("AI Roleplay Story Generator")
 genre = st.text_input("Enter story genre", "Cyberpunk mystery")
 characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick")
 length = st.selectbox("Story length", ["Short", "Medium", "Long"])
+language = st.selectbox("Select story language", ["English", "Hindi", "Bhojpuri"])
 add_audio = st.checkbox("Generate audio of full story")
 
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -53,7 +54,10 @@ if st.button("Generate Story & Audio"):
     thread = threading.Thread(target=animate_progress_bar, args=(story_progress, story_placeholder, "Generating story", 8))
     thread.start()
 
-    prompt = f"Write a {length} {genre} roleplay story with characters: {characters}. Split into scenes with dialogue."
+    prompt = (
+        f"Write a {length} {genre} roleplay story in {language} "
+        f"with characters: {characters}. Split into scenes with dialogue."
+    )
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
     st.session_state["story"] = story
@@ -77,6 +81,7 @@ if st.button("Generate Story & Audio"):
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
+                    # Using the same voice, but Gemini adapts output to language in text
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
                 )
             )
