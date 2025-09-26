@@ -11,17 +11,36 @@ from google.genai import types
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
-client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+# --- API Key selection ---
+api_keys = {
+    "Key 1": st.secrets["GOOGLE_API_KEY_1"],
+    "Key 2": st.secrets["GOOGLE_API_KEY_2"]
+}
+selected_key_name = st.selectbox("Select API Key", list(api_keys.keys()))
+api_key = api_keys[selected_key_name]
+
+client = genai.Client(api_key=api_key)
 
 st.set_page_config(page_title="AI Roleplay Story", layout="wide")
 st.title("AI Roleplay Story Generator")
 
+# Inputs
 genre = st.text_input("Enter story genre", "Cyberpunk mystery")
 characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick")
 length = st.selectbox("Story length", ["Short", "Medium", "Long"])
 language = st.selectbox("Select story language", ["English", "Hindi", "Bhojpuri"])
+
+# Voice choices per language
+voice_options = {
+    "English": ["English Male", "English Female"],
+    "Hindi": ["Hindi Male", "Hindi Female"],
+    "Bhojpuri": ["Bhojpuri Male", "Bhojpuri Female"]
+}
+voice_choice = st.selectbox("Select voice", voice_options[language])
+
 add_audio = st.checkbox("Generate audio of full story")
 
+# --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -33,7 +52,6 @@ def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     return buf.read()
 
 def animate_progress_bar(progress, placeholder, text, est_time=10):
-    """Animate progress bar with countdown until stopped by global flag."""
     global running
     running = True
     start = time.time()
@@ -47,46 +65,80 @@ def animate_progress_bar(progress, placeholder, text, est_time=10):
         if pct >= 100:
             break
 
+def map_voice(voice_choice):
+    mapping = {
+        "English Male": "Kore",
+        "English Female": "Charon",
+        "Hindi Male": "Kore",
+        "Hindi Female": "Charon",
+        "Bhojpuri Male": "Kore",
+        "Bhojpuri Female": "Charon"
+    }
+    return mapping.get(voice_choice, "Kore")
+
+def map_language_code(language):
+    codes = {
+        "English": "en-US",
+        "Hindi": "hi-IN",
+        "Bhojpuri": "bh-IN"  # Fallback to hi-IN if not supported
+    }
+    return codes.get(language, "en-US")
+
+# --- Main: Generate Story + Audio ---
 if st.button("Generate Story & Audio"):
-    # Story progress bar + countdown
+    # Story generation
     story_progress = st.progress(0, text="Generating story...")
     story_placeholder = st.empty()
-    thread = threading.Thread(target=animate_progress_bar, args=(story_progress, story_placeholder, "Generating story", 8))
+    thread = threading.Thread(
+        target=animate_progress_bar,
+        args=(story_progress, story_placeholder, "Generating story", 8)
+    )
     thread.start()
 
     prompt = (
-        f"Write a {length} {genre} roleplay story in {language} "
-        f"with characters: {characters}. Split into scenes with dialogue."
+        f"Write a {length} {genre} roleplay story in {language} ONLY. "
+        f"Include first a brief introduction of each character ({characters}) and then the story. "
+        f"Do NOT include text in any other language. "
+        f"Do NOT include explanations, summaries, or extra content. "
+        f"The output must be entirely in {language} and contain ONLY character introductions and the story."
     )
+
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
-    st.session_state["story"] = story
+    st.session_state["story"] = story  # store story persistently
 
     running = False
     thread.join()
     story_progress.progress(100, text="Story generated ✅")
     story_placeholder.write("✅ Story ready!")
 
-    st.subheader("Story Script")
-    st.write(story)
-
+    # Audio generation
     if add_audio:
-        # Audio progress bar + countdown
         audio_progress = st.progress(0, text="Generating audio...")
         audio_placeholder = st.empty()
-        thread = threading.Thread(target=animate_progress_bar, args=(audio_progress, audio_placeholder, "Generating audio", 12))
+        thread = threading.Thread(
+            target=animate_progress_bar,
+            args=(audio_progress, audio_placeholder, "Generating audio", 12)
+        )
         thread.start()
 
         config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
+                language_code=map_language_code(language),
                 voice_config=types.VoiceConfig(
-                    # Using the same voice, but Gemini adapts output to language in text
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=map_voice(voice_choice)
+                    )
                 )
             )
         )
-        tts_resp = client.models.generate_content(model=TTS_MODEL, contents=[story], config=config)
+
+        tts_resp = client.models.generate_content(
+            model=TTS_MODEL,
+            contents=[st.session_state["story"]],
+            config=config
+        )
 
         data = None
         if hasattr(tts_resp, "candidates") and tts_resp.candidates:
@@ -108,8 +160,21 @@ if st.button("Generate Story & Audio"):
             else:
                 pcm = bytes(data)
             wav_bytes = pcm_to_wav_bytes(pcm)
-            st.audio(wav_bytes, format="audio/wav")
-            st.download_button(label="Download Audio", data=wav_bytes, file_name="story_audio.wav", mime="audio/wav")
+            st.session_state["audio_bytes"] = wav_bytes  # store audio persistently
+
+# --- Display story persistently ---
+if "story" in st.session_state:
+    st.subheader("Story Script")
+    st.write(st.session_state["story"])
+
+# --- Display audio persistently ---
+if "audio_bytes" in st.session_state:
+    st.audio(st.session_state["audio_bytes"], format="audio/wav")
+    st.download_button(
+        label="Download Audio",
+        data=st.session_state["audio_bytes"],
+        file_name="story_audio.wav",
+        mime="audio/wav"
+    )
 
 st.markdown("---")
-st.caption("Built with Gemma + Gemini TTS")
