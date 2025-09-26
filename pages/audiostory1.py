@@ -4,6 +4,7 @@ import wave
 import base64
 import time
 import threading
+import os
 
 from google import genai
 from google.genai import types
@@ -84,29 +85,31 @@ def map_language_code(language):
     codes = {
         "English": "en-US",
         "Hindi": "hi-IN",
-        "Bhojpuri": "bh-IN"  # fallback to hi-IN
+        "Bhojpuri": "bh-IN"
     }
     return codes.get(language, "en-US")
 
-# --- PDF generation using reportlab ---
-def generate_pdf_reportlab(text, title="AI Roleplay Story"):
+# --- PDF generation using reportlab (Unicode-safe) ---
+def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    # Register a TTF font for Unicode support
-    pdfmetrics.registerFont(TTFont("DejaVu", "DejaVuSans.ttf"))
+    font_path = "NotoSansDevanagari-Regular.ttf"
+    if not os.path.exists(font_path):
+        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
+    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
 
     y = height - 50
-    c.setFont("DejaVu", 18)
+    c.setFont("NotoSans", 18)
     c.drawString(50, y, title)
     y -= 30
 
-    c.setFont("DejaVu", 12)
+    c.setFont("NotoSans", 12)
     for line in text.split("\n"):
         if y < 50:  # new page
             c.showPage()
-            c.setFont("DejaVu", 12)
+            c.setFont("NotoSans", 12)
             y = height - 50
         c.drawString(50, y, line)
         y -= 18
@@ -137,7 +140,7 @@ if st.button("Generate Story & Audio"):
 
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
-    st.session_state["story"] = story  # persistent
+    st.session_state["story"] = story
 
     running = False
     thread.join()
@@ -198,7 +201,7 @@ if st.button("Generate Story & Audio"):
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
-    pdf_buffer = generate_pdf_reportlab(st.session_state["story"])
+    pdf_buffer = generate_pdf_unicode(st.session_state["story"])
     st.download_button(
         label="Download Story as PDF",
         data=pdf_buffer,
