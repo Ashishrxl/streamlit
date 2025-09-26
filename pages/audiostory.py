@@ -1,4 +1,9 @@
-import streamlit as st from google import genai from google.genai import types import io import wave import base64
+import streamlit as st 
+import io import wave 
+import base64
+
+from google import genai 
+from google.genai import types
 
 GEMMA_MODEL = "gemma-3-12b-it" TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
@@ -6,7 +11,10 @@ client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 st.set_page_config(page_title="AI Roleplay Story", layout="wide") st.title("AI Roleplay Story Generator")
 
-genre = st.text_input("Enter story genre", "Cyberpunk mystery") characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") length = st.selectbox("Story length", ["Short", "Medium", "Long"]) add_audio = st.checkbox("Generate audio of full story")
+genre = st.text_input("Enter story genre", "Cyberpunk mystery") 
+characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick") 
+length = st.selectbox("Story length", ["Short", "Medium", "Long"]) 
+add_audio = st.checkbox("Generate audio of full story")
 
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2): buf = io.BytesIO() with wave.open(buf, "wb") as wf: wf.setnchannels(channels) wf.setsampwidth(sample_width) wf.setframerate(rate) wf.writeframes(pcm_bytes) buf.seek(0) return buf.read()
 
