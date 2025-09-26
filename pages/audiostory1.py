@@ -11,7 +11,15 @@ from google.genai import types
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
-client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+# --- API Key selection ---
+api_keys = {
+    "Key 1": st.secrets["GOOGLE_API_KEY_1"],
+    "Key 2": st.secrets["GOOGLE_API_KEY_2"]
+}
+selected_key_name = st.selectbox("Select API Key", list(api_keys.keys()))
+api_key = api_keys[selected_key_name]
+
+client = genai.Client(api_key=api_key)
 
 st.set_page_config(page_title="AI Roleplay Story", layout="wide")
 st.title("AI Roleplay Story Generator")
@@ -32,7 +40,7 @@ voice_choice = st.selectbox("Select voice", voice_options[language])
 
 add_audio = st.checkbox("Generate audio of full story")
 
-# Utility: Convert PCM → WAV
+# --- Utility ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -43,7 +51,6 @@ def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf.seek(0)
     return buf.read()
 
-# Progress bar with countdown
 def animate_progress_bar(progress, placeholder, text, est_time=10):
     global running
     running = True
@@ -58,7 +65,6 @@ def animate_progress_bar(progress, placeholder, text, est_time=10):
         if pct >= 100:
             break
 
-# Map voice choice to Gemini TTS names
 def map_voice(voice_choice):
     mapping = {
         "English Male": "Kore",
@@ -70,18 +76,17 @@ def map_voice(voice_choice):
     }
     return mapping.get(voice_choice, "Kore")
 
-# Map language to TTS language code (Gemini can adapt pronunciation)
 def map_language_code(language):
     codes = {
         "English": "en-US",
         "Hindi": "hi-IN",
-        "Bhojpuri": "bh-IN"  # Gemini TTS may use hi-IN as fallback for Bhojpuri
+        "Bhojpuri": "bh-IN"  # Gemini may fallback to hi-IN for Bhojpuri
     }
     return codes.get(language, "en-US")
 
-# Main button: Generate story + audio
+# --- Main button: Generate story + audio ---
 if st.button("Generate Story & Audio"):
-    # --- Story Generation ---
+    # Story generation
     story_progress = st.progress(0, text="Generating story...")
     story_placeholder = st.empty()
     thread = threading.Thread(
@@ -90,11 +95,10 @@ if st.button("Generate Story & Audio"):
     )
     thread.start()
 
-    # Strict prompt: only selected language + character intro + story
     prompt = (
         f"Write a {length} {genre} roleplay story in {language} ONLY. "
         f"Include first a brief introduction of each character ({characters}) and then the story. "
-        f"Do NOT include any text in any other language. "
+        f"Do NOT include text in any other language. "
         f"Do NOT include explanations, summaries, or extra content. "
         f"The output must be entirely in {language} and contain ONLY character introductions and the story."
     )
@@ -111,7 +115,7 @@ if st.button("Generate Story & Audio"):
     st.subheader("Story Script")
     st.write(st.session_state["story"])
 
-    # --- Audio Generation ---
+    # Audio generation
     if add_audio:
         audio_progress = st.progress(0, text="Generating audio...")
         audio_placeholder = st.empty()
@@ -132,6 +136,7 @@ if st.button("Generate Story & Audio"):
                 )
             )
         )
+
         tts_resp = client.models.generate_content(
             model=TTS_MODEL,
             contents=[st.session_state["story"]],
