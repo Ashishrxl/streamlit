@@ -127,10 +127,7 @@ def generate_images_from_story(story_text):
     for i, scene in enumerate(scenes, 1):
         img_resp = client.models.generate_content(
             model=IMAGE_MODEL,
-            contents=[f"Create a high-quality illustration for this scene of a story:\n{scene}"],
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"]
-            )
+            contents=[f"Create a high-quality illustration for this scene of a story:\n{scene}"]
         )
         if hasattr(img_resp, "candidates") and img_resp.candidates:
             candidate = img_resp.candidates[0]
@@ -201,7 +198,7 @@ if st.button("Generate Story & Audio"):
         data = None
         if hasattr(tts_resp, "candidates") and tts_resp.candidates:
             candidate = tts_resp.candidates[0]
-            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+            if hasattr(candidate, "content") and candidate.content:
                 for part in candidate.content.parts:
                     if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
                         data = part.inline_data.data
