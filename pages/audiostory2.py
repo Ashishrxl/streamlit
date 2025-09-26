@@ -51,7 +51,9 @@ voice_options = {
 }
 voice_choice = st.selectbox("Select voice", voice_options[language])
 
+# User options
 add_audio = st.checkbox("Generate audio of full story")
+add_images = st.checkbox("Generate images for each scene")
 
 # --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -244,12 +246,13 @@ if st.button("Generate Story & Audio"):
             st.session_state["audio_bytes"] = wav_bytes
 
     # Image generation per scene
-    with st.spinner("Generating illustrations for each scene..."):
-        images = generate_images_from_story(st.session_state["story"])
-        if images:
-            st.subheader("Story Illustrations")
-            for i, img_bytes in images:
-                st.image(img_bytes, caption=f"Illustration for Scene {i}")
+    if add_images:
+        with st.spinner("Generating illustrations for each scene..."):
+            images = generate_images_from_story(st.session_state["story"])
+            if images:
+                st.subheader("Story Illustrations")
+                for i, img_bytes in images:
+                    st.image(img_bytes, caption=f"Illustration for Scene {i}")
 
 # --- Display story persistently ---
 if "story" in st.session_state:
@@ -274,4 +277,3 @@ if "audio_bytes" in st.session_state:
     )
 
 st.markdown("---")
-st.caption("Built with Gemma + Gemini TTS + Gemini Multi-Model Image Gen")
