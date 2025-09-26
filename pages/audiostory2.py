@@ -58,9 +58,9 @@ add_images = st.checkbox("Generate images for each scene")
 # Stop image generation flag
 if "stop_images" not in st.session_state:
     st.session_state["stop_images"] = False
-if add_images:
-    if st.button("Stop Image Generation"):
-        st.session_state["stop_images"] = True
+
+# Placeholder for dynamic stop button
+stop_button_placeholder = st.empty()
 
 # --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -150,6 +150,11 @@ def safe_generate_image(prompt, retries=2, delay=5):
                 )
                 return img_resp
             except Exception as e:
+                # show stop button dynamically
+                stop_button_placeholder.button(
+                    "Stop Image Generation", 
+                    on_click=lambda: st.session_state.update({"stop_images": True})
+                )
                 if attempt < retries - 1:
                     wait = delay + random.randint(0, 3)
                     st.warning(f"{model} overloaded. Retrying in {wait}s...")
@@ -163,6 +168,7 @@ def generate_images_from_story(story_text):
     scenes = [p.strip() for p in story_text.split("\n") if p.strip()]
     images = []
     st.session_state["stop_images"] = False  # reset before starting
+    stop_button_placeholder.empty()  # remove previous button
 
     for i, scene in enumerate(scenes, 1):
         if st.session_state["stop_images"]:
@@ -273,13 +279,16 @@ if st.button("Generate Story & Audio"):
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
-    pdf_buffer = generate_pdf_unicode(st.session_state["story"])
-    st.download_button(
-        label="Download Story as PDF",
-        data=pdf_buffer,
-        file_name="story.pdf",
-        mime="application/pdf"
-    )
+    try:
+        pdf_buffer = generate_pdf_unicode(st.session_state["story"])
+        st.download_button(
+            label="Download Story as PDF",
+            data=pdf_buffer,
+            file_name="story.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"PDF generation failed: {e}")
 
 # --- Display audio persistently ---
 if "audio_bytes" in st.session_state:
