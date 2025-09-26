@@ -127,15 +127,18 @@ def generate_images_from_story(story_text):
     for i, scene in enumerate(scenes, 1):
         img_resp = client.models.generate_content(
             model=IMAGE_MODEL,
-            contents=[f"Create a high-quality illustration for this scene of a story:\n{scene}"]
+            contents=[f"Create a high-quality illustration for this scene of a story:\n{scene}"],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"]
+            )
         )
         if hasattr(img_resp, "candidates") and img_resp.candidates:
             candidate = img_resp.candidates[0]
-            if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+            if hasattr(candidate, "content") and candidate.content:
                 for part in candidate.content.parts:
                     if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
-                        img_data = base64.b64decode(part.inline_data.data)
-                        images.append((i, img_data))
+                        img_bytes = base64.b64decode(part.inline_data.data)
+                        images.append((i, img_bytes))
                         break
     return images
 
@@ -222,8 +225,8 @@ if st.button("Generate Story & Audio"):
         images = generate_images_from_story(st.session_state["story"])
         if images:
             st.subheader("Story Illustrations")
-            for i, img_data in images:
-                st.image(img_data, caption=f"Illustration for Scene {i}")
+            for i, img_bytes in images:
+                st.image(img_bytes, caption=f"Illustration for Scene {i}")
 
 # --- Display story persistently ---
 if "story" in st.session_state:
