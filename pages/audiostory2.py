@@ -5,6 +5,7 @@ import base64
 import time
 import threading
 import os
+import random
 
 from google import genai
 from google.genai import types
@@ -15,7 +16,13 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
-IMAGE_MODEL = "gemini-2.0-flash-exp-image-generation"
+
+# Image generation models in fallback order
+IMAGE_MODELS = [
+    "gemini-2.0-flash-exp-image-generation",
+    "gemini-2.0-flash-preview-image-generation",
+    "gemini-2.5-flash-image-preview"
+]
 
 # --- API Key selection ---
 api_keys = {
@@ -120,16 +127,35 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf.seek(0)
     return buf
 
-# --- Image generation for multiple scenes ---
+# --- Image generation with fallback ---
+def safe_generate_image(prompt, retries=2, delay=5):
+    """Try each IMAGE_MODEL in order; retry if overloaded."""
+    for model in IMAGE_MODELS:
+        for attempt in range(retries):
+            try:
+                img_resp = client.models.generate_content(
+                    model=model,
+                    contents=[prompt]
+                )
+                return img_resp
+            except Exception as e:
+                if attempt < retries - 1:
+                    wait = delay + random.randint(0, 3)
+                    st.warning(f"{model} overloaded. Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    st.warning(f"{model} failed. Trying next model...")
+                    break
+    return None
+
 def generate_images_from_story(story_text):
     scenes = [p.strip() for p in story_text.split("\n") if p.strip()]
     images = []
     for i, scene in enumerate(scenes, 1):
-        img_resp = client.models.generate_content(
-            model=IMAGE_MODEL,
-            contents=[f"Create a high-quality illustration for this scene of a story:\n{scene}"]
+        img_resp = safe_generate_image(
+            f"Create a high-quality illustration for this scene of a story:\n{scene}"
         )
-        if hasattr(img_resp, "candidates") and img_resp.candidates:
+        if img_resp and hasattr(img_resp, "candidates") and img_resp.candidates:
             candidate = img_resp.candidates[0]
             if hasattr(candidate, "content") and candidate.content:
                 for part in candidate.content.parts:
@@ -248,4 +274,4 @@ if "audio_bytes" in st.session_state:
     )
 
 st.markdown("---")
-st.caption("Built with Gemma + Gemini TTS + Gemini Image Gen")
+st.caption("Built with Gemma + Gemini TTS + Gemini Multi-Model Image Gen")
