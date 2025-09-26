@@ -150,9 +150,10 @@ def safe_generate_image(prompt, retries=2, delay=5):
                 )
                 return img_resp
             except Exception as e:
-                # show stop button dynamically
+                # show stop button dynamically with unique key
                 stop_button_placeholder.button(
                     "Stop Image Generation", 
+                    key=f"stop_button_{model}_{attempt}",
                     on_click=lambda: st.session_state.update({"stop_images": True})
                 )
                 if attempt < retries - 1:
@@ -301,3 +302,4 @@ if "audio_bytes" in st.session_state:
     )
 
 st.markdown("---")
+st.caption("Built with Gemma + Gemini TTS + Gemini Multi-Model Image Gen + Stop Button")
