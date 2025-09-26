@@ -30,6 +30,7 @@ voice_options = {
 }
 voice_choice = st.selectbox("Select voice", voice_options[language])
 
+# Checkbox to generate audio
 add_audio = st.checkbox("Generate audio of full story")
 
 # Utility: Convert PCM → WAV
@@ -63,16 +64,16 @@ def map_voice(voice_choice):
     mapping = {
         "English Male": "Kore",
         "English Female": "Charon",
-        "Hindi Male": "Kore",     # Replace with proper Hindi male voice if available
-        "Hindi Female": "Charon", # Replace with proper Hindi female voice if available
-        "Bhojpuri Male": "Kore",  # Gemini may adapt pronunciation based on text
+        "Hindi Male": "Kore",
+        "Hindi Female": "Charon",
+        "Bhojpuri Male": "Kore",
         "Bhojpuri Female": "Charon"
     }
     return mapping.get(voice_choice, "Kore")
 
-# Main button
+# Main button: Generate both story & audio
 if st.button("Generate Story & Audio"):
-    # Story generation
+    # --- Story Generation ---
     story_progress = st.progress(0, text="Generating story...")
     story_placeholder = st.empty()
     thread = threading.Thread(
@@ -81,13 +82,13 @@ if st.button("Generate Story & Audio"):
     )
     thread.start()
 
-    # Refined prompt → only language, character intro + story
+    # Prompt: only language + character intro + story
     prompt = (
-        f"Write a {length} {genre} roleplay story in {language}. "
-        f"First, give a short introduction of each character ({characters}). "
-        f"Then write the story itself, split into scenes with dialogue. "
-        f"Do not include any explanations, meta text, or extra content. "
-        f"Only character introductions and the story."
+        f"Write a {length} {genre} roleplay story in {language} only. "
+        f"First, give a short introduction of each character ({characters}), "
+        f"then the story itself with scenes and dialogue. "
+        f"Do not include explanations, meta text, or extra content. "
+        f"Output text must be entirely in {language}."
     )
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
@@ -99,9 +100,9 @@ if st.button("Generate Story & Audio"):
     story_placeholder.write("✅ Story ready!")
 
     st.subheader("Story Script")
-    st.write(story)
+    st.write(st.session_state["story"])
 
-    # Audio generation
+    # --- Audio Generation ---
     if add_audio:
         audio_progress = st.progress(0, text="Generating audio...")
         audio_placeholder = st.empty()
@@ -123,7 +124,7 @@ if st.button("Generate Story & Audio"):
         )
         tts_resp = client.models.generate_content(
             model=TTS_MODEL,
-            contents=[story],
+            contents=[st.session_state["story"]],
             config=config
         )
 
