@@ -1,5 +1,6 @@
 import streamlit as st 
-import io import wave 
+import io 
+import wave 
 import base64
 
 from google import genai 
