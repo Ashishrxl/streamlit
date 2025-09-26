@@ -3,7 +3,6 @@ import io
 import wave
 import base64
 import time
-import threading
 import os
 import random
 import uuid
@@ -63,7 +62,6 @@ if "stop_images" not in st.session_state:
 # Placeholder for dynamic stop button
 stop_button_placeholder = st.empty()
 
-# --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -73,20 +71,6 @@ def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
         wf.writeframes(pcm_bytes)
     buf.seek(0)
     return buf.read()
-
-def animate_progress_bar(progress, placeholder, text, est_time=10):
-    global running
-    running = True
-    start = time.time()
-    while running:
-        elapsed = time.time() - start
-        remaining = max(0, est_time - int(elapsed))
-        pct = min(100, int((elapsed / est_time) * 100))
-        progress.progress(pct, text=f"{text} ~{remaining}s left")
-        placeholder.write(f"⏳ {text} (about {remaining}s remaining)")
-        time.sleep(0.2)
-        if pct >= 100:
-            break
 
 def map_voice(voice_choice):
     mapping = {
@@ -107,7 +91,6 @@ def map_language_code(language):
     }
     return codes.get(language, "en-US")
 
-# --- PDF generation ---
 def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -125,7 +108,7 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
 
     c.setFont("NotoSans", 12)
     for line in text.split("\n"):
-        if y < 50:  # new page
+        if y < 50:
             c.showPage()
             c.setFont("NotoSans", 12)
             y = height - 50
@@ -137,9 +120,7 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf.seek(0)
     return buf
 
-# --- Image generation with fallback & stop button ---
 def safe_generate_image(prompt, retries=2, delay=5):
-    """Try each IMAGE_MODEL in order; retry if overloaded."""
     for model in IMAGE_MODELS:
         for attempt in range(retries):
             if st.session_state.get("stop_images", False):
@@ -151,14 +132,13 @@ def safe_generate_image(prompt, retries=2, delay=5):
                 )
                 return img_resp
             except Exception as e:
-                # create a truly unique key using uuid
                 stop_button_placeholder.button(
-                    "Stop Image Generation", 
+                    "Stop Image Generation",
                     key=f"stop_button_{uuid.uuid4()}",
                     on_click=lambda: st.session_state.update({"stop_images": True})
                 )
                 if attempt < retries - 1:
-                    wait = delay + random.randint(0, 3)
+                    wait = delay + random.randint(0,3)
                     st.warning(f"{model} overloaded. Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
@@ -169,8 +149,8 @@ def safe_generate_image(prompt, retries=2, delay=5):
 def generate_images_from_story(story_text):
     scenes = [p.strip() for p in story_text.split("\n") if p.strip()]
     images = []
-    st.session_state["stop_images"] = False  # reset before starting
-    stop_button_placeholder.empty()  # remove previous button
+    st.session_state["stop_images"] = False
+    stop_button_placeholder.empty()
 
     for i, scene in enumerate(scenes, 1):
         if st.session_state["stop_images"]:
@@ -178,7 +158,7 @@ def generate_images_from_story(story_text):
             break
 
         img_resp = safe_generate_image(
-            f"Create a high-quality illustration for this scene of a story:\n{scene}"
+            f"Create a high-quality illustration for this scene:\n{scene}"
         )
         if img_resp and hasattr(img_resp, "candidates") and img_resp.candidates:
             candidate = img_resp.candidates[0]
@@ -192,15 +172,10 @@ def generate_images_from_story(story_text):
 
 # --- Main: Generate story + audio + images ---
 if st.button("Generate Story & Audio"):
-    # Story generation
-    story_progress = st.progress(0, text="Generating story...")
-    story_placeholder = st.empty()
-    thread = threading.Thread(
-        target=animate_progress_bar,
-        args=(story_progress, story_placeholder, "Generating story", 8)
-    )
-    thread.start()
 
+    # --- Story generation ---
+    story_progress = st.progress(0)
+    story_placeholder = st.empty()
     prompt = (
         f"Write a {length} {genre} roleplay story in {language} ONLY. "
         f"Include first a brief introduction of each character ({characters}) and then the story. "
@@ -209,24 +184,26 @@ if st.button("Generate Story & Audio"):
         f"The output must be entirely in {language} and contain ONLY character introductions and the story."
     )
 
+    for pct in range(0, 101, 5):
+        story_progress.progress(pct, text=f"Generating story ~{100-pct}s left")
+        story_placeholder.write(f"⏳ Generating story (about {100-pct}s remaining)")
+        time.sleep(0.1)
+
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
     st.session_state["story"] = story
 
-    running = False
-    thread.join()
     story_progress.progress(100, text="Story generated ✅")
     story_placeholder.write("✅ Story ready!")
 
-    # Audio generation
+    # --- Audio generation ---
     if add_audio:
-        audio_progress = st.progress(0, text="Generating audio...")
+        audio_progress = st.progress(0)
         audio_placeholder = st.empty()
-        thread = threading.Thread(
-            target=animate_progress_bar,
-            args=(audio_progress, audio_placeholder, "Generating audio", 12)
-        )
-        thread.start()
+        for pct in range(0, 101, 5):
+            audio_progress.progress(pct, text=f"Generating audio ~{100-pct}s left")
+            audio_placeholder.write(f"⏳ Generating audio (about {100-pct}s remaining)")
+            time.sleep(0.1)
 
         config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
@@ -255,8 +232,6 @@ if st.button("Generate Story & Audio"):
                         data = part.inline_data.data
                         break
 
-        running = False
-        thread.join()
         audio_progress.progress(100, text="Audio generated ✅")
         audio_placeholder.write("✅ Audio ready!")
 
@@ -268,7 +243,7 @@ if st.button("Generate Story & Audio"):
             wav_bytes = pcm_to_wav_bytes(pcm)
             st.session_state["audio_bytes"] = wav_bytes
 
-    # Image generation per scene
+    # --- Image generation ---
     if add_images:
         with st.spinner("Generating illustrations for each scene..."):
             images = generate_images_from_story(st.session_state["story"])
