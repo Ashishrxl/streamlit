@@ -30,7 +30,6 @@ voice_options = {
 }
 voice_choice = st.selectbox("Select voice", voice_options[language])
 
-# Checkbox to generate audio
 add_audio = st.checkbox("Generate audio of full story")
 
 # Utility: Convert PCM → WAV
@@ -71,7 +70,16 @@ def map_voice(voice_choice):
     }
     return mapping.get(voice_choice, "Kore")
 
-# Main button: Generate both story & audio
+# Map language to TTS language code (Gemini can adapt pronunciation)
+def map_language_code(language):
+    codes = {
+        "English": "en-US",
+        "Hindi": "hi-IN",
+        "Bhojpuri": "bh-IN"  # Gemini TTS may use hi-IN as fallback for Bhojpuri
+    }
+    return codes.get(language, "en-US")
+
+# Main button: Generate story + audio
 if st.button("Generate Story & Audio"):
     # --- Story Generation ---
     story_progress = st.progress(0, text="Generating story...")
@@ -82,14 +90,15 @@ if st.button("Generate Story & Audio"):
     )
     thread.start()
 
-    # Prompt: only language + character intro + story
+    # Strict prompt: only selected language + character intro + story
     prompt = (
-        f"Write a {length} {genre} roleplay story in {language} only. "
-        f"First, give a short introduction of each character ({characters}), "
-        f"then the story itself with scenes and dialogue. "
-        f"Do not include explanations, meta text, or extra content. "
-        f"Output text must be entirely in {language}."
+        f"Write a {length} {genre} roleplay story in {language} ONLY. "
+        f"Include first a brief introduction of each character ({characters}) and then the story. "
+        f"Do NOT include any text in any other language. "
+        f"Do NOT include explanations, summaries, or extra content. "
+        f"The output must be entirely in {language} and contain ONLY character introductions and the story."
     )
+
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
     st.session_state["story"] = story
@@ -115,6 +124,7 @@ if st.button("Generate Story & Audio"):
         config = types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
+                language_code=map_language_code(language),
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
                         voice_name=map_voice(voice_choice)
