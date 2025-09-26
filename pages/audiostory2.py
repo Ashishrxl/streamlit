@@ -55,6 +55,13 @@ voice_choice = st.selectbox("Select voice", voice_options[language])
 add_audio = st.checkbox("Generate audio of full story")
 add_images = st.checkbox("Generate images for each scene")
 
+# Stop image generation flag
+if "stop_images" not in st.session_state:
+    st.session_state["stop_images"] = False
+if add_images:
+    if st.button("Stop Image Generation"):
+        st.session_state["stop_images"] = True
+
 # --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
     buf = io.BytesIO()
@@ -129,11 +136,13 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf.seek(0)
     return buf
 
-# --- Image generation with fallback ---
+# --- Image generation with fallback & stop button ---
 def safe_generate_image(prompt, retries=2, delay=5):
     """Try each IMAGE_MODEL in order; retry if overloaded."""
     for model in IMAGE_MODELS:
         for attempt in range(retries):
+            if st.session_state.get("stop_images", False):
+                return None
             try:
                 img_resp = client.models.generate_content(
                     model=model,
@@ -153,7 +162,13 @@ def safe_generate_image(prompt, retries=2, delay=5):
 def generate_images_from_story(story_text):
     scenes = [p.strip() for p in story_text.split("\n") if p.strip()]
     images = []
+    st.session_state["stop_images"] = False  # reset before starting
+
     for i, scene in enumerate(scenes, 1):
+        if st.session_state["stop_images"]:
+            st.warning("Image generation stopped by user.")
+            break
+
         img_resp = safe_generate_image(
             f"Create a high-quality illustration for this scene of a story:\n{scene}"
         )
