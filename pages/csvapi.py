@@ -26,7 +26,7 @@ try:
     
     # Initialize the LangChain Gemini model
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         temperature=0.1,
         google_api_key=st.secrets["GOOGLE_API_KEY"]
     )
