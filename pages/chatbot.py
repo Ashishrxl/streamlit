@@ -652,7 +652,7 @@ def run_app_logic(uploaded_df, is_alldata):
                             st.info("✅ Code passed safety checks. Executing in a restricted environment...")
                             # Prepare restricted environment
                             safe_builtins = {
-                                "len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "round": round, "sorted": sorted
+                                "len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "round": round, "sorted": sorted, "str": str, "int": int, "float": float, "dict": dict, "list": list
                             }
                             # Bind a copy of the dataframe (df) to the environment
                             exec_globals = {
