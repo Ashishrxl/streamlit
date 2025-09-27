@@ -4,7 +4,6 @@ import wave
 import base64
 import time
 import threading
-import os
 
 from google import genai
 from google.genai import types
@@ -12,11 +11,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.utils import ImageReader
 
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
-IMAGE_MODEL = "gemini-2.0-flash-exp-image-generation"
 
 # --- API Key selection ---
 api_keys = {
@@ -37,6 +34,7 @@ characters = st.text_area("List characters (comma separated)", "Detective, Hacke
 length = st.selectbox("Story length", ["Short", "Medium", "Long"])
 language = st.selectbox("Select story language", ["English", "Hindi", "Bhojpuri"])
 
+# Voice choices per language
 voice_options = {
     "English": ["English Male", "English Female"],
     "Hindi": ["Hindi Male", "Hindi Female"],
@@ -45,7 +43,6 @@ voice_options = {
 voice_choice = st.selectbox("Select voice", voice_options[language])
 
 add_audio = st.checkbox("Generate audio of full story")
-add_images = st.checkbox("Generate images for story")
 
 # --- Utility functions ---
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -87,61 +84,41 @@ def map_language_code(language):
     codes = {
         "English": "en-US",
         "Hindi": "hi-IN",
-        "Bhojpuri": "bh-IN"
+        "Bhojpuri": "bh-IN"  # fallback to hi-IN
     }
     return codes.get(language, "en-US")
 
-# --- PDF generation with text + images ---
-def generate_pdf_unicode(text_parts, image_parts, title="AI Roleplay Story"):
+# --- PDF generation using reportlab ---
+def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    font_path = "NotoSansDevanagari-Regular.ttf"
-    if not os.path.exists(font_path):
-        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
-    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+    # Register a TTF font for Unicode support
+    pdfmetrics.registerFont(TTFont("DejaVu", "DejaVuSans.ttf"))
 
     y = height - 50
-    c.setFont("NotoSans", 18)
+    c.setFont("DejaVu", 18)
     c.drawString(50, y, title)
-    y -= 40
+    y -= 30
 
-    c.setFont("NotoSans", 12)
-    for i, text in enumerate(text_parts):
-        for line in text.split("\n"):
-            if y < 100:  
-                c.showPage()
-                c.setFont("NotoSans", 12)
-                y = height - 50
-            c.drawString(50, y, line)
-            y -= 18
-
-        # Insert image if available
-        if i < len(image_parts) and image_parts[i] is not None:
-            try:
-                img_reader = ImageReader(io.BytesIO(image_parts[i]))
-                img_width, img_height = img_reader.getSize()
-                aspect = img_height / float(img_width)
-                display_width = width - 100
-                display_height = display_width * aspect
-                if display_height > y - 50:
-                    c.showPage()
-                    c.setFont("NotoSans", 12)
-                    y = height - 50
-                c.drawImage(img_reader, 50, y - display_height, width=display_width, height=display_height)
-                y -= display_height + 30
-            except Exception as e:
-                print("Image insertion failed:", e)
+    c.setFont("DejaVu", 12)
+    for line in text.split("\n"):
+        if y < 50:  # new page
+            c.showPage()
+            c.setFont("DejaVu", 12)
+            y = height - 50
+        c.drawString(50, y, line)
+        y -= 18
 
     c.showPage()
     c.save()
     buf.seek(0)
     return buf
 
-# --- Main process ---
+# --- Main: Generate story + audio ---
 if st.button("Generate Story & Audio"):
-    # Story
+    # Story generation
     story_progress = st.progress(0, text="Generating story...")
     story_placeholder = st.empty()
     thread = threading.Thread(
@@ -154,20 +131,20 @@ if st.button("Generate Story & Audio"):
         f"Write a {length} {genre} roleplay story in {language} ONLY. "
         f"Include first a brief introduction of each character ({characters}) and then the story. "
         f"Do NOT include text in any other language. "
-        f"Output must be ONLY introductions and story."
+        f"Do NOT include explanations, summaries, or extra content. "
+        f"The output must be entirely in {language} and contain ONLY character introductions and the story."
     )
+
     resp = client.models.generate_content(model=GEMMA_MODEL, contents=[prompt])
     story = getattr(resp, "text", str(resp))
-    story_parts = [p.strip() for p in story.split("\n") if p.strip()]
-    st.session_state["story"] = story
-    st.session_state["story_parts"] = story_parts
+    st.session_state["story"] = story  # persistent
 
     running = False
     thread.join()
     story_progress.progress(100, text="Story generated ✅")
     story_placeholder.write("✅ Story ready!")
 
-    # Audio
+    # Audio generation
     if add_audio:
         audio_progress = st.progress(0, text="Generating audio...")
         audio_placeholder = st.empty()
@@ -191,7 +168,7 @@ if st.button("Generate Story & Audio"):
 
         tts_resp = client.models.generate_content(
             model=TTS_MODEL,
-            contents=[story],
+            contents=[st.session_state["story"]],
             config=config
         )
 
@@ -217,43 +194,19 @@ if st.button("Generate Story & Audio"):
             wav_bytes = pcm_to_wav_bytes(pcm)
             st.session_state["audio_bytes"] = wav_bytes
 
-    # Images
-    if add_images:
-        st.subheader("Generated Story Illustrations")
-        images = []
-        for i, part in enumerate(story_parts):
-            with st.spinner(f"Generating image for scene {i+1}..."):
-                img_resp = client.models.generate_content(
-                    model=IMAGE_MODEL,
-                    contents=[f"Create an illustration for this scene of a {genre} story in {language}: {part}"]
-                )
-                img_data = None
-                if hasattr(img_resp, "candidates") and img_resp.candidates:
-                    candidate = img_resp.candidates[0]
-                    if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
-                        for prt in candidate.content.parts:
-                            if hasattr(prt, "inline_data") and hasattr(prt.inline_data, "data"):
-                                img_data = base64.b64decode(prt.inline_data.data)
-                                st.image(img_data, caption=f"Scene {i+1}")
-                                break
-                images.append(img_data)
-        st.session_state["images"] = images
-
-# --- Persistent display ---
+# --- Display story persistently ---
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
-    pdf_buffer = generate_pdf_unicode(
-        st.session_state["story_parts"],
-        st.session_state.get("images", [])
-    )
+    pdf_buffer = generate_pdf_reportlab(st.session_state["story"])
     st.download_button(
-        label="Download Illustrated Story as PDF",
+        label="Download Story as PDF",
         data=pdf_buffer,
         file_name="story.pdf",
         mime="application/pdf"
     )
 
+# --- Display audio persistently ---
 if "audio_bytes" in st.session_state:
     st.audio(st.session_state["audio_bytes"], format="audio/wav")
     st.download_button(
