@@ -304,7 +304,7 @@ async def transcribe_and_sing():
     progress_text.text("🔤 Transcribing...")
     try:
         resp = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=[
                 {"role": "user", "parts": [
                     {"text": "Please transcribe this speech accurately."},
