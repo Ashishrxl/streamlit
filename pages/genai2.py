@@ -49,7 +49,7 @@ if audio_bytes and st.button("🎶 Transcribe & Sing"):
             audio_data = f.read()
 
         resp = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-preview-tts",
             contents=[
                 {"role": "user", "parts": [
                     {"text": "Please transcribe this speech."},
