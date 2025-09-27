@@ -22,7 +22,7 @@ st.title("📊 CSV Visualizer with Forecasting (Interactive)")
 # Use Streamlit secrets for API key
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash') # Renamed for clarity
+    gemini_model = genai.GenerativeModel('gemini-2.5-flash') # Renamed for clarity
     
     # Initialize the LangChain Gemini model
     llm = ChatGoogleGenerativeAI(
