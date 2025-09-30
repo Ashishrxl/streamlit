@@ -1,7 +1,10 @@
-import streamlit as st
-import google.generativeai as genai
-from google.generativeai import types
+# --- Replace your google imports with these ---
+from google import genai
+from google.genai import types
+
+import base64
 import wave
+import streamlit as st
 
 from streamlit.components.v1 import html
 
@@ -43,8 +46,9 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 🔐 Configure Gemini API
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+# Create client (uses API key from streamlit secrets)
+client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+# ---------------------------------------------------------------------
 
 def generate_script(topic):
     prompt = f"""
@@ -55,8 +59,12 @@ def generate_script(topic):
     - A closing statement
     Keep it conversational and natural.
     """
-    model = genai.GenerativeModel("gemini-2.5-pro")
-    resp = model.generate_content(prompt)
+    # Use a text model for generation
+    resp = client.models.generate_content(
+        model="gemini-2.5-pro",
+        contents=prompt
+    )
+    # The SDK exposes .text for text responses
     return resp.text
 
 def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
@@ -67,58 +75,39 @@ def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
         wf.writeframes(pcm_data)
 
 def generate_audio(script_text, voice_name="Kore", language="English"):
-    # choose style prompt based on language
+    # style prompt is OK to include in the text you send to the TTS model
     if language.lower() == "hindi":
         style_prompt = "Speak this in a warm and expressive Hindi accent."
     elif language.lower() == "bhojpuri":
         style_prompt = "Speak this in a friendly Bhojpuri tone, like a local storyteller."
     else:
         style_prompt = "Speak this in a natural and friendly tone."
-    
-    # Use the Gemini TTS variant
-    model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
-    response = model.generate_content(
-        contents=f"{style_prompt}\n\n{script_text}",
-        # here we configure to request audio modality + voice config
-        generation_config=types.GenerationConfig(
+
+    contents = f"{style_prompt}\n\n{script_text}"
+
+    # Use the TTS model and the GenerateContentConfig shape expected by the SDK
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-preview-tts",
+        contents=contents,
+        config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
-                    prebuilt_voice=voice_name
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=voice_name
+                    )
                 )
             )
         )
     )
-    # Extract PCM audio data
+
+    # Extract PCM audio. The SDK example uses this path.
     pcm_data = response.candidates[0].content.parts[0].inline_data.data
+
+    # Defensive: if the SDK returned a base64 string, decode it
+    if isinstance(pcm_data, str):
+        pcm_data = base64.b64decode(pcm_data)
+
     filename = "podcast.wav"
     save_wave(filename, pcm_data)
     return filename
-
-# Streamlit UI
-st.set_page_config(page_title="VoiceVerse AI", layout="centered")
-st.title("🎙️ VoiceVerse AI Podcast Generator")
-
-topic = st.text_input("Enter your podcast topic:")
-language = st.selectbox("Choose a language:", ["English", "Hindi", "Bhojpuri"])
-gender = st.radio("Select voice gender:", ["Female", "Male"])
-
-female_voices = ["Kore", "Aoede", "Callirhoe"]
-male_voices = ["Puck", "Charon", "Fenrir"]
-voice = st.selectbox("Choose a voice:", female_voices if gender == "Female" else male_voices)
-
-if st.button("Generate Podcast"):
-    with st.spinner("Creating your podcast script..."):
-        script = generate_script(topic)
-        st.text_area("Generated Script", script, height=300)
-
-    with st.spinner("Converting to audio..."):
-        audio_file = generate_audio(script, voice, language)
-        st.audio(audio_file, format="audio/wav")
-        with open(audio_file, "rb") as f:
-            st.download_button(
-                label="📥 Download Podcast",
-                data=f,
-                file_name="voiceverse_podcast.wav",
-                mime="audio/wav"
-            )
