@@ -5,6 +5,25 @@ import google.generativeai as genai
 st.set_page_config(page_title="Google Generative AI Models", layout="wide")
 st.title("🔍 Google Generative AI Models Explorer")
 
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+
+/* The following specifically targets and hides all child elements of the header's right side,
+   while preserving the header itself and, by extension, the sidebar toggle button. */
+header > div:nth-child(2) {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+
 # API Key Input (secured with password type input)
 api_key = st.secrets["GOOGLE_API_KEY"]
 
