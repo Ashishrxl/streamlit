@@ -12,6 +12,25 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+
+/* The following specifically targets and hides all child elements of the header's right side,
+   while preserving the header itself and, by extension, the sidebar toggle button. */
+header > div:nth-child(2) {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
