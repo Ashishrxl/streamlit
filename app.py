@@ -29,6 +29,9 @@ header > div:nth-child(2) {
 st.title("🌐 Welcome to My App")
 st.write("Use the sidebar to navigate to other pages.")
 
+
+st.link_button("Go to CSVVISUAL", "https://csvvisual.streamlit.app")
+
 # ✅ Sidebar content
 st.sidebar.title("📌 Navigation")
 st.sidebar.info("👉 Use the selector above to switch pages.\n\nYou’re currently on **Home**.")
