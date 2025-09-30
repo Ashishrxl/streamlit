@@ -1,12 +1,6 @@
 import streamlit as st
 from streamlit.components.v1 import html
 
-st.set_page_config(
-    page_title="My App",
-    page_icon="🌐",
-    initial_sidebar_state="expanded"
-)
-
 
 html(
   """
@@ -26,6 +20,13 @@ disable_footer_click = """
     </style>
 """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+st.set_page_config(
+    page_title="My App",
+    page_icon="🌐",
+    initial_sidebar_state="expanded"
+)
+
 
 # --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
 hide_streamlit_style = """
