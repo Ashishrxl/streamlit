@@ -1,10 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai import types
 import wave
 import base64
 from streamlit.components.v1 import html
 
-# --- Hide Streamlit UI elements (your original code kept intact) ---
+# --- Hide Streamlit UI elements (original code kept intact) ---
 html(
   """
   <script>
@@ -70,27 +71,21 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
     # choose style prompt based on language
     if language.lower() == "hindi":
         style_prompt = "Speak this in a warm and expressive Hindi accent."
-        language_code = "hi-IN"
     elif language.lower() == "bhojpuri":
         style_prompt = "Speak this in a friendly Bhojpuri tone, like a local storyteller."
-        # Bhojpuri isn't an official ISO code; using hi-IN as fallback
-        language_code = "hi-IN"
     else:
         style_prompt = "Speak this in a natural and friendly tone."
-        language_code = "en-US"
 
     model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
     contents = f"{style_prompt}\n\n{script_text}"
 
-    generation_config = {
-        "responseModalities": ["AUDIO"],
-        "speechConfig": {
-            "voiceConfig": {
-                "prebuiltVoiceConfig": {"voiceName": voice_name}
-            },
-            "languageCode": language_code
-        }
-    }
+    # ✅ Use typed GenerationConfig to match SDK requirements
+    generation_config = types.GenerationConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(prebuilt_voice=voice_name)
+        )
+    )
 
     response = model.generate_content(
         contents=contents,
