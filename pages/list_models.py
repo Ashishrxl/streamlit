@@ -1,6 +1,19 @@
 import streamlit as st
 import google.generativeai as genai
 
+from streamlit.components.v1 import html
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
 # Streamlit App
 st.set_page_config(page_title="Google Generative AI Models", layout="wide")
 st.title("🔍 Google Generative AI Models Explorer")
