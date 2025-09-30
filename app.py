@@ -6,6 +6,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+custom_footer = """
+    <style>
+    footer {visibility: hidden;}
+    </style>
+    <div style="position: fixed; bottom: 0; width: 100%; text-align: center; color: grey;">
+        <p>© 2025 Your App Name | Built with ❤️</p>
+    </div>
+"""
+st.markdown(custom_footer, unsafe_allow_html=True)
+
 # --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
 hide_streamlit_style = """
 <style>
