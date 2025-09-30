@@ -30,7 +30,7 @@ st.title("🌐 Welcome to My App")
 
 
 
-st.link_button("Go to CSVVISUAL", "https://csvvisual.streamlit.app")
+
 
 st.link_button("Go to CSVVISUALISATION", "https://csvvisualisation.streamlit.app")
 
