@@ -3,6 +3,28 @@ import google.generativeai as genai
 from google.generativeai import types
 import wave
 
+from streamlit.components.v1 import html
+
+
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
 # 🔐 Configure Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
