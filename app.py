@@ -62,7 +62,7 @@ st.link_button("Go to AUDIOSTORY2", "https://ashishraxaul.streamlit.app/audiosto
 
 st.link_button("Go to SINGIFY", "https://ashishraxaul.streamlit.app/singify")
 
-st.link_button("Go to AIPODCAST", "https://ashishraxaul.streamlit.app/aipodcast)
+st.link_button("Go to AIPODCAST", "https://ashishraxaul.streamlit.app/aipodcast")
 
 st.link_button("Go to MODEL LISTS", "https://ashishraxaul.streamlit.app/list_models")
 
