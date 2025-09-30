@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit.components.v1 import html
 
 st.set_page_config(
     page_title="My App",
@@ -6,7 +7,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-import streamlit as st
+
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
 
 disable_footer_click = """
     <style>
