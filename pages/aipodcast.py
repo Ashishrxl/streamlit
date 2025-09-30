@@ -42,10 +42,10 @@ header > div:nth-child(2) {
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # 🔐 Configure Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# ✍️ Generate podcast script
 def generate_script(topic):
     prompt = f"""
     Write a friendly and engaging podcast script about "{topic}".
@@ -56,10 +56,9 @@ def generate_script(topic):
     Keep it conversational and natural.
     """
     model = genai.GenerativeModel("gemini-2.5-pro")
-    response = model.generate_content(prompt)
-    return response.text
+    resp = model.generate_content(prompt)
+    return resp.text
 
-# 🔊 Save audio to WAV
 def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
     with wave.open(filename, "wb") as wf:
         wf.setnchannels(channels)
@@ -67,30 +66,36 @@ def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
         wf.setframerate(rate)
         wf.writeframes(pcm_data)
 
-# 🗣️ Generate audio from script
 def generate_audio(script_text, voice_name="Kore", language="English"):
+    # choose style prompt based on language
     if language.lower() == "hindi":
         style_prompt = "Speak this in a warm and expressive Hindi accent."
     elif language.lower() == "bhojpuri":
         style_prompt = "Speak this in a friendly Bhojpuri tone, like a local storyteller."
     else:
         style_prompt = "Speak this in a natural and friendly tone."
-
+    
+    # Use the Gemini TTS variant
     model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
     response = model.generate_content(
         contents=f"{style_prompt}\n\n{script_text}",
-        generation_config=types.GenerationConfig(response_mime_type="audio/wav"),
-        response_modality="AUDIO",
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(prebuilt_voice=voice_name)
+        # here we configure to request audio modality + voice config
+        generation_config=types.GenerationConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice=voice_name
+                )
+            )
         )
     )
-    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    # Extract PCM audio data
+    pcm_data = response.candidates[0].content.parts[0].inline_data.data
     filename = "podcast.wav"
-    save_wave(filename, audio_data)
+    save_wave(filename, pcm_data)
     return filename
 
-# 🎙️ Streamlit UI
+# Streamlit UI
 st.set_page_config(page_title="VoiceVerse AI", layout="centered")
 st.title("🎙️ VoiceVerse AI Podcast Generator")
 
@@ -110,7 +115,6 @@ if st.button("Generate Podcast"):
     with st.spinner("Converting to audio..."):
         audio_file = generate_audio(script, voice, language)
         st.audio(audio_file, format="audio/wav")
-
         with open(audio_file, "rb") as f:
             st.download_button(
                 label="📥 Download Podcast",
