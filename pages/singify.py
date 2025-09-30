@@ -9,6 +9,19 @@ import requests
 import wave
 import numpy as np
 
+from streamlit.components.v1 import html
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
