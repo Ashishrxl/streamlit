@@ -5,7 +5,7 @@ import wave
 import base64
 from streamlit.components.v1 import html
 
-# --- Hide Streamlit UI elements (original code kept intact) ---
+# --- Hide Streamlit UI elements ---
 html(
   """
   <script>
@@ -33,19 +33,16 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
-
-/* The following specifically targets and hides all child elements of the header's right side,
-   while preserving the header itself and, by extension, the sidebar toggle button. */
 header > div:nth-child(2) {
     display: none;
 }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-# -------------------------------------------------------------------
 
-# 🔐 Configure Gemini API
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY_2"])
+# --- Initialize GenAI client ---
+# According to docs, client picks API key from environment variable GEMINI_API_KEY if set. 1
+client = genai.Client()
 
 # --- Language code mapper ---
 def map_language_code(language: str) -> str:
@@ -55,11 +52,11 @@ def map_language_code(language: str) -> str:
     elif lang == "hindi":
         return "hi-IN"
     elif lang == "bhojpuri":
-        return "bho-IN"  # may fallback if not supported
-    return "en-US"  # default
+        return "bho-IN"
+    return "en-US"
 
 # --- Script Generation ---
-def generate_script(topic):
+def generate_script(topic: str) -> str:
     prompt = f"""
     Write a friendly and engaging podcast script about "{topic}".
     Include:
@@ -68,21 +65,23 @@ def generate_script(topic):
     - A closing statement
     Keep it conversational and natural.
     """
-    model = genai.GenerativeModel("gemini-2.5-pro")
-    resp = model.generate_content(prompt)
+    # Use client.models.generate_content for text
+    resp = client.models.generate_content(
+        model="gemini-2.5-pro",
+        contents=prompt
+    )
     return resp.text
 
-# --- Save WAV helper ---
-def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
+# --- WAV saving helper ---
+def save_wave(filename: str, pcm_data: bytes, channels=1, rate=24000, sample_width=2):
     with wave.open(filename, "wb") as wf:
         wf.setnchannels(channels)
         wf.setsampwidth(sample_width)
         wf.setframerate(rate)
         wf.writeframes(pcm_data)
 
-# --- Audio (TTS) Generation ---
-def generate_audio(script_text, voice_name="Kore", language="English"):
-    # choose style prompt based on language
+# --- Audio (TTS) generation ---
+def generate_audio(script_text: str, voice_name: str = "Kore", language: str = "English") -> str:
     if language.lower() == "hindi":
         style_prompt = "Speak this in a warm and expressive Hindi accent."
     elif language.lower() == "bhojpuri":
@@ -90,10 +89,8 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
     else:
         style_prompt = "Speak this in a natural and friendly tone."
 
-    model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
     contents = f"{style_prompt}\n\n{script_text}"
 
-    # ✅ Use GenerateContentConfig with prebuilt_voice_config
     config = types.GenerateContentConfig(
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
@@ -106,14 +103,13 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
         )
     )
 
-    response = model.generate_content(
+    response = client.models.generate_content(
+        model="gemini-2.5-pro-preview-tts",
         contents=contents,
         config=config
     )
 
     pcm_data = response.candidates[0].content.parts[0].inline_data.data
-
-    # decode if base64 string
     if isinstance(pcm_data, str):
         pcm_data = base64.b64decode(pcm_data)
 
