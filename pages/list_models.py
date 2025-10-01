@@ -91,7 +91,7 @@ with st.expander("🔍 Check Available Models with this API Key"):
 
         # Checkbox to filter only image-generation models
         if st.checkbox("Show only models that support generateImage"):
-            df_image = df[df['Supports'].str.contains("generateImage")]
+            df_image = df[df['Supports'].str.contains("generateContent")]
             st.dataframe(df_image)
         else:
             st.dataframe(df)
