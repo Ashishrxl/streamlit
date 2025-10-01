@@ -74,22 +74,28 @@ with st.expander("🔍 Check Available Models with this API Key"):
         models = client.models.list()
         st.success(f"Found {len(models)} raw entries available for this API key")
 
-        # Deduplicate by model "name"
-        unique_models = {}
+        # Convert to safe dict
+        model_list = []
         for m in models:
-            model_name = getattr(m, "name", "")
-            if model_name not in unique_models:
-                unique_models[model_name] = {
-                    "Model Name": model_name,
-                    "Display Name": getattr(m, "display_name", ""),
-                    "Supports": ", ".join(getattr(m, "supported_generation_methods", []))
-                }
+            if hasattr(m, "to_dict"):
+                d = m.to_dict()
+                model_list.append({
+                    "Model Name": d.get("name", ""),
+                    "Display Name": d.get("display_name", ""),
+                    "Supports": ", ".join(d.get("supported_generation_methods", []))
+                })
 
-        df = pd.DataFrame(list(unique_models.values()))
+        # Deduplicate by model name
+        df = pd.DataFrame(model_list).drop_duplicates(subset=["Model Name"])
         st.success(f"✅ {len(df)} unique models after deduplication")
-        st.dataframe(df)
+
+        # Checkbox to filter only image-generation models
+        if st.checkbox("Show only models that support generateImage"):
+            df_image = df[df['Supports'].str.contains("generateImage")]
+            st.dataframe(df_image)
+        else:
+            st.dataframe(df)
 
         st.info("💡 Look for models where 'Supports' includes `generateImage` for image generation.")
     except Exception as e:
         st.error(f"Failed to list models: {e}")
-
