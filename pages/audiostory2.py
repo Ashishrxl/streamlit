@@ -277,4 +277,4 @@ if "story" in st.session_state:
     try:
         pdf_buffer = generate_pdf_unicode(st.session_state["story"])
         st.download_button(
-            label="Download Story as PDF0
+            label="Download Story as PDF")
