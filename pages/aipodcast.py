@@ -45,7 +45,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # -------------------------------------------------------------------
 
 # 🔐 Configure Gemini API
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY_2"])
 
 # --- Language code mapper ---
 def map_language_code(language: str) -> str:
