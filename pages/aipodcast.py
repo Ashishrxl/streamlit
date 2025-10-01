@@ -1,6 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
-# from google.generativeai import types
+from google import genai
 from google.genai import types
 import wave
 import base64
@@ -56,7 +55,7 @@ def map_language_code(language: str) -> str:
     elif lang == "hindi":
         return "hi-IN"
     elif lang == "bhojpuri":
-        return "bho-IN"  # Bhojpuri is not always officially supported; fallback may apply
+        return "bho-IN"  # may fallback if not supported
     return "en-US"  # default
 
 # --- Script Generation ---
@@ -91,10 +90,10 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
     else:
         style_prompt = "Speak this in a natural and friendly tone."
 
-    model = genai.GenerativeModel("gemini-2.5-flash-preview-tts")
+    model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
     contents = f"{style_prompt}\n\n{script_text}"
 
-    # ✅ TTS config style updated with mapped language codes
+    # ✅ Use GenerateContentConfig with prebuilt_voice_config
     config = types.GenerateContentConfig(
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
