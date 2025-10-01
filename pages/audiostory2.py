@@ -53,8 +53,6 @@ TTS_MODEL = "gemini-2.5-flash-preview-tts"
 # Image generation models in fallback order
 IMAGE_MODELS = ["gemini-2.0-flash-exp-image-generation", "gemini-2.0-flash-preview-image-generation", "gemini-2.5-flash-image-preview"]
 
-# IMAGE_MODELS = [ "imagen-3.0-generate-002", "imagen-4.0-generate-preview-06-06", "imagen-4.0-ultra-generate-preview-06-06", "imagen-4.0-generate-001", "imagen-4.0-ultra-generate-001", "imagen-4.0-fast-generate-001", "gemini-2.0-flash-exp-image-generation", "gemini-2.0-flash-preview-image-generation", "gemini-2.5-flash-image-preview"]
-
 # --- API Key selection ---
 api_keys = {
     "Key 1": st.secrets["GOOGLE_API_KEY_1"],
@@ -199,6 +197,8 @@ def generate_images_from_story(story_text):
                         img_bytes = base64.b64decode(part.inline_data.data)
                         images.append((i, img_bytes))
                         break
+        else:
+            st.error(f"❌ Failed to generate image for Scene {i}.")
     return images
 
 # --- Main: Generate story + audio + images ---
@@ -282,6 +282,9 @@ if st.button("Generate Story & Audio"):
                 st.subheader("Story Illustrations")
                 for i, img_bytes in images:
                     st.image(img_bytes, caption=f"Illustration for Scene {i}")
+                st.session_state["images"] = images
+            else:
+                st.error("❌ Image generation failed for all scenes.")
 
 # --- Display story persistently ---
 if "story" in st.session_state:
@@ -307,5 +310,20 @@ if "audio_bytes" in st.session_state:
         file_name="story_audio.wav",
         mime="audio/wav"
     )
+
+# --- Display images persistently + retry button ---
+if "images" in st.session_state and st.session_state["images"]:
+    st.subheader("Story Illustrations (Persistent)")
+    for i, img_bytes in st.session_state["images"]:
+        st.image(img_bytes, caption=f"Illustration for Scene {i}")
+
+    if st.button("🔄 Retry Image Generation"):
+        with st.spinner("Retrying image generation..."):
+            new_images = generate_images_from_story(st.session_state["story"])
+            if new_images:
+                st.session_state["images"] = new_images
+                st.success("✅ Images regenerated successfully!")
+            else:
+                st.error("❌ Retry failed, no images generated.")
 
 st.markdown("---")
