@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 from google import genai as genaii
+import pandas as pd
 
 from streamlit.components.v1 import html
 html(
