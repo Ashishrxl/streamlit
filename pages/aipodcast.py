@@ -41,7 +41,7 @@ header > div:nth-child(2) {
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # --- Initialize GenAI client with API key from secrets ---
-client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY_2"])
+client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # --- Language code mapper ---
 def map_language_code(language: str) -> str:
