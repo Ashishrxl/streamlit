@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
-from google import genai as genaii
-import pandas as pd
+
+
 
 from streamlit.components.v1 import html
 html(
@@ -41,7 +41,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # API Key Input (secured with password type input)
 api_key = st.secrets["GOOGLE_API_KEY"]
-client = genaii.Client(api_key=api_key)
+
 
 
 if api_key:
@@ -69,27 +69,3 @@ if api_key:
 else:
     st.info("👆 Please enter your API key to fetch available models.")
 
-with st.expander("🔍 Check Available Models with this API Key"):
-    try:
-        models = client.models.list()
-        st.success(f"Found {len(models)} raw entries available for this API key")
-
-        # Convert safely
-        model_list = []
-        for m in models:
-            if hasattr(m, "to_dict"):
-                d = m.to_dict()
-                model_list.append({
-                    "Model Name": d.get("name", ""),
-                    "Display Name": d.get("display_name", ""),
-                    "Supports": ", ".join(d.get("supported_generation_methods", []))
-                })
-
-        # Deduplicate correctly by Model Name
-        df = pd.DataFrame(model_list).drop_duplicates(subset=["Model Name"])
-        st.success(f"✅ {len(df)} unique models after deduplication")
-        st.dataframe(df)
-
-        st.info("💡 Look for models where 'Supports' includes `generateImage` for image generation.")
-    except Exception as e:
-        st.error(f"Failed to list models: {e}")
