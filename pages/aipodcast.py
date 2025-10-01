@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
-from google.generativeai import types
+# from google.generativeai import types
+from google.genai import types
 import wave
 import base64
 from streamlit.components.v1 import html
