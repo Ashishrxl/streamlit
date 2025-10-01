@@ -271,10 +271,44 @@ if st.button("Generate Story & Audio"):
                     else:
                         st.warning(f"Image generation failed for Scene {i}. Please try again later.")
 
+# --- Display story persistently ---
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
     try:
         pdf_buffer = generate_pdf_unicode(st.session_state["story"])
         st.download_button(
-            label="Download Story as PDF")
+            label="Download Story as PDF",
+            data=pdf_buffer,
+            file_name="story.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"PDF generation failed: {e}")
+
+# --- Display audio persistently ---
+if "audio_bytes" in st.session_state:
+    st.audio(st.session_state["audio_bytes"], format="audio/wav")
+    st.download_button(
+        label="Download Audio",
+        data=st.session_state["audio_bytes"],
+        file_name="story_audio.wav",
+        mime="audio/wav"
+    )
+
+# --- Display images persistently + retry button ---
+if "images" in st.session_state and st.session_state["images"]:
+    st.subheader("Story Illustrations (Persistent)")
+    for i, img_bytes in st.session_state["images"]:
+        st.image(img_bytes, caption=f"Illustration for Scene {i}")
+
+    if st.button("🔄 Retry Image Generation"):
+        with st.spinner("Retrying image generation..."):
+            new_images = generate_images_from_story(st.session_state["story"])
+            if new_images:
+                st.session_state["images"] = new_images
+                st.success("✅ Images regenerated successfully!")
+            else:
+                st.error("❌ Retry failed, no images generated.")
+
+st.markdown("---")
