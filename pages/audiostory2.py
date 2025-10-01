@@ -13,19 +13,18 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
-
 from streamlit.components.v1 import html
+
 html(
-  """
-  <script>
-  try {
-    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-    sel.forEach(e => e.style.display='none');
-  } catch(e) { console.warn('parent DOM not reachable', e); }
-  </script>
-  """,
-  height=0
+    """
+    <script>
+    try {
+        const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+        sel.forEach(e => e.style.display='none');
+    } catch(e) { console.warn('parent DOM not reachable', e); }
+    </script>
+    """,
+    height=0
 )
 
 hide_streamlit_style = """
@@ -36,9 +35,6 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
-
-/* The following specifically targets and hides all child elements of the header's right side,
-   while preserving the header itself and, by extension, the sidebar toggle button. */
 header > div:nth-child(2) {
     display: none;
 }
@@ -46,14 +42,11 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
-# Image generation models in fallback order
 IMAGE_MODELS = ["gemini-2.0-flash-exp-image-generation", "gemini-2.0-flash-preview-image-generation", "gemini-2.5-flash-image-preview"]
 
-# --- API Key selection ---
 api_keys = {
     "Key 1": st.secrets["GOOGLE_API_KEY_1"],
     "Key 2": st.secrets["GOOGLE_API_KEY_2"]
@@ -66,13 +59,11 @@ client = genai.Client(api_key=api_key)
 st.set_page_config(page_title="AI Roleplay Story", layout="wide")
 st.title("AI Roleplay Story Generator")
 
-# Inputs
 genre = st.text_input("Enter story genre", "Cyberpunk mystery")
 characters = st.text_area("List characters (comma separated)", "Detective, Hacker, AI sidekick")
 length = st.selectbox("Story length", ["Short", "Medium", "Long"])
 language = st.selectbox("Select story language", ["English", "Hindi", "Bhojpuri"])
 
-# Voice choices per language
 voice_options = {
     "English": ["English Male", "English Female"],
     "Hindi": ["Hindi Male", "Hindi Female"],
@@ -80,15 +71,12 @@ voice_options = {
 }
 voice_choice = st.selectbox("Select voice", voice_options[language])
 
-# User options
 add_audio = st.checkbox("Generate audio of full story")
 add_images = st.checkbox("Generate images for each scene")
 
-# Stop image generation flag
 if "stop_images" not in st.session_state:
     st.session_state["stop_images"] = False
 
-# Placeholder for dynamic stop button
 stop_button_placeholder = st.empty()
 
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -198,13 +186,12 @@ def generate_images_from_story(story_text):
                         images.append((i, img_bytes))
                         break
         else:
-            st.error(f"❌ Failed to generate image for Scene {i}.")
+            st.warning(f"Image generation failed for scene {i}.")
+            images.append((i, None))
     return images
 
-# --- Main: Generate story + audio + images ---
 if st.button("Generate Story & Audio"):
 
-    # --- Story generation ---
     story_progress = st.progress(0)
     story_placeholder = st.empty()
     prompt = (
@@ -227,7 +214,6 @@ if st.button("Generate Story & Audio"):
     story_progress.progress(100, text="Story generated ✅")
     story_placeholder.write("✅ Story ready!")
 
-    # --- Audio generation ---
     if add_audio:
         audio_progress = st.progress(0)
         audio_placeholder = st.empty()
@@ -274,56 +260,21 @@ if st.button("Generate Story & Audio"):
             wav_bytes = pcm_to_wav_bytes(pcm)
             st.session_state["audio_bytes"] = wav_bytes
 
-    # --- Image generation ---
     if add_images:
         with st.spinner("Generating illustrations for each scene..."):
             images = generate_images_from_story(st.session_state["story"])
             if images:
                 st.subheader("Story Illustrations")
                 for i, img_bytes in images:
-                    st.image(img_bytes, caption=f"Illustration for Scene {i}")
-                st.session_state["images"] = images
-            else:
-                st.error("❌ Image generation failed for all scenes.")
+                    if img_bytes:
+                        st.image(img_bytes, caption=f"Illustration for Scene {i}")
+                    else:
+                        st.warning(f"Image generation failed for Scene {i}. Please try again later.")
 
-# --- Display story persistently ---
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
     try:
         pdf_buffer = generate_pdf_unicode(st.session_state["story"])
         st.download_button(
-            label="Download Story as PDF",
-            data=pdf_buffer,
-            file_name="story.pdf",
-            mime="application/pdf"
-        )
-    except Exception as e:
-        st.error(f"PDF generation failed: {e}")
-
-# --- Display audio persistently ---
-if "audio_bytes" in st.session_state:
-    st.audio(st.session_state["audio_bytes"], format="audio/wav")
-    st.download_button(
-        label="Download Audio",
-        data=st.session_state["audio_bytes"],
-        file_name="story_audio.wav",
-        mime="audio/wav"
-    )
-
-# --- Display images persistently + retry button ---
-if "images" in st.session_state and st.session_state["images"]:
-    st.subheader("Story Illustrations (Persistent)")
-    for i, img_bytes in st.session_state["images"]:
-        st.image(img_bytes, caption=f"Illustration for Scene {i}")
-
-    if st.button("🔄 Retry Image Generation"):
-        with st.spinner("Retrying image generation..."):
-            new_images = generate_images_from_story(st.session_state["story"])
-            if new_images:
-                st.session_state["images"] = new_images
-                st.success("✅ Images regenerated successfully!")
-            else:
-                st.error("❌ Retry failed, no images generated.")
-
-st.markdown("---")
+            label="Download Story as PDF0
