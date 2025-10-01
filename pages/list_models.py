@@ -74,7 +74,7 @@ with st.expander("🔍 Check Available Models with this API Key"):
         models = client.models.list()
         st.success(f"Found {len(models)} raw entries available for this API key")
 
-        # Convert to safe dict
+        # Convert safely
         model_list = []
         for m in models:
             if hasattr(m, "to_dict"):
@@ -85,16 +85,10 @@ with st.expander("🔍 Check Available Models with this API Key"):
                     "Supports": ", ".join(d.get("supported_generation_methods", []))
                 })
 
-        # Deduplicate by model name
+        # Deduplicate correctly by Model Name
         df = pd.DataFrame(model_list).drop_duplicates(subset=["Model Name"])
         st.success(f"✅ {len(df)} unique models after deduplication")
-
-        # Checkbox to filter only image-generation models
-        if st.checkbox("Show only models that support generateContent"):
-            df_image = df[df['Supports'].str.contains("generateContent")]
-            st.dataframe(df_image)
-        else:
-            st.dataframe(df)
+        st.dataframe(df)
 
         st.info("💡 Look for models where 'Supports' includes `generateImage` for image generation.")
     except Exception as e:
