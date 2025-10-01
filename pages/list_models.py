@@ -69,20 +69,26 @@ if api_key:
 else:
     st.info("👆 Please enter your API key to fetch available models.")
 
-# --- Model Explorer Helper ---
 with st.expander("🔍 Check Available Models with this API Key"):
     try:
         models = client.models.list()
-        st.success(f"Found {len(models)} models available for this API key")
+        st.success(f"Found {len(models)} raw entries available for this API key")
 
-        data = []
+        # Deduplicate by model "name"
+        unique_models = {}
         for m in models:
-            data.append({
-                "Model Name": getattr(m, "name", ""),
-                "Display Name": getattr(m, "display_name", ""),
-                "Supports": ", ".join(getattr(m, "supported_generation_methods", []))
-            })
-        st.dataframe(pd.DataFrame(data))
+            model_name = getattr(m, "name", "")
+            if model_name not in unique_models:
+                unique_models[model_name] = {
+                    "Model Name": model_name,
+                    "Display Name": getattr(m, "display_name", ""),
+                    "Supports": ", ".join(getattr(m, "supported_generation_methods", []))
+                }
+
+        df = pd.DataFrame(list(unique_models.values()))
+        st.success(f"✅ {len(df)} unique models after deduplication")
+        st.dataframe(df)
+
         st.info("💡 Look for models where 'Supports' includes `generateImage` for image generation.")
     except Exception as e:
         st.error(f"Failed to list models: {e}")
