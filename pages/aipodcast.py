@@ -40,9 +40,8 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# --- Initialize GenAI client ---
-# According to docs, client picks API key from environment variable GEMINI_API_KEY if set. 1
-client = genai.Client()
+# --- Initialize GenAI client with API key from secrets ---
+client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY_2"])
 
 # --- Language code mapper ---
 def map_language_code(language: str) -> str:
@@ -52,7 +51,7 @@ def map_language_code(language: str) -> str:
     elif lang == "hindi":
         return "hi-IN"
     elif lang == "bhojpuri":
-        return "bho-IN"
+        return "bho-IN"  # may fallback if unsupported
     return "en-US"
 
 # --- Script Generation ---
@@ -65,7 +64,6 @@ def generate_script(topic: str) -> str:
     - A closing statement
     Keep it conversational and natural.
     """
-    # Use client.models.generate_content for text
     resp = client.models.generate_content(
         model="gemini-2.5-pro",
         contents=prompt
