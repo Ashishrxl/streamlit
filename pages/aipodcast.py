@@ -47,6 +47,18 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # 🔐 Configure Gemini API
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
+# --- Language code mapper ---
+def map_language_code(language: str) -> str:
+    lang = language.lower()
+    if lang == "english":
+        return "en-US"
+    elif lang == "hindi":
+        return "hi-IN"
+    elif lang == "bhojpuri":
+        return "bho-IN"  # Bhojpuri is not always officially supported; fallback may apply
+    return "en-US"  # default
+
+# --- Script Generation ---
 def generate_script(topic):
     prompt = f"""
     Write a friendly and engaging podcast script about "{topic}".
@@ -60,6 +72,7 @@ def generate_script(topic):
     resp = model.generate_content(prompt)
     return resp.text
 
+# --- Save WAV helper ---
 def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
     with wave.open(filename, "wb") as wf:
         wf.setnchannels(channels)
@@ -67,6 +80,7 @@ def save_wave(filename, pcm_data, channels=1, rate=24000, sample_width=2):
         wf.setframerate(rate)
         wf.writeframes(pcm_data)
 
+# --- Audio (TTS) Generation ---
 def generate_audio(script_text, voice_name="Kore", language="English"):
     # choose style prompt based on language
     if language.lower() == "hindi":
@@ -79,17 +93,22 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
     model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
     contents = f"{style_prompt}\n\n{script_text}"
 
-    # ✅ Use typed GenerationConfig to match SDK requirements
-    generation_config = types.GenerationConfig(
+    # ✅ TTS config style updated with mapped language codes
+    config = types.GenerateContentConfig(
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(prebuilt_voice=voice_name)
+            language_code=map_language_code(language),
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=voice_name
+                )
+            )
         )
     )
 
     response = model.generate_content(
         contents=contents,
-        generation_config=generation_config
+        config=config
     )
 
     pcm_data = response.candidates[0].content.parts[0].inline_data.data
