@@ -90,7 +90,7 @@ with st.expander("🔍 Check Available Models with this API Key"):
         st.success(f"✅ {len(df)} unique models after deduplication")
 
         # Checkbox to filter only image-generation models
-        if st.checkbox("Show only models that support generateImage"):
+        if st.checkbox("Show only models that support generateContent"):
             df_image = df[df['Supports'].str.contains("generateContent")]
             st.dataframe(df_image)
         else:
