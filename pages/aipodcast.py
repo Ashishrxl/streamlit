@@ -90,7 +90,7 @@ def generate_audio(script_text, voice_name="Kore", language="English"):
     else:
         style_prompt = "Speak this in a natural and friendly tone."
 
-    model = genai.GenerativeModel("gemini-2.5-pro-preview-tts")
+    model = genai.GenerativeModel("gemini-2.5-flash-preview-tts")
     contents = f"{style_prompt}\n\n{script_text}"
 
     # ✅ TTS config style updated with mapped language codes
