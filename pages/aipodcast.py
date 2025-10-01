@@ -102,7 +102,7 @@ def generate_audio(script_text: str, voice_name: str = "Kore", language: str = "
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-pro-preview-tts",
+        model="gemini-2.5-flash-preview-tts",
         contents=contents,
         config=config
     )
