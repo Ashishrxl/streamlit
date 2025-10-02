@@ -6,6 +6,8 @@ import time
 import os
 import random
 import uuid
+from io import BytesIO
+from PIL import Image
 
 from google import genai
 from google.genai import types
@@ -147,6 +149,16 @@ def safe_generate_image(prompt, retries=2, delay=5):
                     model=model,
                     contents=[prompt]
                 )
+                image_base64 = img_resp["data"][0]["b64_json"] 
+                image_bytes = base64.b64decode(image_base64)
+
+                # Open as image
+                img = Image.open(BytesIO(image_bytes))
+
+                # Show in Streamlit
+                st.image(img, caption="Image from AI response")
+
+                
                 return img_resp
             except Exception as e:
                 stop_button_placeholder.button(
