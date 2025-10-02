@@ -128,7 +128,8 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     y -= 30
 
     c.setFont("NotoSans", 12)
-    for line in text.split("\n"):
+    for line in text.split("
+"):
         if y < 50:
             c.showPage()
             c.setFont("NotoSans", 12)
