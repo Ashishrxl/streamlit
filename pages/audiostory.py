@@ -153,13 +153,13 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     story = []
 
     # Title
-    story.append(Paragraph(title, stylesheet["Title"]))
+    story.append(Paragraph(title, stylesheet["My Title"]))
     story.append(Spacer(1, 20))
 
     # Content (split into paragraphs)
     for line in text.split("\n"):
         if line.strip():
-            story.append(Paragraph(line.strip(), stylesheet["Hindi"]))
+            story.append(Paragraph(line.strip(), stylesheet["My Hindi"]))
             story.append(Spacer(1, 8))
 
     doc.build(story)
