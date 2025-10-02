@@ -198,9 +198,10 @@ def safe_generate_image(prompt, retries=2, delay=5):
             if st.session_state.get("stop_images", False):
                 return None
             try:
+                config = types.GenerateContentConfig(response_mime_type="image/jpeg")
                 img_resp = client.models.generate_content(
                     model=model,
-                    contents=[prompt]
+                    contents=[prompt], config=config
                 )
                 if hasattr(img_resp, 'candidates') and img_resp.candidates:
                     candidate = img_resp.candidates[0]
