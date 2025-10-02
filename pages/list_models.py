@@ -62,7 +62,6 @@ if api_key:
                     st.markdown(f"**Output Token Limit:** {getattr(m, 'output_token_limit', 'N/A')}")
                     st.markdown(f"**Supported Generation Methods:** {getattr(m, 'supported_generation_methods', 'N/A')}")
                     st.markdown(f"**Version:** {getattr(m, 'version', 'N/A')}")
-                    st.markdown(f"**Base Model ID:** {getattr(m, 'base_model_id', 'N/A')}")
                     st.markdown(f"**Temperature (Default):** {getattr(m, 'temperature', 'N/A')}")
         else:
             st.warning("No models found.")
