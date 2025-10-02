@@ -119,6 +119,35 @@ def map_language_code(language):
     }
     return codes.get(language, "en-US")
 
+def generate_pdf_reportlab(text, title="AI Roleplay Story"):
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    font_path = "NotoSansDevanagari-Regular.ttf"
+    if not os.path.exists(font_path):
+        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
+    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+
+    y = height - 50
+    c.setFont("NotoSans", 18)
+    c.drawString(50, y, title)
+    y -= 30
+
+    c.setFont("NotoSans", 12)
+    for line in text.split("\n"):
+        if y < 50:
+            c.showPage()
+            c.setFont("NotoSans", 12)
+            y = height - 50
+        c.drawString(50, y, line)
+        y -= 18
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf
+/*
 # --- PDF generation using reportlab ---
 def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
@@ -146,7 +175,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     c.save()
     buf.seek(0)
     return buf
-
+*/
 # --- Main: Generate story + audio ---
 if st.button("Generate Story & Audio"):
     # Story generation
