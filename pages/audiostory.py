@@ -11,6 +11,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from streamlit.components.v1 import html
 html(
@@ -119,7 +121,53 @@ def map_language_code(language):
     }
     return codes.get(language, "en-US")
 
+
+
+
 def generate_pdf_reportlab(text, title="AI Roleplay Story"):
+    buf = io.BytesIO()
+
+    # Font setup
+    font_path = "NotoSansDevanagari-Regular.ttf"
+    if not os.path.exists(font_path):
+        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
+    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+
+    # Create doc
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            rightMargin=50, leftMargin=50,
+                            topMargin=50, bottomMargin=50)
+
+    # Styles
+    stylesheet = getSampleStyleSheet()
+    stylesheet.add(ParagraphStyle(name="Hindi",
+                                  fontName="NotoSans",
+                                  fontSize=12,
+                                  leading=16))
+    stylesheet.add(ParagraphStyle(name="Title",
+                                  fontName="NotoSans",
+                                  fontSize=18,
+                                  leading=22,
+                                  alignment=1))  # centered
+
+    story = []
+
+    # Title
+    story.append(Paragraph(title, stylesheet["Title"]))
+    story.append(Spacer(1, 20))
+
+    # Content (split into paragraphs)
+    for line in text.split("\n"):
+        if line.strip():
+            story.append(Paragraph(line.strip(), stylesheet["Hindi"]))
+            story.append(Spacer(1, 8))
+
+    doc.build(story)
+
+    buf.seek(0)
+    return buf
+
+def generate_pdf_reportlabbb(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
