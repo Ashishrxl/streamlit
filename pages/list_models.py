@@ -56,7 +56,7 @@ if api_key:
         if models:
             for i, m in enumerate(models, start=1):
                 
-                with st.expander(f"{i}📌 {m.name}", expanded=False):
+                with st.expander(f"{i} 📌 {m.name}", expanded=False):
                     st.markdown(f"**Display Name:** {getattr(m, 'display_name', 'N/A')}")
                     st.markdown(f"**Description:** {getattr(m, 'description', 'N/A')}")
                     st.markdown(f"**Input Token Limit:** {getattr(m, 'input_token_limit', 'N/A')}")
