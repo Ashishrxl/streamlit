@@ -55,7 +55,8 @@ if api_key:
 
         if models:
             for m in models:
-                with st.expander(f"📌 {m.name}", expanded=False):
+                i = 1
+                with st.expander(f"{i}📌 {m.name}", expanded=False):
                     st.markdown(f"**Display Name:** {getattr(m, 'display_name', 'N/A')}")
                     st.markdown(f"**Description:** {getattr(m, 'description', 'N/A')}")
                     st.markdown(f"**Input Token Limit:** {getattr(m, 'input_token_limit', 'N/A')}")
@@ -63,6 +64,7 @@ if api_key:
                     st.markdown(f"**Supported Generation Methods:** {getattr(m, 'supported_generation_methods', 'N/A')}")
                     st.markdown(f"**Version:** {getattr(m, 'version', 'N/A')}")
                     st.markdown(f"**Temperature (Default):** {getattr(m, 'temperature', 'N/A')}")
+                    i++
         else:
             st.warning("No models found.")
 
