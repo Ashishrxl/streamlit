@@ -124,48 +124,78 @@ def map_language_code(language):
 
 
 
+
+# PDF generator (same as you provided)
 def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
 
     # Font setup
     font_path = "NotoSansDevanagari-Regular.ttf"
     if not os.path.exists(font_path):
-        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
+        raise FileNotFoundError(
+            "Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support."
+        )
     pdfmetrics.registerFont(TTFont("NotoSans", font_path))
 
     # Create doc
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-                            rightMargin=50, leftMargin=50,
-                            topMargin=50, bottomMargin=50)
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        rightMargin=50,
+        leftMargin=50,
+        topMargin=50,
+        bottomMargin=50,
+    )
 
     # Styles
     stylesheet = getSampleStyleSheet()
-    stylesheet.add(ParagraphStyle(name="My Hindi",
-                                  fontName="NotoSans",
-                                  fontSize=12,
-                                  leading=16))
-    stylesheet.add(ParagraphStyle(name="My Title",
-                                  fontName="NotoSans",
-                                  fontSize=18,
-                                  leading=22,
-                                  alignment=1))  # centered
+    # Add custom styles with unique names
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyBody",
+            fontName="NotoSans",
+            fontSize=12,
+            leading=16
+        )
+    )
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyTitle",
+            fontName="NotoSans",
+            fontSize=18,
+            leading=22,
+            alignment=1  # centered
+        )
+    )
 
     story = []
 
     # Title
-    story.append(Paragraph(title, stylesheet["My Title"]))
+    story.append(Paragraph(title, stylesheet["MyTitle"]))
     story.append(Spacer(1, 20))
 
-    # Content (split into paragraphs)
+    # Content
     for line in text.split("\n"):
         if line.strip():
-            story.append(Paragraph(line.strip(), stylesheet["My Hindi"]))
+            story.append(Paragraph(line.strip(), stylesheet["MyBody"]))
             story.append(Spacer(1, 8))
 
     doc.build(story)
 
     buf.seek(0)
     return buf
+
+
+# 🔹 New wrapper function to use with your generated story
+def save_story_as_pdf(story, title="AI Roleplay Story"):
+    pdf_buffer = generate_pdf_reportlab(story, title=title)
+    return pdf_buffer
+
+
+# ✅ Example usage inside your Streamlit app
+# After story is generated:
+# story = st.session_state["story"]
+
 
 def generate_pdf_reportlabbb(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
@@ -307,7 +337,7 @@ if st.button("Generate Story & Audio"):
 if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
-    pdf_buffer = generate_pdf_reportlab(st.session_state["story"])
+    pdf_buffer = save_story_as_pdf(st.session_state["story"], title = "My AI Roleplay")
     st.download_button(
         label="Download Story as PDF",
         data=pdf_buffer,
