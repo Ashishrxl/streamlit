@@ -145,10 +145,12 @@ def safe_generate_image(prompt, retries=2, delay=5):
             if st.session_state.get("stop_images", False):
                 return None
             try:
+                st.markdown("hello1")
                 img_resp = client.models.generate_content(
                     model=model,
                     contents=[prompt]
                 )
+                st.markdown("hello2")
                 image_base64 = img_resp["data"][0]["b64_json"] 
                 image_bytes = base64.b64decode(image_base64)
 
