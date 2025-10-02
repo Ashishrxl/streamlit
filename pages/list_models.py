@@ -40,7 +40,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
 # API Key Input (secured with password type input)
-api_key = st.secrets["GOOGLE_API_KEY"]
+api_key = st.secrets["GOOGLE_API_KEY_2"]
 
 
 
