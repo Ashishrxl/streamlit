@@ -363,9 +363,7 @@ if "images" in st.session_state and st.session_state["images"]:
         st.info("Retrying image generation for failed scenes...")
         with st.spinner("Regenerating failed images..."):
             failed_scenes = []
-            story_scenes = [
-                p.strip() for p in st.session_state["story"].split("
-")
+            story_scenes = [p.strip() for p in st.session_state["story"].split(" ")
                 if p.strip() and len(p.strip()) > 50
             ]
             for i, img_bytes in st.session_state["images"]:
