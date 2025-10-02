@@ -182,8 +182,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
         story.append(Paragraph(title, stylesheet["MyTitleLatin"]))
     story.append(Spacer(1, 20))
 
-    for line in text.split("
-"):
+    for line in text.split(" "):
         if line.strip():
             if is_devanagari(line):
                 story.append(Paragraph(line.strip(), stylesheet["MyBodyDeva"]))
