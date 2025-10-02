@@ -143,8 +143,7 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
 
 # Enhanced image generation function with robust error handling and rate limits
 def safe_generate_image(prompt, retries=3, delay=5):
-    enhanced_prompt = (
-        f"Create a high-quality illustration for this scene: {prompt} Style: digital illustration, cinematic, detailed, vibrant.")
+    enhanced_prompt = ( f"Create a high-quality illustration for this scene: {prompt} Style: digital illustration, cinematic, detailed, vibrant.")
     for model in IMAGE_MODELS:
         for attempt in range(retries):
             if st.session_state.get("stop_images", False):
