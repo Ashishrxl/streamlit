@@ -42,7 +42,7 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-GEMMA_MODEL = "gemma-3-12b-it"
+GEMMA_MODEL = "gemini-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 # Updated list with currently supported image models
@@ -143,7 +143,10 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
 
 # Enhanced image generation function with robust error handling and rate limits
 def safe_generate_image(prompt, retries=3, delay=5):
-    enhanced_prompt = ( f"Create a high-quality illustration for this scene: {prompt} Style: digital illustration, cinematic, detailed, vibrant.")
+    enhanced_prompt = (
+        f"Create a high-quality illustration for this scene:
+{prompt} Style: digital illustration, cinematic, detailed, vibrant."
+    )
     for model in IMAGE_MODELS:
         for attempt in range(retries):
             if st.session_state.get("stop_images", False):
@@ -191,7 +194,8 @@ def safe_generate_image(prompt, retries=3, delay=5):
 
 def generate_images_from_story(story_text):
     # Better scene detection: skip short/brief lines and intros
-    raw_scenes = [p.strip() for p in story_text.split(" ") if p.strip()]
+    raw_scenes = [p.strip() for p in story_text.split("
+") if p.strip()]
     scenes = []
     for scene in raw_scenes:
         if len(scene) > 50 and not scene.lower().startswith("character:") and not scene.lower().startswith("introduction:"):
@@ -363,7 +367,9 @@ if "images" in st.session_state and st.session_state["images"]:
         st.info("Retrying image generation for failed scenes...")
         with st.spinner("Regenerating failed images..."):
             failed_scenes = []
-            story_scenes = [p.strip() for p in st.session_state["story"].split(" ")
+            story_scenes = [
+                p.strip() for p in st.session_state["story"].split("
+")
                 if p.strip() and len(p.strip()) > 50
             ]
             for i, img_bytes in st.session_state["images"]:
