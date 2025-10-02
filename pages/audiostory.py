@@ -4,7 +4,7 @@ import wave
 import base64
 import time
 import threading
-
+import os
 from google import genai
 from google.genai import types
 from reportlab.lib.pagesizes import A4
