@@ -50,11 +50,13 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
-IMAGE_MODELS = [
-    "gemini-2.0-flash-exp-image-generation",
+# IMAGE_MODELS = [
+    "gemini-2.5-flash-image-preview", # reliable first
     "gemini-2.0-flash-preview-image-generation",
-    "gemini-2.5-flash-image-preview"
+    "gemini-2.0-flash-exp-image-generation"
 ]
+
+IMAGE_MODELS = ["gemini-2.5-flash-image-preview"]
 
 api_keys = {
     "Key 1": st.secrets["GOOGLE_API_KEY_1"],
@@ -85,7 +87,6 @@ add_images = st.checkbox("Generate images for each scene")
 
 if "stop_images" not in st.session_state:
     st.session_state["stop_images"] = False
-
 stop_button_placeholder = st.empty()
 
 def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
@@ -119,10 +120,8 @@ def map_language_code(language):
 
 def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
-
     deva_font_path = "NotoSansDevanagari-Regular.ttf"
     latin_font_path = "NotoSans-Regular.ttf"
-
     if not os.path.exists(deva_font_path):
         raise FileNotFoundError(
             "Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support."
@@ -131,10 +130,8 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
         raise FileNotFoundError(
             "Add NotoSans-Regular.ttf in the folder for English support."
         )
-
     pdfmetrics.registerFont(TTFont("NotoSansDeva", deva_font_path))
     pdfmetrics.registerFont(TTFont("NotoSansLatin", latin_font_path))
-
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
@@ -143,7 +140,6 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
         topMargin=50,
         bottomMargin=50,
     )
-
     stylesheet = getSampleStyleSheet()
     stylesheet.add(ParagraphStyle(
         name="MyBodyDeva",
@@ -175,14 +171,13 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     def is_devanagari(text_line):
         return bool(devanagari_re.search(text_line))
     story = []
-
     if is_devanagari(title):
         story.append(Paragraph(title, stylesheet["MyTitleDeva"]))
     else:
         story.append(Paragraph(title, stylesheet["MyTitleLatin"]))
     story.append(Spacer(1, 20))
-
-    for line in text.split(" "):
+    for line in text.split("
+"):
         if line.strip():
             if is_devanagari(line):
                 story.append(Paragraph(line.strip(), stylesheet["MyBodyDeva"]))
@@ -197,8 +192,12 @@ def save_story_as_pdf(story, title="AI Roleplay Story"):
     pdf_buffer = generate_pdf_reportlab(story, title=title)
     return pdf_buffer
 
-# --- IMAGE GENERATION FIXED CODE ---
+# --- IMAGE GENERATION with visible stop button on failure ---
 def safe_generate_image(prompt, retries=2, delay=5):
+    stop_button_placeholder.button(
+        "🛑 Stop Image Generation", key="main_stop_button",
+        on_click=lambda: st.session_state.update({"stop_images": True})
+    )
     for model in IMAGE_MODELS:
         for attempt in range(retries):
             if st.session_state.get("stop_images", False):
@@ -208,7 +207,6 @@ def safe_generate_image(prompt, retries=2, delay=5):
                     model=model,
                     contents=[prompt]
                 )
-                # Correct response parsing for Google GenAI SDK
                 if hasattr(img_resp, 'candidates') and img_resp.candidates:
                     candidate = img_resp.candidates[0]
                     if hasattr(candidate, 'content') and candidate.content:
@@ -218,31 +216,35 @@ def safe_generate_image(prompt, retries=2, delay=5):
                                 img = Image.open(BytesIO(image_bytes))
                                 st.image(img, caption=f"Generated with {model}")
                                 return image_bytes
-                st.warning(f"No image data found in response from {model}")
+                st.warning(f"No image data found in response from {model}", icon="⚠️")
+                stop_button_placeholder.button(
+                    "🛑 Stop Generation", key=f"stop_fail_{uuid.uuid4()}",
+                    on_click=lambda: st.session_state.update({"stop_images": True})
+                )
                 return None
             except Exception as e:
                 stop_button_placeholder.button(
-                    "Stop Image Generation",
-                    key=f"stop_button_{uuid.uuid4()}",
+                    "🛑 Stop Generation", key=f"stop_exception_{uuid.uuid4()}",
                     on_click=lambda: st.session_state.update({"stop_images": True})
                 )
                 if attempt < retries - 1:
                     wait = delay + random.randint(0, 3)
-                    st.warning(f"{model} error: {str(e)}. Retrying in {wait}s...")
+                    st.warning(f"{model} error: {str(e)}. Retrying in {wait}s...", icon="⚠️")
                     time.sleep(wait)
                 else:
-                    st.warning(f"{model} failed: {str(e)}. Trying next model...")
+                    st.warning(f"{model} failed: {str(e)}. Trying next model...", icon="❌")
                     break
     return None
 
 def generate_images_from_story(story_text):
-    scenes = [p.strip() for p in story_text.split(" ") if p.strip()]
+    scenes = [p.strip() for p in story_text.split("
+") if p.strip()]
     images = []
     st.session_state["stop_images"] = False
     stop_button_placeholder.empty()
     for i, scene in enumerate(scenes, 1):
         if st.session_state["stop_images"]:
-            st.warning("Image generation stopped by user.")
+            st.warning("Image generation stopped by user.", icon="🛑")
             break
         st.info(f"Generating image for scene {i}/{len(scenes)}")
         img_bytes = safe_generate_image(
@@ -253,6 +255,10 @@ def generate_images_from_story(story_text):
             st.success(f"✅ Generated image for scene {i}")
         else:
             st.warning(f"❌ Image generation failed for scene {i}")
+            stop_button_placeholder.button(
+                "🛑 Stop Generation", key=f"failed_stop_{i}",
+                on_click=lambda: st.session_state.update({"stop_images": True})
+            )
             images.append((i, None))
     st.session_state["images"] = images
     return images
