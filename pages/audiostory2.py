@@ -42,14 +42,10 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-GEMMA_MODEL = "gemini-3-12b-it"
+GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
-# Updated list with currently supported image models
-IMAGE_MODELS = [
-    "gemini-2.5-flash-image-preview",  # Most stable and supported in India
-    "gemini-2.0-flash-preview-image-generation"
-]
+IMAGE_MODELS = ["gemini-2.0-flash-exp-image-generation", "gemini-2.0-flash-preview-image-generation", "gemini-2.5-flash-image-preview"]
 
 api_keys = {
     "Key 1": st.secrets["GOOGLE_API_KEY_1"],
@@ -128,8 +124,7 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     y -= 30
 
     c.setFont("NotoSans", 12)
-    for line in text.split("
-"):
+    for line in text.split("\n"):
         if y < 50:
             c.showPage()
             c.setFont("NotoSans", 12)
@@ -142,14 +137,7 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
     buf.seek(0)
     return buf
 
-# Enhanced image generation function with robust error handling and rate limits
-def safe_generate_image(prompt, retries=3, delay=5):
-    enhanced_prompt = (
-        f"Create a high-quality illustration for this scene:
-{prompt}
-"
-        "Style: digital illustration, cinematic, detailed, vibrant."
-    )
+def safe_generate_image(prompt, retries=2, delay=5):
     for model in IMAGE_MODELS:
         for attempt in range(retries):
             if st.session_state.get("stop_images", False):
@@ -157,76 +145,38 @@ def safe_generate_image(prompt, retries=3, delay=5):
             try:
                 img_resp = client.models.generate_content(
                     model=model,
-                    contents=[enhanced_prompt]
+                    contents=[prompt]
                 )
-                if (
-                    img_resp and hasattr(img_resp, "candidates")
-                    and img_resp.candidates and hasattr(img_resp.candidates[0], "content")
-                    and img_resp.candidates[0].content
-                ):
-                    for part in img_resp.candidates[0].content.parts:
-                        if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
-                            return img_resp
-                st.warning(f"No image data returned from {model}.")
+                return img_resp
             except Exception as e:
-                error_msg = str(e).lower()
-                if "404" in error_msg or "not found" in error_msg:
-                    st.error(f"Model {model} not available or deprecated.")
-                    break
-                elif "429" in error_msg or "quota" in error_msg or "rate" in error_msg:
-                    wait = delay * (2 ** attempt) + random.randint(1, 5)
-                    st.warning(f"Rate limit hit for {model}. Waiting {wait}s before retry {attempt + 1}/{retries}...")
-                    stop_button_placeholder.button(
-                        f"Stop Image Generation (waiting {wait}s)",
-                        key=f"stop_button_{uuid.uuid4()}",
-                        on_click=lambda: st.session_state.update({"stop_images": True})
-                    )
-                    time.sleep(wait)
-                elif "503" in error_msg or "service unavailable" in error_msg:
-                    wait = delay + random.randint(1, 10)
-                    st.warning(f"Service temporarily unavailable for {model}. Retrying in {wait}s...")
-                    time.sleep(wait)
-                else:
-                    st.error(f"Unexpected error with {model}: {str(e)}")
+                stop_button_placeholder.button(
+                    "Stop Image Generation",
+                    key=f"stop_button_{uuid.uuid4()}",
+                    on_click=lambda: st.session_state.update({"stop_images": True})
+                )
                 if attempt < retries - 1:
-                    st.info(f"Retrying with {model} (attempt {attempt + 2}/{retries})...")
+                    wait = delay + random.randint(0,3)
+                    st.warning(f"{model} overloaded. Retrying in {wait}s...")
+                    time.sleep(wait)
                 else:
-                    st.warning(f"All attempts failed for {model}. Trying next model...")
-    st.error("All image generation models failed. Please try again later or check your API keys.")
+                    st.warning(f"{model} failed. Trying next model...")
+                    break
     return None
 
 def generate_images_from_story(story_text):
-    # Better scene detection: skip short/brief lines and intros
-    raw_scenes = [p.strip() for p in story_text.split("
-") if p.strip()]
-    scenes = []
-    for scene in raw_scenes:
-        if len(scene) > 50 and not scene.lower().startswith("character:") and not scene.lower().startswith("introduction:"):
-            if len(scene) > 200:
-                scene = scene[:200] + "..."
-            scenes.append(scene)
-    # Limit to 6 scenes to avoid rate limits
-    if len(scenes) > 6:
-        scenes = scenes[:6]
-        st.info(f"Limited to first 6 scenes to avoid rate limiting. Total scenes found: {len(raw_scenes)}")
+    scenes = [p.strip() for p in story_text.split("\n") if p.strip()]
     images = []
     st.session_state["stop_images"] = False
     stop_button_placeholder.empty()
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+
     for i, scene in enumerate(scenes, 1):
         if st.session_state["stop_images"]:
             st.warning("Image generation stopped by user.")
             break
-        progress = i / len(scenes)
-        progress_bar.progress(progress)
-        status_text.text(f"Generating image {i}/{len(scenes)}...")
-        # Random delay between requests for rate limiting
-        if i > 1:
-            delay_time = random.randint(5, 10)
-            st.info(f"Waiting {delay_time}s to avoid rate limiting...")
-            time.sleep(delay_time)
-        img_resp = safe_generate_image(scene)
+
+        img_resp = safe_generate_image(
+            f"Create a high-quality illustration for this scene:\n{scene}"
+        )
         if img_resp and hasattr(img_resp, "candidates") and img_resp.candidates:
             candidate = img_resp.candidates[0]
             if hasattr(candidate, "content") and candidate.content:
@@ -234,19 +184,10 @@ def generate_images_from_story(story_text):
                     if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
                         img_bytes = base64.b64decode(part.inline_data.data)
                         images.append((i, img_bytes))
-                        st.success(f"Generated image {i}/{len(scenes)}.")
                         break
-                else:
-                    st.warning(f"No image data found for scene {i}.")
-                    images.append((i, None))
-            else:
-                st.warning(f"No content in response for scene {i}.")
-                images.append((i, None))
         else:
-            st.error(f"Failed to generate image for scene {i}.")
+            st.warning(f"Image generation failed for scene {i}.")
             images.append((i, None))
-    progress_bar.progress(1.0)
-    status_text.text("Image generation completed!")
     return images
 
 if st.button("Generate Story & Audio"):
@@ -320,27 +261,24 @@ if st.button("Generate Story & Audio"):
             st.session_state["audio_bytes"] = wav_bytes
 
     if add_images:
-        st.subheader("🎨 Generating Story Illustrations")
-        st.info("This may take several minutes due to rate limiting. Please be patient.")
         with st.spinner("Generating illustrations for each scene..."):
             images = generate_images_from_story(st.session_state["story"])
             if images:
-                st.session_state["images"] = images
-                st.subheader("🖼️ Generated Story Illustrations")
+                st.subheader("Story Illustrations")
                 for i, img_bytes in images:
                     if img_bytes:
-                        st.image(img_bytes, caption=f"Scene {i} Illustration", use_column_width=True)
+                        st.image(img_bytes, caption=f"Illustration for Scene {i}")
                     else:
-                        st.warning(f"Scene {i}: Image generation failed.")
+                        st.warning(f"Image generation failed for Scene {i}. Please try again later.")
 
 # --- Display story persistently ---
 if "story" in st.session_state:
-    st.subheader("📖 Story Script")
+    st.subheader("Story Script")
     st.write(st.session_state["story"])
     try:
         pdf_buffer = generate_pdf_unicode(st.session_state["story"])
         st.download_button(
-            label="📄 Download Story as PDF",
+            label="Download Story as PDF",
             data=pdf_buffer,
             file_name="story.pdf",
             mime="application/pdf"
@@ -350,10 +288,9 @@ if "story" in st.session_state:
 
 # --- Display audio persistently ---
 if "audio_bytes" in st.session_state:
-    st.subheader("🔊 Story Audio")
     st.audio(st.session_state["audio_bytes"], format="audio/wav")
     st.download_button(
-        label="🎵 Download Audio",
+        label="Download Audio",
         data=st.session_state["audio_bytes"],
         file_name="story_audio.wav",
         mime="audio/wav"
@@ -361,42 +298,17 @@ if "audio_bytes" in st.session_state:
 
 # --- Display images persistently + retry button ---
 if "images" in st.session_state and st.session_state["images"]:
-    st.subheader("🖼️ Story Illustrations")
+    st.subheader("Story Illustrations (Persistent)")
     for i, img_bytes in st.session_state["images"]:
-        if img_bytes:
-            st.image(img_bytes, caption=f"Scene {i} Illustration", use_column_width=True)
+        st.image(img_bytes, caption=f"Illustration for Scene {i}")
 
-    if st.button("🔄 Retry Failed Images"):
-        st.info("Retrying image generation for failed scenes...")
-        with st.spinner("Regenerating failed images..."):
-            failed_scenes = []
-            story_scenes = [
-                p.strip() for p in st.session_state["story"].split("
-")
-                if p.strip() and len(p.strip()) > 50
-            ]
-            for i, img_bytes in st.session_state["images"]:
-                if img_bytes is None and i <= len(story_scenes):
-                    failed_scenes.append((i, story_scenes[i-1] if i <= len(story_scenes) else f"Scene {i}"))
-            if failed_scenes:
-                for i, scene in failed_scenes:
-                    st.info(f"Retrying scene {i}...")
-                    time.sleep(random.randint(3, 8))  # Rate limiting
-                    img_resp = safe_generate_image(scene)
-                    if img_resp and hasattr(img_resp, "candidates") and img_resp.candidates:
-                        candidate = img_resp.candidates[0]
-                        if hasattr(candidate, "content") and candidate.content:
-                            for part in candidate.content.parts:
-                                if hasattr(part, "inline_data") and hasattr(part.inline_data, "data"):
-                                    img_bytes = base64.b64decode(part.inline_data.data)
-                                    for idx, (scene_num, old_img_bytes) in enumerate(st.session_state["images"]):
-                                        if scene_num == i:
-                                            st.session_state["images"][idx] = (i, img_bytes)
-                                            st.success(f"Successfully regenerated scene {i}.")
-                                            break
-                                    break
-                st.success("Retry completed! Check the illustrations above.")
+    if st.button("🔄 Retry Image Generation"):
+        with st.spinner("Retrying image generation..."):
+            new_images = generate_images_from_story(st.session_state["story"])
+            if new_images:
+                st.session_state["images"] = new_images
+                st.success("✅ Images regenerated successfully!")
             else:
-                st.info("No failed images to retry.")
+                st.error("❌ Retry failed, no images generated.")
 
 st.markdown("---")
