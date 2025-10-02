@@ -1,6 +1,7 @@
 import streamlit as st
 import io
 import wave
+omport re
 import base64
 import time
 import os
@@ -110,34 +111,108 @@ def map_language_code(language):
     }
     return codes.get(language, "en-US")
 
-def generate_pdf_unicode(text, title="AI Roleplay Story"):
+def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
 
-    font_path = "NotoSansDevanagari-Regular.ttf"
-    if not os.path.exists(font_path):
-        raise FileNotFoundError("Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support.")
-    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+    # ✅ Font setup
+    deva_font_path = "NotoSansDevanagari-Regular.ttf"
+    latin_font_path = "NotoSans-Regular.ttf"
 
-    y = height - 50
-    c.setFont("NotoSans", 18)
-    c.drawString(50, y, title)
-    y -= 30
+    if not os.path.exists(deva_font_path):
+        raise FileNotFoundError(
+            "Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support."
+        )
+    if not os.path.exists(latin_font_path):
+        raise FileNotFoundError(
+            "Add NotoSans-Regular.ttf in the folder for English support."
+        )
 
-    c.setFont("NotoSans", 12)
+    pdfmetrics.registerFont(TTFont("NotoSansDeva", deva_font_path))
+    pdfmetrics.registerFont(TTFont("NotoSansLatin", latin_font_path))
+
+    # Create document
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        rightMargin=50,
+        leftMargin=50,
+        topMargin=50,
+        bottomMargin=50,
+    )
+
+    # Styles
+    stylesheet = getSampleStyleSheet()
+
+    # Devanagari (Hindi/Bhojpuri) styles
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyBodyDeva",
+            fontName="NotoSansDeva",
+            fontSize=12,
+            leading=16
+        )
+    )
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyTitleDeva",
+            fontName="NotoSansDeva",
+            fontSize=18,
+            leading=22,
+            alignment=1  # centered
+        )
+    )
+
+    # Latin (English) styles
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyBodyLatin",
+            fontName="NotoSansLatin",
+            fontSize=12,
+            leading=16
+        )
+    )
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyTitleLatin",
+            fontName="NotoSansLatin",
+            fontSize=18,
+            leading=22,
+            alignment=1  # centered
+        )
+    )
+
+    # Simple Devanagari detector
+    devanagari_re = re.compile(r'[\u0900-\u097F]')
+    def is_devanagari(text_line):
+        return bool(devanagari_re.search(text_line))
+
+    story = []
+
+    # Title
+    if is_devanagari(title):
+        story.append(Paragraph(title, stylesheet["MyTitleDeva"]))
+    else:
+        story.append(Paragraph(title, stylesheet["MyTitleLatin"]))
+    story.append(Spacer(1, 20))
+
+    # Content
     for line in text.split("\n"):
-        if y < 50:
-            c.showPage()
-            c.setFont("NotoSans", 12)
-            y = height - 50
-        c.drawString(50, y, line)
-        y -= 18
+        if line.strip():
+            if is_devanagari(line):
+                story.append(Paragraph(line.strip(), stylesheet["MyBodyDeva"]))
+            else:
+                story.append(Paragraph(line.strip(), stylesheet["MyBodyLatin"]))
+            story.append(Spacer(1, 8))
 
-    c.showPage()
-    c.save()
+    doc.build(story)
     buf.seek(0)
     return buf
+
+# 🔹 Wrapper function
+def save_story_as_pdf(story, title="AI Roleplay Story"):
+    pdf_buffer = generate_pdf_reportlab(story, title=title)
+    return pdf_buffer
+
 
 def safe_generate_image(prompt, retries=2, delay=5):
     for model in IMAGE_MODELS:
@@ -290,7 +365,7 @@ if "story" in st.session_state:
     st.subheader("Story Script")
     st.write(st.session_state["story"])
     try:
-        pdf_buffer = generate_pdf_unicode(st.session_state["story"])
+        pdf_buffer = save_story_as_pdf(st.session_state["story"], title="AI Roleplay Story")
         st.download_button(
             label="Download Story as PDF",
             data=pdf_buffer,
