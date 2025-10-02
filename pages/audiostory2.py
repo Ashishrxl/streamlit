@@ -323,4 +323,4 @@ if "images" in st.session_state and st.session_state["images"]:
             else:
                 st.error("❌ Retry failed, no images generated.")
 
-st.markdown("end")
+st.markdown("---")
