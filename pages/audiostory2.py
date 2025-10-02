@@ -42,7 +42,7 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-GEMMA_MODEL = "gemini-3-12b-it"
+GEMMA_MODEL = "gemma-3-12b-it"
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 # Updated list with currently supported image models
