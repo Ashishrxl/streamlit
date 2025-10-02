@@ -189,8 +189,9 @@ def save_story_as_pdf(story, title="AI Roleplay Story"):
 
 # --- IMAGE GENERATION with visible stop button on failure ---
 def safe_generate_image(prompt, retries=2, delay=5):
+    unique_key = f"main_stop_button_{uuid.uuid4()}"
     stop_button_placeholder.button(
-        "🛑 Stop Image Generation", key="main_stop_button",
+        "🛑 Stop Image Generation", key=unique_key,
         on_click=lambda: st.session_state.update({"stop_images": True})
     )
     for model in IMAGE_MODELS:
@@ -250,7 +251,7 @@ def generate_images_from_story(story_text):
         else:
             st.warning(f"❌ Image generation failed for scene {i}")
             stop_button_placeholder.button(
-                "🛑 Stop Generation", key=f"failed_stop_{i}",
+                "🛑 Stop Generation", key=f"failed_stop_{uuid.uuid4()}",
                 on_click=lambda: st.session_state.update({"stop_images": True})
             )
             images.append((i, None))
