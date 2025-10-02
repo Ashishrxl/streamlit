@@ -150,7 +150,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
 
 # --- PDF generation using reportlab ---
 
-/* def generate_pdf_reportlab(text, title="AI Roleplay Story"):
+def generate_pdf_reportlabb(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
@@ -175,7 +175,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     c.showPage()
     c.save()
     buf.seek(0)
-    return buf */
+    return buf 
 
 # --- Main: Generate story + audio ---
 if st.button("Generate Story & Audio"):
