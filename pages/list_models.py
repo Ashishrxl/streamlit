@@ -18,7 +18,7 @@ html(
 
 # Streamlit App
 st.set_page_config(page_title="Google Generative AI Models", layout="wide")
-st.title("🔍 Models list accessed via Google API")
+st.title("🔍 Models list of Google API")
 
 hide_streamlit_style = """
 <style>
