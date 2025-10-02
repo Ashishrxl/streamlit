@@ -145,7 +145,9 @@ def generate_pdf_unicode(text, title="AI Roleplay Story"):
 def safe_generate_image(prompt, retries=3, delay=5):
     enhanced_prompt = (
         f"Create a high-quality illustration for this scene:
-{prompt} Style: digital illustration, cinematic, detailed, vibrant."
+{prompt}
+"
+        "Style: digital illustration, cinematic, detailed, vibrant."
     )
     for model in IMAGE_MODELS:
         for attempt in range(retries):
