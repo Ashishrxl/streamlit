@@ -155,7 +155,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    # Register a TTF font for Unicode support
+    
     pdfmetrics.registerFont(TTFont("DejaVu", "DejaVuSans.ttf"))
 
     y = height - 50
