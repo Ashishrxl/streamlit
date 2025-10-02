@@ -52,8 +52,7 @@ TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 # IMAGE_MODELS = ["gemini-2.5-flash-image-preview", "gemini-2.0-flash-preview-image-generation, "gemini-2.0-flash-exp-image-generation"]
 
-IMAGE_MODELS = ["gemini-2.5-flash-image-preview"]
-
+IMAGE_MODELS = [ "gemini-2.0-flash-preview-image-generation"]
 api_keys = {
     "Key 1": st.secrets["GOOGLE_API_KEY_1"],
     "Key 2": st.secrets["GOOGLE_API_KEY_2"]
