@@ -140,11 +140,11 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
 
     # Styles
     stylesheet = getSampleStyleSheet()
-    stylesheet.add(ParagraphStyle(name="Hindi",
+    stylesheet.add(ParagraphStyle(name="My Hindi",
                                   fontName="NotoSans",
                                   fontSize=12,
                                   leading=16))
-    stylesheet.add(ParagraphStyle(name="Title",
+    stylesheet.add(ParagraphStyle(name="My Title",
                                   fontName="NotoSans",
                                   fontSize=18,
                                   leading=22,
