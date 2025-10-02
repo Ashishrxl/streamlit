@@ -191,8 +191,7 @@ def safe_generate_image(prompt, retries=3, delay=5):
 
 def generate_images_from_story(story_text):
     # Better scene detection: skip short/brief lines and intros
-    raw_scenes = [p.strip() for p in story_text.split("
-") if p.strip()]
+    raw_scenes = [p.strip() for p in story_text.split(" ") if p.strip()]
     scenes = []
     for scene in raw_scenes:
         if len(scene) > 50 and not scene.lower().startswith("character:") and not scene.lower().startswith("introduction:"):
