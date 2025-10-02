@@ -130,7 +130,7 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
 
     # Font setup
-    font_path = "NotoSansDevanagari-Regular.ttf"
+    font_path = "NotoSans-Regular.ttf"
     if not os.path.exists(font_path):
         raise FileNotFoundError(
             "Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support."
