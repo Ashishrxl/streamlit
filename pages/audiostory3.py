@@ -236,8 +236,7 @@ def safe_generate_image(prompt, retries=2, delay=5):
     return None
 
 def generate_images_from_story(story_text):
-    scenes = [p.strip() for p in story_text.split("
-") if p.strip()]
+    scenes = [p.strip() for p in story_text.split(" ") if p.strip()]
     images = []
     st.session_state["stop_images"] = False
     stop_button_placeholder.empty()
