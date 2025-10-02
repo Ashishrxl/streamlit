@@ -125,19 +125,26 @@ def map_language_code(language):
 
 
 
-# PDF generator (same as you provided)
 def generate_pdf_reportlab(text, title="AI Roleplay Story"):
     buf = io.BytesIO()
 
-    # Font setup
-    font_path = "NotoSans-Regular.ttf"
-    if not os.path.exists(font_path):
+    # ✅ Font setup
+    deva_font_path = "NotoSansDevanagari-Regular.ttf"
+    latin_font_path = "NotoSans-Regular.ttf"
+
+    if not os.path.exists(deva_font_path):
         raise FileNotFoundError(
             "Add NotoSansDevanagari-Regular.ttf in the folder for Hindi/Unicode support."
         )
-    pdfmetrics.registerFont(TTFont("NotoSans", font_path))
+    if not os.path.exists(latin_font_path):
+        raise FileNotFoundError(
+            "Add NotoSans-Regular.ttf in the folder for English support."
+        )
 
-    # Create doc
+    pdfmetrics.registerFont(TTFont("NotoSansDeva", deva_font_path))
+    pdfmetrics.registerFont(TTFont("NotoSansLatin", latin_font_path))
+
+    # Create document
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
@@ -149,44 +156,73 @@ def generate_pdf_reportlab(text, title="AI Roleplay Story"):
 
     # Styles
     stylesheet = getSampleStyleSheet()
-    # Add custom styles with unique names
+
+    # Devanagari (Hindi/Bhojpuri) styles
     stylesheet.add(
         ParagraphStyle(
-            name="MyBody",
-            fontName="NotoSans",
+            name="MyBodyDeva",
+            fontName="NotoSansDeva",
             fontSize=12,
             leading=16
         )
     )
     stylesheet.add(
         ParagraphStyle(
-            name="MyTitle",
-            fontName="NotoSans",
+            name="MyTitleDeva",
+            fontName="NotoSansDeva",
             fontSize=18,
             leading=22,
             alignment=1  # centered
         )
     )
 
+    # Latin (English) styles
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyBodyLatin",
+            fontName="NotoSansLatin",
+            fontSize=12,
+            leading=16
+        )
+    )
+    stylesheet.add(
+        ParagraphStyle(
+            name="MyTitleLatin",
+            fontName="NotoSansLatin",
+            fontSize=18,
+            leading=22,
+            alignment=1  # centered
+        )
+    )
+
+    # Simple Devanagari detector
+    devanagari_re = re.compile(r'[\u0900-\u097F]')
+    def is_devanagari(text_line):
+        return bool(devanagari_re.search(text_line))
+
     story = []
 
     # Title
-    story.append(Paragraph(title, stylesheet["MyTitle"]))
+    if is_devanagari(title):
+        story.append(Paragraph(title, stylesheet["MyTitleDeva"]))
+    else:
+        story.append(Paragraph(title, stylesheet["MyTitleLatin"]))
     story.append(Spacer(1, 20))
 
     # Content
     for line in text.split("\n"):
         if line.strip():
-            story.append(Paragraph(line.strip(), stylesheet["MyBody"]))
+            if is_devanagari(line):
+                story.append(Paragraph(line.strip(), stylesheet["MyBodyDeva"]))
+            else:
+                story.append(Paragraph(line.strip(), stylesheet["MyBodyLatin"]))
             story.append(Spacer(1, 8))
 
     doc.build(story)
-
     buf.seek(0)
     return buf
 
-
-# 🔹 New wrapper function to use with your generated story
+# 🔹 Wrapper function
 def save_story_as_pdf(story, title="AI Roleplay Story"):
     pdf_buffer = generate_pdf_reportlab(story, title=title)
     return pdf_buffer
