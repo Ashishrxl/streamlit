@@ -96,12 +96,12 @@ def pcm_to_wav_bytes(pcm_bytes, channels=1, rate=24000, sample_width=2):
 
 def map_voice(voice_choice):
     mapping = {
-        "English Male": "Kore",
-        "English Female": "Charon",
-        "Hindi Male": "Kore",
-        "Hindi Female": "Charon",
-        "Bhojpuri Male": "Kore",
-        "Bhojpuri Female": "Charon"
+        "English Male": "Charon",
+        "English Female": "Kore",
+        "Hindi Male": "Charon",
+        "Hindi Female": "Kore",
+        "Bhojpuri Male": "Charon",
+        "Bhojpuri Female": "Kore"
     }
     return mapping.get(voice_choice, "Kore")
 
