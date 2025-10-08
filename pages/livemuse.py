@@ -5,7 +5,7 @@ import io
 import numpy as np
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-
+from audiorecorder import audiorecorder  # ✅ added for recording
 
 html(
   """
@@ -72,20 +72,24 @@ tempo = st.slider("Tempo (BPM)", 60, 160, 100)
 duration = st.slider("Desired output length (seconds)", 5, 30, 15)
 instrument = st.sidebar.selectbox("Target Style", ["Piano", "Lo-fi Beat", "Synth Pad", "Guitar", "Ambient"])
 
-# --- Audio input ---
-st.header("1️⃣ Upload or record your seed audio")
-uploaded = st.file_uploader("Upload WAV/MP3/OGG", type=["wav", "mp3", "ogg"])
 
-if uploaded:
-    seed_audio = uploaded.read()
-    st.audio(seed_audio)
+# --- Audio input ---
+st.header("1️⃣ Record your seed audio")
+
+audio = audiorecorder("🎤 Click to record", "⏹ Stop recording")
+
+if len(audio) > 0:
+    wav_bytes = audio.tobytes()
+    st.audio(wav_bytes, format="audio/wav")
+    seed_audio = wav_bytes
 else:
-    st.info("Please upload a short audio clip (5–10 seconds).")
+    st.info("Press the record button and hum or beatbox for 5–10 seconds 🎙️")
+
 
 # --- Generate ---
 st.header("2️⃣ Generate AI Music")
 
-if st.button("🎶 Generate with Gemini") and uploaded:
+if st.button("🎶 Generate with Gemini") and len(audio) > 0:
     st.spinner("Calling Gemini model...")
 
     api_key = st.secrets.get("GOOGLE_API_KEY")
@@ -159,8 +163,8 @@ if st.button("🎶 Generate with Gemini") and uploaded:
     except requests.exceptions.RequestException as e:
         st.error(f"API request failed: {e}")
 
-elif st.button("🎶 Generate with Google") and not uploaded:
-    st.warning("Please upload or record audio first!")
+elif st.button("🎶 Generate with Google") and len(audio) == 0:
+    st.warning("Please record audio first!")
 
 st.markdown("---")
 st.caption("Powered by Gemini 2.5 Flash Native Audio — via Google AI Studio API key")
