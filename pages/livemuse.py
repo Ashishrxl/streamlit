@@ -159,7 +159,7 @@ if st.button("🎶 Generate with Gemini") and uploaded:
     except requests.exceptions.RequestException as e:
         st.error(f"API request failed: {e}")
 
-elif st.button("🎶 Generate with Gemini") and not uploaded:
+elif st.button("🎶 Generate with Google") and not uploaded:
     st.warning("Please upload or record audio first!")
 
 st.markdown("---")
