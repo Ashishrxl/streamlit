@@ -1,3 +1,4 @@
+import audioop_lts as audioop
 import streamlit as st
 import requests
 import base64
