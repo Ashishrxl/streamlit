@@ -5,7 +5,7 @@ import io
 import numpy as np
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-from streamlit_audio_recorder import audio_recorder 
+from audiorecorder import audiorecorder  # ✅ correct working recorder module
 
 html(
   """
@@ -56,7 +56,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 st.set_page_config(page_title="🎙️ LiveMuse", layout="centered")
 
 st.title("🎵 LiveMuse – Real-time AI Music Co-Creation")
-st.write("Hum, beatbox, or upload a clip — Gemini will turn your idea into music 🎧")
+st.write("Hum, beatbox, or record a clip — Gemini will turn your idea into music 🎧")
 
 # --- Sidebar ---
 
@@ -76,18 +76,12 @@ instrument = st.sidebar.selectbox("Target Style", ["Piano", "Lo-fi Beat", "Synth
 # --- Audio input ---
 st.header("1️⃣ Record your seed audio")
 
-recorded_audio_enhanced = audio_recorder(
-    text="Click to record",
-    recording_color="#e8b62c",
-    neutral_color="#6aa36f",
-    icon_name="microphone",
-    icon_size="2x",
-    key="enhanced_recorder"
-)
+audio = audiorecorder("🎤 Click to record", "⏹ Stop recording")
 
-if recorded_audio_enhanced:
-    st.audio(recorded_audio_enhanced, format="audio/wav")
-    seed_audio = recorded_audio_enhanced
+if len(audio) > 0:
+    wav_bytes = audio.tobytes()
+    st.audio(wav_bytes, format="audio/wav")
+    seed_audio = wav_bytes
 else:
     st.info("Press the record button and hum or beatbox for 5–10 seconds 🎙️")
 
@@ -95,81 +89,81 @@ else:
 # --- Generate ---
 st.header("2️⃣ Generate AI Music")
 
-if st.button("🎶 Generate with Gemini") and recorded_audio_enhanced:
-    st.spinner("Calling Gemini model...")
+if st.button("🎶 Generate with Gemini") and len(audio) > 0:
+    with st.spinner("Calling Gemini model..."):
 
-    api_key = st.secrets.get("GOOGLE_API_KEY")
-    if not api_key:
-        st.error("Missing GOOGLE_API_KEY in Streamlit secrets.")
-        st.stop()
+        api_key = st.secrets.get("GOOGLE_API_KEY")
+        if not api_key:
+            st.error("Missing GOOGLE_API_KEY in Streamlit secrets.")
+            st.stop()
 
-    # Encode audio to base64
-    audio_b64 = base64.b64encode(seed_audio).decode("utf-8")
+        # Encode audio to base64
+        audio_b64 = base64.b64encode(seed_audio).decode("utf-8")
 
-    # Gemini REST endpoint
-    url = "https://generativelanguage.googleapis.com/v1beta/models/" + model_choice + ":generateContent"
+        # Gemini REST endpoint
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + model_choice + ":generateContent"
 
-    # Create the request payload
-    prompt = (
-        f"Transform this vocal or beat idea into a short {instrument} loop "
-        f"at {tempo} BPM, around {duration} seconds long. "
-        "Make it sound musical and natural."
-    )
+        # Create the request payload
+        prompt = (
+            f"Transform this vocal or beat idea into a short {instrument} loop "
+            f"at {tempo} BPM, around {duration} seconds long. "
+            "Make it sound musical and natural."
+        )
 
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "audio/wav",
-                            "data": audio_b64
-                        }
-                    },
-                ]
-            }
-        ]
-    }
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": audio_b64
+                            }
+                        },
+                    ]
+                }
+            ]
+        }
 
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        }
 
-    # Send request
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        data = response.json()
+        # Send request
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
 
-        # Parse response — Gemini audio models may return audio in base64 or text
-        generated_audio = None
-        if "candidates" in data:
-            for c in data["candidates"]:
-                parts = c.get("content", {}).get("parts", [])
-                for p in parts:
-                    if "inline_data" in p and p["inline_data"].get("mime_type", "").startswith("audio"):
-                        generated_audio = base64.b64decode(p["inline_data"]["data"])
-                        break
+            # Parse response — Gemini audio models may return audio in base64 or text
+            generated_audio = None
+            if "candidates" in data:
+                for c in data["candidates"]:
+                    parts = c.get("content", {}).get("parts", [])
+                    for p in parts:
+                        if "inline_data" in p and p["inline_data"].get("mime_type", "").startswith("audio"):
+                            generated_audio = base64.b64decode(p["inline_data"]["data"])
+                            break
 
-        if generated_audio:
-            st.success("✅ Music generated successfully!")
-            st.audio(generated_audio)
+            if generated_audio:
+                st.success("✅ Music generated successfully!")
+                st.audio(generated_audio)
 
-            b64 = base64.b64encode(generated_audio).decode()
-            st.markdown(
-                f'<a href="data:audio/wav;base64,{b64}" download="livemuse_output.wav">📥 Download AI Music</a>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.error("No audio data returned from Gemini.")
-            st.json(data)
+                b64 = base64.b64encode(generated_audio).decode()
+                st.markdown(
+                    f'<a href="data:audio/wav;base64,{b64}" download="livemuse_output.wav">📥 Download AI Music</a>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.error("No audio data returned from Gemini.")
+                st.json(data)
 
-    except requests.exceptions.RequestException as e:
-        st.error(f"API request failed: {e}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")
 
-elif st.button("🎶 Generate with Google") and not recorded_audio_enhanced:
+elif st.button("🎶 Generate with Google") and len(audio) == 0:
     st.warning("Please record audio first!")
 
 st.markdown("---")
