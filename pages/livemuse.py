@@ -60,7 +60,7 @@ st.write("Hum, beatbox, or upload a clip — Gemini will turn your idea into mus
 
 # --- Sidebar ---
 
-model_choice = st.sidebar.selectbox(
+model_choice = st.selectbox(
     "Gemini Audio Model",
     [
         "models/gemini-2.5-flash-native-audio-preview-09-2025",
