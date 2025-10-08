@@ -5,7 +5,7 @@ import io
 import numpy as np
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-from audiorecorder import audiorecorder  # ✅ added for recording
+from streamlit_audio_recorder import audio_recorder  # ✅ updated import
 
 html(
   """
@@ -76,12 +76,18 @@ instrument = st.sidebar.selectbox("Target Style", ["Piano", "Lo-fi Beat", "Synth
 # --- Audio input ---
 st.header("1️⃣ Record your seed audio")
 
-audio = audiorecorder("🎤 Click to record", "⏹ Stop recording")
+recorded_audio_enhanced = audio_recorder(
+    text="Click to record",
+    recording_color="#e8b62c",
+    neutral_color="#6aa36f",
+    icon_name="microphone",
+    icon_size="2x",
+    key="enhanced_recorder"
+)
 
-if len(audio) > 0:
-    wav_bytes = audio.tobytes()
-    st.audio(wav_bytes, format="audio/wav")
-    seed_audio = wav_bytes
+if recorded_audio_enhanced:
+    st.audio(recorded_audio_enhanced, format="audio/wav")
+    seed_audio = recorded_audio_enhanced
 else:
     st.info("Press the record button and hum or beatbox for 5–10 seconds 🎙️")
 
@@ -89,7 +95,7 @@ else:
 # --- Generate ---
 st.header("2️⃣ Generate AI Music")
 
-if st.button("🎶 Generate with Gemini") and len(audio) > 0:
+if st.button("🎶 Generate with Gemini") and recorded_audio_enhanced:
     st.spinner("Calling Gemini model...")
 
     api_key = st.secrets.get("GOOGLE_API_KEY")
@@ -163,7 +169,7 @@ if st.button("🎶 Generate with Gemini") and len(audio) > 0:
     except requests.exceptions.RequestException as e:
         st.error(f"API request failed: {e}")
 
-elif st.button("🎶 Generate with Google") and len(audio) == 0:
+elif st.button("🎶 Generate with Google") and not recorded_audio_enhanced:
     st.warning("Please record audio first!")
 
 st.markdown("---")
