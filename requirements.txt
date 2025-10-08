@@ -15,7 +15,8 @@ google-generativeai
 langchain-google-genai
 langchain-experimental
 tabulate
-audioop-lts
+scipy
+streamlit-webrtc
 
 # Secure CSV Visualizer - Requirements
 streamlit>=1.28.0
