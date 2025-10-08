@@ -5,7 +5,7 @@ import io
 import numpy as np
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-from streamlit_audio_recorder import audio_recorder  # ✅ updated import
+from streamlit_audio_recorder import audio_recorder 
 
 html(
   """
