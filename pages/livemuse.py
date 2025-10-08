@@ -6,7 +6,7 @@ import numpy as np
 import wave
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
 import av
 
 # --- Hide Streamlit branding ---
@@ -72,18 +72,22 @@ instrument = st.sidebar.selectbox(
 # --- WebRTC Audio Recorder ---
 st.header("1️⃣ Record your seed audio")
 
+# Buffer to hold recorded frames
 recorded_frames = []
 
-def audio_callback(frame: av.AudioFrame):
-    recorded_frames.append(frame)
-    return frame
+# Define Audio Processor
+class AudioProcessor(AudioProcessorBase):
+    def recv_audio_frame(self, frame: av.AudioFrame) -> av.AudioFrame:
+        recorded_frames.append(frame)
+        return frame
 
+# Create WebRTC streamer
 webrtc_ctx = webrtc_streamer(
     key="audio-recorder",
     mode=WebRtcMode.SENDONLY,
     audio_receiver_size=256,
     media_stream_constraints={"audio": True, "video": False},
-    on_audio_frame=audio_callback,
+    audio_processor_factory=AudioProcessor,
 )
 
 seed_audio = None
@@ -93,7 +97,6 @@ if st.button("⏹ Stop & Save Recording"):
         st.info("Processing your recording...")
         audio_data = b""
         for f in recorded_frames:
-            # Convert each frame to bytes
             sound = f.to_ndarray().astype(np.int16).tobytes()
             audio_data += sound
 
