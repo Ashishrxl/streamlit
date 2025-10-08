@@ -1,23 +1,25 @@
-import audioop_lts as audioop
 import streamlit as st
 import requests
 import base64
 import io
 import numpy as np
+import wave
 from scipy.io import wavfile
 from streamlit.components.v1 import html
-from audiorecorder import audiorecorder  # ✅ correct working recorder module
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
+import av
 
+# --- Hide Streamlit branding ---
 html(
-  """
-  <script>
-  try {
-    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-    sel.forEach(e => e.style.display='none');
-  } catch(e) { console.warn('parent DOM not reachable', e); }
-  </script>
-  """,
-  height=0
+    """
+    <script>
+    try {
+        const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+        sel.forEach(e => e.style.display='none');
+    } catch(e) { console.warn('parent DOM not reachable', e); }
+    </script>
+    """,
+    height=0
 )
 
 disable_footer_click = """
@@ -28,13 +30,13 @@ disable_footer_click = """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
 
 st.set_page_config(
-    page_title="My App",
+    page_title="🎙️ LiveMuse",
     page_icon="🌐",
-    initial_sidebar_state="expanded"
+    layout="centered",
+    initial_sidebar_state="expanded",
 )
 
-
-# --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
+# --- Hide top menu and toolbar ---
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -43,24 +45,16 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
-
-/* The following specifically targets and hides all child elements of the header's right side,
-   while preserving the header itself and, by extension, the sidebar toggle button. */
-header > div:nth-child(2) {
-    display: none;
-}
+header > div:nth-child(2) {display: none;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-
-st.set_page_config(page_title="🎙️ LiveMuse", layout="centered")
-
+# --- Title ---
 st.title("🎵 LiveMuse – Real-time AI Music Co-Creation")
 st.write("Hum, beatbox, or record a clip — Gemini will turn your idea into music 🎧")
 
-# --- Sidebar ---
-
+# --- Sidebar settings ---
 model_choice = st.selectbox(
     "Gemini Audio Model",
     [
@@ -71,40 +65,70 @@ model_choice = st.selectbox(
 )
 tempo = st.slider("Tempo (BPM)", 60, 160, 100)
 duration = st.slider("Desired output length (seconds)", 5, 30, 15)
-instrument = st.sidebar.selectbox("Target Style", ["Piano", "Lo-fi Beat", "Synth Pad", "Guitar", "Ambient"])
+instrument = st.sidebar.selectbox(
+    "Target Style", ["Piano", "Lo-fi Beat", "Synth Pad", "Guitar", "Ambient"]
+)
 
-
-# --- Audio input ---
+# --- WebRTC Audio Recorder ---
 st.header("1️⃣ Record your seed audio")
 
-audio = audiorecorder("🎤 Click to record", "⏹ Stop recording")
+recorded_frames = []
 
-if len(audio) > 0:
-    wav_bytes = audio.tobytes()
-    st.audio(wav_bytes, format="audio/wav")
-    seed_audio = wav_bytes
-else:
-    st.info("Press the record button and hum or beatbox for 5–10 seconds 🎙️")
+def audio_callback(frame: av.AudioFrame):
+    recorded_frames.append(frame)
+    return frame
 
+webrtc_ctx = webrtc_streamer(
+    key="audio-recorder",
+    mode=WebRtcMode.SENDONLY,
+    audio_receiver_size=256,
+    media_stream_constraints={"audio": True, "video": False},
+    on_audio_frame=audio_callback,
+)
 
-# --- Generate ---
+seed_audio = None
+
+if st.button("⏹ Stop & Save Recording"):
+    if len(recorded_frames) > 0:
+        st.info("Processing your recording...")
+        audio_data = b""
+        for f in recorded_frames:
+            # Convert each frame to bytes
+            sound = f.to_ndarray().astype(np.int16).tobytes()
+            audio_data += sound
+
+        # Convert to WAV
+        sample_rate = recorded_frames[0].sample_rate
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_data)
+
+        seed_audio = buffer.getvalue()
+        st.audio(seed_audio, format="audio/wav")
+        st.success("✅ Recording saved successfully!")
+    else:
+        st.warning("No audio recorded yet. Please record first.")
+
+# --- Generate Music ---
 st.header("2️⃣ Generate AI Music")
 
-if st.button("🎶 Generate with Gemini") and len(audio) > 0:
+if st.button("🎶 Generate with Gemini") and seed_audio:
     with st.spinner("Calling Gemini model..."):
-
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key:
             st.error("Missing GOOGLE_API_KEY in Streamlit secrets.")
             st.stop()
 
-        # Encode audio to base64
+        # Encode audio
         audio_b64 = base64.b64encode(seed_audio).decode("utf-8")
 
-        # Gemini REST endpoint
-        url = "https://generativelanguage.googleapis.com/v1beta/models/" + model_choice + ":generateContent"
+        # API endpoint
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_choice}:generateContent"
 
-        # Create the request payload
+        # Prompt
         prompt = (
             f"Transform this vocal or beat idea into a short {instrument} loop "
             f"at {tempo} BPM, around {duration} seconds long. "
@@ -119,7 +143,7 @@ if st.button("🎶 Generate with Gemini") and len(audio) > 0:
                         {
                             "inline_data": {
                                 "mime_type": "audio/wav",
-                                "data": audio_b64
+                                "data": audio_b64,
                             }
                         },
                     ]
@@ -132,13 +156,12 @@ if st.button("🎶 Generate with Gemini") and len(audio) > 0:
             "x-goog-api-key": api_key,
         }
 
-        # Send request
+        # Call Gemini API
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             data = response.json()
 
-            # Parse response — Gemini audio models may return audio in base64 or text
             generated_audio = None
             if "candidates" in data:
                 for c in data["candidates"]:
@@ -151,7 +174,6 @@ if st.button("🎶 Generate with Gemini") and len(audio) > 0:
             if generated_audio:
                 st.success("✅ Music generated successfully!")
                 st.audio(generated_audio)
-
                 b64 = base64.b64encode(generated_audio).decode()
                 st.markdown(
                     f'<a href="data:audio/wav;base64,{b64}" download="livemuse_output.wav">📥 Download AI Music</a>',
@@ -164,7 +186,7 @@ if st.button("🎶 Generate with Gemini") and len(audio) > 0:
         except requests.exceptions.RequestException as e:
             st.error(f"API request failed: {e}")
 
-elif st.button("🎶 Generate with Google") and len(audio) == 0:
+elif st.button("🎶 Generate with Google") and not seed_audio:
     st.warning("Please record audio first!")
 
 st.markdown("---")
