@@ -99,8 +99,7 @@ with col2:
 st.divider()
 st.subheader("📋 Activity Log")
 if st.session_state.translations:
-    activity_text = "
-".join([f"• {t}" for t in st.session_state.translations[-10:]])
+    activity_text = " ".join([f"• {t}" for t in st.session_state.translations[-10:]])
     st.text_area("Recent translations", activity_text, height=150, disabled=True)
 
 st.divider()
