@@ -45,4 +45,6 @@ requests
 speechrecognition
 sounddevice
 gTTS
+langdetect
+pydub
 
