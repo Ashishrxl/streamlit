@@ -43,5 +43,5 @@ requests
 
 
 speechrecognition
-pyaudio
+sounddevice
 
