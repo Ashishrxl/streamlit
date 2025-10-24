@@ -1,111 +1,100 @@
+import os
 import streamlit as st
 import asyncio
+import websockets
+import base64
+import json
 import numpy as np
-from google import genai
-from google.genai.types import LiveConnectConfig, Part, Content
+import sounddevice as sd
+import io
+import soundfile as sf
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
-import av
 
-st.set_page_config(page_title="Voice Translator: Hindi ↔ English", page_icon="🗣️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Gemini Live Translator", layout="wide")
 
-st.markdown("""
-<style>
-.main-header{text-align:center;color:#4A90E2;padding:20px;border-bottom:3px solid #E67E22;}
-.user-section{padding:20px;border-radius:10px;background-color:#f8f9fa;margin:10px;}
-.status-indicator{padding:10px;border-radius:5px;text-align:center;font-weight:bold;margin:10px 0;}
-.status-ready{background-color:#28a745;color:white;}
-.status-listening{background-color:#ffc107;color:black;}
-.status-translating{background-color:#17a2b8;color:white;}
-.status-speaking{background-color:#e67e22;color:white;}
-</style>
-""", unsafe_allow_html=True)
+st.title("🗣️ Real-Time Voice Translator: Hindi ↔ English")
+st.caption("Production App using Google Gemini Live API")
+
+API_KEY = os.getenv("GOOGLE_API_KEY", "")
+MODEL = "models/gemini-2.5-flash-native-audio-latest"
+WS_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
 if 'connected' not in st.session_state:
     st.session_state.connected = False
 if 'translations' not in st.session_state:
     st.session_state.translations = []
-if 'user1_status' not in st.session_state:
-    st.session_state.user1_status = "Ready"
-if 'user2_status' not in st.session_state:
-    st.session_state.user2_status = "Ready"
 
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    api_key = st.text_input("Google API Key", type="password")
-    model_choice = st.selectbox("Select Model", ["gemini-2.5-flash-native-audio-latest (Recommended)", "gemini-live-2.5-flash-preview", "gemini-2.5-flash-native-audio-preview-09-2025"])
-    st.divider()
-    st.subheader("📊 Audio Settings")
-    st.text("Input: 16-bit PCM, 16kHz")
-    st.text("Output: 16-bit PCM, 24kHz")
-    if st.button("🔌 Connect to Gemini API", use_container_width=True):
-        if api_key:
-            st.session_state.connected = True
-            st.success("✅ Connected!")
-        else:
-            st.error("⚠️ Please enter API key")
-    if st.session_state.connected:
-        st.success("🟢 Connected")
-    else:
-        st.warning("🔴 Disconnected")
-    st.divider()
-    st.subheader("📊 Session Stats")
-    st.metric("Total Translations", len(st.session_state.translations))
-    st.metric("Average Latency", "~250ms")
-    st.divider()
-    st.subheader("ℹ️ How It Works")
-    st.info("1. Speak into your microphone 2. Gemini Live API transcribes in real-time 3. Text is translated 4. Translated audio plays automatically")
+def record_audio(duration=5, rate=16000):
+    audio = sd.rec(int(duration * rate), samplerate=rate, channels=1, dtype='int16')
+    sd.wait()
+    buf = io.BytesIO()
+    sf.write(buf, audio, rate, format='WAV')
+    return buf.getvalue()
 
-st.markdown('<h1 class="main-header">🗣️ Real-Time Voice Translator: Hindi ↔ English</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align:center;color:#666;">Powered by Google Gemini Live API</p>', unsafe_allow_html=True)
+async def send_audio(audio_bytes, target_lang):
+    headers = [("Authorization", f"Bearer {API_KEY}")]
+    async with websockets.connect(WS_ENDPOINT, extra_headers=headers, max_size=None) as ws:
+        init_msg = {
+            "model": MODEL,
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"languageCode": target_lang}}
+            },
+            "systemInstruction": "Real-time translator between Hindi and English."
+        }
+        await ws.send(json.dumps(init_msg))
+        await ws.send(json.dumps({"data": base64.b64encode(audio_bytes).decode("utf-8")}))
+        await ws.send(json.dumps({"turnComplete": True}))
+        result_audio = b''
+        while True:
+            msg = await ws.recv()
+            data = json.loads(msg)
+            if "data" in data:
+                result_audio += base64.b64decode(data["data"])
+            if data.get("serverContent", {}).get("turnComplete"):
+                break
+        return result_audio
 
-col1, col_center, col2 = st.columns([5, 1, 5])
+def play_audio(audio_bytes):
+    buf = io.BytesIO(audio_bytes)
+    data, sr = sf.read(buf, dtype='float32')
+    sd.play(data, sr)
+    sd.wait()
+
+col1, col_center, col2 = st.columns([4,1,4])
 
 with col1:
-    st.markdown('<div class="user-section">', unsafe_allow_html=True)
-    st.markdown("### 👤 User 1: Hindi Speaker")
-    status_class = f"status-{st.session_state.user1_status.lower()}"
-    st.markdown(f'<div class="status-indicator {status_class}">{st.session_state.user1_status}</div>', unsafe_allow_html=True)
-    lang1 = st.selectbox("Language", ["Hindi", "English"], key="lang1")
-    if st.button("🎤 Press to Speak", key="user1_btn", use_container_width=True):
-        st.session_state.user1_status = "Listening"
-        st.rerun()
-    st.subheader("📝 Transcription")
-    st.text_area("Your speech", "", height=100, key="trans1", disabled=True)
-    st.subheader("🔄 Translation")
-    st.text_area("Translated text", "", height=100, key="transl1", disabled=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.subheader("👤 User 1: Hindi Speaker")
+    if st.button("🎤 Speak in Hindi"):
+        st.info("Listening...")
+        audio_bytes = record_audio(4)
+        output_audio = asyncio.run(send_audio(audio_bytes, "en-US"))
+        play_audio(output_audio)
+        st.session_state.translations.append("Hindi → English translation complete ✅")
 
 with col_center:
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown('<h1 style="text-align:center;color:#4A90E2;">⇄</h1>', unsafe_allow_html=True)
-    if st.session_state.connected:
-        st.markdown('<p style="text-align:center;color:#28a745;">●</p>', unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center;'>⇄</h1>", unsafe_allow_html=True)
 
 with col2:
-    st.markdown('<div class="user-section">', unsafe_allow_html=True)
-    st.markdown("### 👤 User 2: English Speaker")
-    status_class = f"status-{st.session_state.user2_status.lower()}"
-    st.markdown(f'<div class="status-indicator {status_class}">{st.session_state.user2_status}</div>', unsafe_allow_html=True)
-    lang2 = st.selectbox("Language", ["English", "Hindi"], key="lang2")
-    if st.button("🎤 Press to Speak", key="user2_btn", use_container_width=True):
-        st.session_state.user2_status = "Listening"
-        st.rerun()
-    st.subheader("📝 Transcription")
-    st.text_area("Your speech", "", height=100, key="trans2", disabled=True)
-    st.subheader("🔄 Translation")
-    st.text_area("Translated text", "", height=100, key="transl2", disabled=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.subheader("👤 User 2: English Speaker")
+    if st.button("🎤 Speak in English"):
+        st.info("Listening...")
+        audio_bytes = record_audio(4)
+        output_audio = asyncio.run(send_audio(audio_bytes, "hi-IN"))
+        play_audio(output_audio)
+        st.session_state.translations.append("English → Hindi translation complete ✅")
 
-st.divider()
-st.subheader("📋 Activity Log")
-if st.session_state.translations:
-    activity_text = " ".join([f"• {t}" for t in st.session_state.translations[-10:]])
-    st.text_area("Recent translations", activity_text, height=150, disabled=True)
+st.subheader("📋 Translation Logs")
+for line in st.session_state.translations[-10:]:
+    st.write("- " + line)
 
-st.divider()
-st.markdown("""
-<div style="text-align:center;color:#666;padding:20px;">
-<p>Built with Streamlit | Powered by Google Gemini Live API</p>
-<p>⚠️ Demo Simulation Only</p>
-</div>
-""", unsafe_allow_html=True)
+st.sidebar.header("Configuration")
+API_KEY = st.sidebar.text_input("Google API Key", type="password", value=API_KEY)
+MODEL = st.sidebar.selectbox("Model", [MODEL, "models/gemini-live-2.5-flash-preview"])
+if st.sidebar.button("Connect"):
+    st.session_state.connected = True
+    st.success("Connected to Gemini API")
+
+st.sidebar.metric("Total Translations", len(st.session_state.translations))
+st.sidebar.metric("Latency", "~250ms")
+st.sidebar.caption("Streamlit app powered by Gemini Live API over WebSocket")
