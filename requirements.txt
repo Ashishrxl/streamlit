@@ -39,3 +39,9 @@ soundfile
 
 requests
 
+
+
+
+speechrecognition
+pyaudio
+
