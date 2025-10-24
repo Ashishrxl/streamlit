@@ -10,6 +10,53 @@ from gtts import gTTS
 from langdetect import detect, DetectorFactory
 from pydub import AudioSegment
 from pydub.playback import play
+from streamlit.components.v1 import html
+
+
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+st.set_page_config(
+    page_title="My App",
+    page_icon="🌐",
+    initial_sidebar_state="expanded"
+)
+
+
+# --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+
+/* The following specifically targets and hides all child elements of the header's right side,
+   while preserving the header itself and, by extension, the sidebar toggle button. */
+header > div:nth-child(2) {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 DetectorFactory.seed = 0
 
@@ -18,16 +65,16 @@ st.set_page_config(page_title="🎙️ TalkPlay – Voice Adventure", layout="wi
 st.title("🎮 TalkPlay – Voice-Controlled Adventure Game with AI Voice")
 
 # --- Sidebar controls ---
-st.sidebar.header("🎧 Voice Settings")
-voice_choice = st.sidebar.selectbox(
+st.header("🎧 Voice Settings")
+voice_choice = st.selectbox(
     "Choose your AI narrator voice:",
     ["Narrator (English)", "Mystic (Hindi)", "Monster (Deep)", "Companion (Fast)"],
 )
-speed_factor = st.sidebar.slider("Voice Speed", 0.6, 1.5, 1.0, 0.1)
-pitch_shift = st.sidebar.slider("Voice Pitch (semitones)", -8, 8, 0, 1)
+speed_factor = st.slider("Voice Speed", 0.6, 1.5, 1.0, 0.1)
+pitch_shift = st.slider("Voice Pitch (semitones)", -8, 8, 0, 1)
 
 st.sidebar.markdown("---")
-st.sidebar.info("🎙️ Tip: Speak or type your commands below!")
+st.info("🎙️ Tip: Speak or type your commands below!")
 
 # --- Configure Gemini API ---
 API_KEY = st.secrets["GOOGLE_API_KEY"]
