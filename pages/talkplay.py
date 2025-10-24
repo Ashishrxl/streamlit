@@ -109,7 +109,7 @@ def gemini_reply(context):
     prompt = f"""
     You are TalkPlay AI, the narrator of an interactive adventure game.
     The player just said: "{context}"
-    Continue the story immersively and describe what happens next in a dramatic tone.
+    Continue the story immersively and describe what happens next in a dramatic tone. and use hindi language only.
     """
     response = model.generate_content(prompt)
     return response.text.strip()
