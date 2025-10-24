@@ -53,10 +53,7 @@ with st.sidebar:
     st.metric("Average Latency", "~250ms")
     st.divider()
     st.subheader("ℹ️ How It Works")
-    st.info("1. Speak into your microphone
-2. Gemini Live API transcribes in real-time
-3. Text is translated
-4. Translated audio plays automatically")
+    st.info("1. Speak into your microphone 2. Gemini Live API transcribes in real-time 3. Text is translated 4. Translated audio plays automatically")
 
 st.markdown('<h1 class="main-header">🗣️ Real-Time Voice Translator: Hindi ↔ English</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align:center;color:#666;">Powered by Google Gemini Live API</p>', unsafe_allow_html=True)
