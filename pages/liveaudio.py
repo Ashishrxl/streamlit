@@ -9,7 +9,7 @@ import numpy as np
 import aiohttp
 
 st.set_page_config(page_title="Voice Translator", layout="wide")
-API_KEY = os.getenv("GOOGLE_API_KEY", "")
+API_KEY = st.sidebar.text_input("Google API Key", type="password", key="api_key")
 MODEL = "models/gemini-2.5-flash-native-audio-latest"
 WS_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
@@ -86,5 +86,5 @@ st.subheader("📜 Translation Log")
 for t in st.session_state.translations[-10:]:
     st.write("• " + t)
 
-st.sidebar.text_input("Google API Key", type="password", key="api_key")
+
 st.sidebar.caption("This version runs in browser — mobile and desktop supported.")
