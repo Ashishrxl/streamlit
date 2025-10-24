@@ -1,90 +1,74 @@
-import os
-import asyncio
-import json
-import base64
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
-import av
+import asyncio
 import numpy as np
-import aiohttp
+import sounddevice as sd
+from google import genai
+from google.genai import types
 
-st.set_page_config(page_title="Voice Translator", layout="wide")
-API_KEY = st.sidebar.text_input("Google API Key", type="password", key="api_key")
-MODEL = "models/gemini-2.5-flash-native-audio-latest"
-WS_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+st.set_page_config(page_title="Voice Translator: Hindi ↔ English", page_icon="🌐", layout="wide")
 
-st.title("🌐 Real-Time Voice Translator (Hindi ↔ English)")
-st.caption("Runs on any browser or device — no PortAudio needed!")
+if "translator" not in st.session_state:
+    st.session_state.translator = None
+if "session" not in st.session_state:
+    st.session_state.session = None
+if "connected" not in st.session_state:
+    st.session_state.connected = False
 
-if 'translations' not in st.session_state:
-    st.session_state.translations = []
+st.title("🌐 Real-Time Hindi ↔ English Voice Translator")
+st.markdown("**Powered by Google Gemini 2.5 Flash Native Audio**")
 
-async def translate_audio(audio_bytes: bytes, target_lang: str):
-    headers = {"Authorization": f"Bearer {API_KEY}"}
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect(WS_ENDPOINT, headers=headers, max_msg_size=0) as ws:
-            await ws.send_json({
-                "model": MODEL,
-                "generationConfig": {
-                    "responseModalities": ["AUDIO"],
-                    "speechConfig": {"voiceConfig": {"languageCode": target_lang}}
-                },
-                "systemInstruction": "Act as a real-time translator between Hindi and English."
-            })
-            await ws.send_json({"data": base64.b64encode(audio_bytes).decode("utf-8")})
-            await ws.send_json({"turnComplete": True})
-            result = b""
-            async for msg in ws:
-                data = json.loads(msg.data)
-                if "data" in data:
-                    result += base64.b64decode(data["data"])
-                if data.get("serverContent", {}).get("turnComplete"):
-                    break
-            return result
+# Read API key from Streamlit secrets
+try:
+    key = st.secrets["GOOGLE_API_KEY"]
+except Exception:
+    st.error("Google API Key not found in Streamlit secrets. Please add `google_api_key` to your secrets.")
+    st.stop()
 
-def audio_callback(frame: av.AudioFrame):
-    pcm = frame.to_ndarray().astype(np.int16).tobytes()
-    st.session_state.audio_buffer = pcm
-    return frame
+model = st.selectbox("Model", ["gemini-2.5-flash-native-audio-latest", "gemini-live-2.5-flash-preview"])
+src = st.selectbox("Source Language", ["Hindi (hi)", "English (en)"])
+tgt = st.selectbox("Target Language", ["English (en)", "Hindi (hi)"])
 
-rtc_config = {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-st.markdown("### 🗣️ Speak into your browser microphone")
+if not st.session_state.connected:
+    client = genai.Client(api_key=key)
+    config = types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        system_instruction=f"You are a real-time bidirectional translator between {src} and {tgt}."
+    )
+    session = client.aio.live.connect(model=model, config=config)
+    st.session_state.client = client
+    st.session_state.session = session
+    st.session_state.connected = True
+    st.success("Connected to Gemini API")
+
+async def record_and_translate(lang_code):
+    samplerate = 16000
+    duration = 5
+    st.info("Recording...")
+    audio = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
+    sd.wait()
+    audio_bytes = audio.tobytes()
+
+    async with st.session_state.session as session:
+        await session.send_realtime_input(audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"))
+        st.info("Translating...")
+        translated_audio = []
+        async for response in session.receive():
+            if response.data:
+                translated_audio.append(response.data)
+            if response.server_content and response.server_content.turn_complete:
+                break
+        audio_out = b''.join(translated_audio)
+        st.success("Playing Translated Audio")
+        np_audio = np.frombuffer(audio_out, dtype=np.int16)
+        sd.play(np_audio, 24000)
+        sd.wait()
 
 col1, col2 = st.columns(2)
+
 with col1:
-    st.subheader("👤 User 1: Hindi → English")
-    ctx_hi = webrtc_streamer(
-        key="hindi",
-        mode=WebRtcMode.SENDONLY,
-        rtc_configuration=rtc_config,
-        media_stream_constraints={"audio": True, "video": False},
-        audio_frame_callback=audio_callback
-    )
-    if st.button("Translate from Hindi"):
-        if 'audio_buffer' in st.session_state:
-            translated_audio = asyncio.run(translate_audio(st.session_state.audio_buffer, "en-US"))
-            st.audio(translated_audio, format="audio/wav")
-            st.session_state.translations.append("Hindi → English done ✅")
+    if st.button("🎤 Speak in Source Language"):
+        asyncio.run(record_and_translate(src))
 
 with col2:
-    st.subheader("👤 User 2: English → Hindi")
-    ctx_en = webrtc_streamer(
-        key="english",
-        mode=WebRtcMode.SENDONLY,
-        rtc_configuration=rtc_config,
-        media_stream_constraints={"audio": True, "video": False},
-        audio_frame_callback=audio_callback
-    )
-    if st.button("Translate from English"):
-        if 'audio_buffer' in st.session_state:
-            translated_audio = asyncio.run(translate_audio(st.session_state.audio_buffer, "hi-IN"))
-            st.audio(translated_audio, format="audio/wav")
-            st.session_state.translations.append("English → Hindi done ✅")
-
-st.divider()
-st.subheader("📜 Translation Log")
-for t in st.session_state.translations[-10:]:
-    st.write("• " + t)
-
-
-st.sidebar.caption("This version runs in browser — mobile and desktop supported.")
+    if st.button("🎤 Speak in Target Language"):
+        asyncio.run(record_and_translate(tgt))
