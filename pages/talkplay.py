@@ -6,7 +6,7 @@ import speech_recognition as sr
 import tempfile
 import numpy as np
 import wave
-import base64
+from gtts import gTTS
 
 # --- Streamlit setup ---
 st.set_page_config(page_title="🎙️ TalkPlay – Voice Adventure", layout="wide")
@@ -23,10 +23,7 @@ Speak commands like:
 # --- Configure Gemini API ---
 API_KEY = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=API_KEY)
-
-# Use Gemini model with audio output support
-MODEL = "gemini-2.5-flash-native-audio-preview-09-2025"
-model = genai.GenerativeModel(MODEL)
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 # --- Game state ---
 GAME_DESCRIPTION = """
@@ -59,26 +56,24 @@ def process_command(cmd):
     else:
         return f"The forest seems quiet... Your command '{cmd}' doesn't do much."
 
-# --- Gemini AI narration (with audio output) ---
-def gemini_narrate(context):
-    """Ask Gemini to respond with voice narration."""
+# --- Gemini AI Narration (text only) ---
+def gemini_reply(context):
+    """Get immersive narration text from Gemini."""
     prompt = f"""
     You are TalkPlay AI, the narrator of an interactive adventure game.
     The player just said: "{context}"
     Continue the story immersively and describe what happens next in a dramatic tone.
     """
-    response = model.generate_content(
-        prompt,
-        generation_config={"response_mime_type": "audio/wav"},
-    )
+    response = model.generate_content(prompt)
+    return response.text.strip()
 
-    # Save audio to a temporary file
-    audio_data = response.audio  # Binary audio
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        f.write(audio_data)
-        audio_path = f.name
-
-    return response.text, audio_path
+# --- Text-to-Speech (gTTS) helper ---
+def text_to_speech(text):
+    """Convert AI narration text to spoken audio using gTTS."""
+    tts = gTTS(text)
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        tts.save(f.name)
+        return f.name
 
 # --- Audio Processor (speech to text) ---
 class AudioProcessor(AudioProcessorBase):
@@ -141,17 +136,17 @@ if command:
 
     # Game logic + AI narration
     local_response = process_command(command)
-    ai_text, audio_path = gemini_narrate(f"{command}. Context: {local_response}")
+    ai_text = gemini_reply(f"{command}. Context: {local_response}")
     full_response = f"{local_response}\n\n**AI Narration:** {ai_text}"
 
     # Display AI text
     st.chat_message("assistant").markdown(full_response)
     st.session_state.history.append({"role": "assistant", "content": full_response})
 
-    # Play AI voice
+    # Generate and play voice
+    audio_path = text_to_speech(ai_text)
     with open(audio_path, "rb") as f:
-        audio_bytes = f.read()
-        st.audio(audio_bytes, format="audio/wav")
+        st.audio(f.read(), format="audio/mp3")
 
 # --- Reset button ---
 if st.button("🔄 Restart Game"):
