@@ -1,74 +1,69 @@
 import streamlit as st
 import asyncio
 import numpy as np
-import sounddevice as sd
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from google import genai
 from google.genai import types
 
 st.set_page_config(page_title="Voice Translator: Hindi ↔ English", page_icon="🌐", layout="wide")
 
-if "translator" not in st.session_state:
-    st.session_state.translator = None
-if "session" not in st.session_state:
-    st.session_state.session = None
-if "connected" not in st.session_state:
-    st.session_state.connected = False
-
 st.title("🌐 Real-Time Hindi ↔ English Voice Translator")
 st.markdown("**Powered by Google Gemini 2.5 Flash Native Audio**")
 
-# Read API key from Streamlit secrets
 try:
-    key = st.secrets["GOOGLE_API_KEY"]
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
 except Exception:
-    st.error("Google API Key not found in Streamlit secrets. Please add `google_api_key` to your secrets.")
+    st.error("Missing 'google_api_key' in Streamlit secrets.")
     st.stop()
 
 model = st.selectbox("Model", ["gemini-2.5-flash-native-audio-latest", "gemini-live-2.5-flash-preview"])
-src = st.selectbox("Source Language", ["Hindi (hi)", "English (en)"])
-tgt = st.selectbox("Target Language", ["English (en)", "Hindi (hi)"])
+src_lang = st.selectbox("Source Language", ["Hindi (hi)", "English (en)"])
+tgt_lang = st.selectbox("Target Language", ["English (en)", "Hindi (hi)"])
 
-if not st.session_state.connected:
-    client = genai.Client(api_key=key)
-    config = types.LiveConnectConfig(
-        response_modalities=["AUDIO"],
-        system_instruction=f"You are a real-time bidirectional translator between {src} and {tgt}."
-    )
-    session = client.aio.live.connect(model=model, config=config)
-    st.session_state.client = client
-    st.session_state.session = session
-    st.session_state.connected = True
-    st.success("Connected to Gemini API")
+client = genai.Client(api_key=API_KEY)
+config = types.LiveConnectConfig(
+    response_modalities=["AUDIO"],
+    system_instruction=f"You are a real-time translator between {src_lang} and {tgt_lang}."
+)
 
-async def record_and_translate(lang_code):
-    samplerate = 16000
-    duration = 5
-    st.info("Recording...")
-    audio = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
-    sd.wait()
-    audio_bytes = audio.tobytes()
+st.session_state.session = client.aio.live.connect(model=model, config=config)
 
-    async with st.session_state.session as session:
-        await session.send_realtime_input(audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"))
-        st.info("Translating...")
-        translated_audio = []
-        async for response in session.receive():
-            if response.data:
-                translated_audio.append(response.data)
-            if response.server_content and response.server_content.turn_complete:
-                break
-        audio_out = b''.join(translated_audio)
-        st.success("Playing Translated Audio")
-        np_audio = np.frombuffer(audio_out, dtype=np.int16)
-        sd.play(np_audio, 24000)
-        sd.wait()
+st.markdown("### Speak and translate live from your browser microphone.")
 
-col1, col2 = st.columns(2)
+audio_buffer = []
 
-with col1:
-    if st.button("🎤 Speak in Source Language"):
-        asyncio.run(record_and_translate(src))
+def audio_frame_callback(frame):
+    array = frame.to_ndarray(format="s16")
+    audio_buffer.append(array.tobytes())
+    return frame
 
-with col2:
-    if st.button("🎤 Speak in Target Language"):
-        asyncio.run(record_and_translate(tgt))
+webrtc_ctx = webrtc_streamer(
+    key="translator",
+    mode=WebRtcMode.SENDRECV,
+    audio_frame_callback=audio_frame_callback,
+    media_stream_constraints={"audio": True, "video": False},
+    async_processing=True,
+)
+
+if st.button("Translate Spoken Audio"):
+    if not audio_buffer:
+        st.warning("Please speak first!")
+    else:
+        audio_bytes = b"".join(audio_buffer)
+        audio_buffer.clear()
+
+        async def translate_and_play():
+            session = await st.session_state.session.__aenter__()
+            await session.send_realtime_input(audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000"))
+            translated_audio_chunks = []
+            async for resp in session.receive():
+                if resp.data:
+                    translated_audio_chunks.append(resp.data)
+                if resp.server_content and resp.server_content.turn_complete:
+                    break
+            await session.__aexit__(None, None, None)
+
+            translated_audio = b"".join(translated_audio_chunks)
+            st.audio(translated_audio, format="audio/wav")
+
+        asyncio.run(translate_and_play())
