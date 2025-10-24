@@ -44,4 +44,5 @@ requests
 
 speechrecognition
 sounddevice
+gTTS
 
