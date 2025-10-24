@@ -6,10 +6,11 @@ import speech_recognition as sr
 import tempfile
 import numpy as np
 import wave
+import base64
 
-# --- Streamlit page setup ---
-st.set_page_config(page_title="🎙️ TalkPlay – Voice-Controlled Adventure Game", layout="wide")
-st.title("🎮 TalkPlay – Voice-Controlled Adventure Game")
+# --- Streamlit setup ---
+st.set_page_config(page_title="🎙️ TalkPlay – Voice Adventure", layout="wide")
+st.title("🎮 TalkPlay – Voice-Controlled Adventure Game with AI Voice")
 
 st.markdown("""
 Speak commands like:
@@ -22,9 +23,12 @@ Speak commands like:
 # --- Configure Gemini API ---
 API_KEY = st.secrets["GOOGLE_API_KEY"]
 genai.configure(api_key=API_KEY)
-MODEL = "gemini-2.5-flash"  # You can replace this with e.g. "models/gemini-2.5-flash-live-preview"
 
-# --- Basic game state ---
+# Use Gemini model with audio output support
+MODEL = "gemini-2.5-flash-native-audio-preview-09-2025"
+model = genai.GenerativeModel(MODEL)
+
+# --- Game state ---
 GAME_DESCRIPTION = """
 You are in a dark forest. Paths lead north and east.
 You hear a stream nearby. Monsters might lurk around.
@@ -55,30 +59,35 @@ def process_command(cmd):
     else:
         return f"The forest seems quiet... Your command '{cmd}' doesn't do much."
 
-# --- Gemini AI Narration ---
-def gemini_reply(context):
-    """Get immersive narrative output from Gemini."""
+# --- Gemini AI narration (with audio output) ---
+def gemini_narrate(context):
+    """Ask Gemini to respond with voice narration."""
     prompt = f"""
     You are TalkPlay AI, the narrator of an interactive adventure game.
     The player just said: "{context}"
-    Continue the story immersively and describe what happens next.
+    Continue the story immersively and describe what happens next in a dramatic tone.
     """
-    response = genai.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}]
+    response = model.generate_content(
+        prompt,
+        generation_config={"response_mime_type": "audio/wav"},
     )
-    return response["choices"][0]["message"]["content"]
 
-# --- Audio Processor for speech-to-text ---
+    # Save audio to a temporary file
+    audio_data = response.audio  # Binary audio
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio_data)
+        audio_path = f.name
+
+    return response.text, audio_path
+
+# --- Audio Processor (speech to text) ---
 class AudioProcessor(AudioProcessorBase):
     def __init__(self):
         self.recognizer = sr.Recognizer()
         self.text = ""
 
     def recv_audio(self, frame):
-        # Convert audio frame from WebRTC to numpy
         audio = frame.to_ndarray().astype(np.int16)
-
         try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
                 with wave.open(temp_wav.name, 'wb') as wf:
@@ -98,14 +107,13 @@ class AudioProcessor(AudioProcessorBase):
 if "history" not in st.session_state:
     st.session_state.history = [{"role": "assistant", "content": GAME_DESCRIPTION}]
 
-# Display chat history
 for msg in st.session_state.history:
     if msg["role"] == "user":
         st.chat_message("user").markdown(msg["content"])
     else:
         st.chat_message("assistant").markdown(msg["content"])
 
-# --- Voice input section ---
+# --- Voice input ---
 st.subheader("🎤 Speak your command below:")
 
 webrtc_ctx = webrtc_streamer(
@@ -115,7 +123,7 @@ webrtc_ctx = webrtc_streamer(
     media_stream_constraints={"audio": True, "video": False},
 )
 
-# --- Manual text input fallback ---
+# --- Manual text input ---
 user_text = st.chat_input("Or type your command here...")
 
 command = None
@@ -131,20 +139,24 @@ if command:
     st.chat_message("user").markdown(command)
     st.session_state.history.append({"role": "user", "content": command})
 
-    # Simple local response
+    # Game logic + AI narration
     local_response = process_command(command)
+    ai_text, audio_path = gemini_narrate(f"{command}. Context: {local_response}")
+    full_response = f"{local_response}\n\n**AI Narration:** {ai_text}"
 
-    # Gemini immersive response
-    ai_response = gemini_reply(f"{command}. Context: {local_response}")
-    full_response = f"{local_response}\n\n**AI Narration:** {ai_response}"
-
+    # Display AI text
     st.chat_message("assistant").markdown(full_response)
     st.session_state.history.append({"role": "assistant", "content": full_response})
 
-# --- Reset game button ---
+    # Play AI voice
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
+        st.audio(audio_bytes, format="audio/wav")
+
+# --- Reset button ---
 if st.button("🔄 Restart Game"):
     st.session_state.history = [{"role": "assistant", "content": GAME_DESCRIPTION}]
     GAME_STATE["location"] = "forest"
     GAME_STATE["inventory"] = []
     GAME_STATE["visited"] = {"forest"}
-    st.experimental_rerun()
+    st.rerun()
