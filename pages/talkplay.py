@@ -8,21 +8,19 @@ import numpy as np
 import wave
 from gtts import gTTS
 from langdetect import detect, DetectorFactory
-from pydub import AudioSegment
-from pydub.playback import play
 from streamlit.components.v1 import html
 
-
+# Hide Streamlit default elements
 html(
-  """
-  <script>
-  try {
-    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-    sel.forEach(e => e.style.display='none');
-  } catch(e) { console.warn('parent DOM not reachable', e); }
-  </script>
-  """,
-  height=0
+    """
+    <script>
+    try {
+      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+      sel.forEach(e => e.style.display='none');
+    } catch(e) { console.warn('parent DOM not reachable', e); }
+    </script>
+    """,
+    height=0
 )
 
 disable_footer_click = """
@@ -33,13 +31,11 @@ disable_footer_click = """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
 
 st.set_page_config(
-    page_title="My App",
-    page_icon="🌐",
-    initial_sidebar_state="expanded"
+    page_title="🎙️ TalkPlay – Voice Adventure",
+    layout="wide"
 )
 
-
-# --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
+# CSS to hide unwanted elements
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -48,20 +44,13 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
-
-/* The following specifically targets and hides all child elements of the header's right side,
-   while preserving the header itself and, by extension, the sidebar toggle button. */
-header > div:nth-child(2) {
-    display: none;
-}
+header > div:nth-child(2) { display: none; }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 DetectorFactory.seed = 0
 
-# --- Streamlit setup ---
-st.set_page_config(page_title="🎙️ TalkPlay – Voice Adventure", layout="wide")
 st.title("🎮 TalkPlay – Voice-Controlled Adventure Game with AI Voice")
 
 # --- Sidebar controls ---
@@ -70,8 +59,9 @@ voice_choice = st.selectbox(
     "Choose your AI narrator voice:",
     ["Narrator (English)", "Mystic (Hindi)", "Monster (Deep)", "Companion (Fast)"],
 )
-speed_factor = st.slider("Voice Speed", 0.6, 1.5, 1.0, 0.1)
-pitch_shift = st.slider("Voice Pitch (semitones)", -8, 8, 0, 1)
+# Speed and pitch sliders are kept but won't affect audio for now
+speed_factor = st.slider("Voice Speed (Preview Only)", 0.6, 1.5, 1.0, 0.1)
+pitch_shift = st.slider("Voice Pitch (Preview Only)", -8, 8, 0, 1)
 
 st.sidebar.markdown("---")
 st.info("🎙️ Tip: Speak or type your commands below!")
@@ -89,7 +79,7 @@ You hear a stream nearby. Monsters might lurk around.
 
 GAME_STATE = {"location": "forest", "inventory": [], "visited": {"forest"}}
 
-
+# --- Game logic ---
 def process_command(cmd):
     cmd = cmd.lower()
     if "north" in cmd:
@@ -108,9 +98,8 @@ def process_command(cmd):
     else:
         return f"The forest seems quiet... Your command '{cmd}' doesn't do much."
 
-
+# --- Gemini AI narration ---
 def gemini_reply(context):
-    """Generate immersive narration text from Gemini."""
     prompt = f"""
     You are TalkPlay AI, the narrator of an interactive adventure game.
     The player just said: "{context}"
@@ -119,48 +108,24 @@ def gemini_reply(context):
     response = model.generate_content(prompt)
     return response.text.strip()
 
-
+# --- Text to speech (no pydub/ffmpeg) ---
 def text_to_speech(text):
-    """Convert text to audio with gTTS and apply style adjustments."""
-    # --- language detection ---
     try:
         lang = detect(text)
-        lang_map = {"hi": "hi", "en": "en", "bn": "bn", "ta": "ta", "te": "te", "gu": "gu", "mr": "mr"}
+        lang_map = {"hi": "hi", "en": "en"}
         gtts_lang = lang_map.get(lang, "en")
     except Exception:
         gtts_lang = "en"
 
-    # --- adjust language based on chosen voice ---
     if "Hindi" in voice_choice:
         gtts_lang = "hi"
     elif "English" in voice_choice:
         gtts_lang = "en"
 
-    # --- generate base audio ---
     tts = gTTS(text=text, lang=gtts_lang)
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
         tts.save(f.name)
-        base_path = f.name
-
-    # --- modify voice style (pitch/speed) ---
-    sound = AudioSegment.from_file(base_path, format="mp3")
-
-    # Speed control
-    sound = sound._spawn(sound.raw_data, overrides={
-        "frame_rate": int(sound.frame_rate * speed_factor)
-    }).set_frame_rate(sound.frame_rate)
-
-    # Pitch shift (semitones)
-    if pitch_shift != 0:
-        new_sample_rate = int(sound.frame_rate * (2.0 ** (pitch_shift / 12.0)))
-        sound = sound._spawn(sound.raw_data, overrides={'frame_rate': new_sample_rate})
-        sound = sound.set_frame_rate(44100)
-
-    # --- Save final adjusted audio ---
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as out_f:
-        sound.export(out_f.name, format="mp3")
-        return out_f.name
-
+        return f.name
 
 # --- Audio Processor (speech to text) ---
 class AudioProcessor(AudioProcessorBase):
@@ -184,8 +149,7 @@ class AudioProcessor(AudioProcessorBase):
             pass
         return frame
 
-
-# --- Chat History ---
+# --- Chat history ---
 if "history" not in st.session_state:
     st.session_state.history = [{"role": "assistant", "content": GAME_DESCRIPTION}]
 
