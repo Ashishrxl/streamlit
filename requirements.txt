@@ -50,4 +50,7 @@ aiortc>=1.5.0
 av>=10.0.0
 asyncio>=3.4.3
 
+PyPDF2 
+python-docx
+
 
