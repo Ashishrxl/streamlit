@@ -41,40 +41,31 @@ footer {visibility: hidden;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
 header > div:nth-child(2) { display: none; }
+.main { padding: 2rem; }
+.stButton > button {
+    width: 100%;
+    background-color: #4CAF50;
+    color: white;
+    padding: 0.75rem;
+    font-size: 1.1rem;
+}
+.success-box {
+    padding: 1rem;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 0.25rem;
+    color: #155724;
+}
+.warning-box {
+    padding: 1rem;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 0.25rem;
+    color: #856404;
+}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# Streamlit page config
-st.set_page_config(
-    page_title="Text-to-Audio Converter",
-    page_icon="🎙️",
-    layout="wide",
-)
-
-# Custom CSS for styling
-st.markdown(
-    """
-    <style>
-    .main { padding: 2rem; }
-    .stButton > button {
-        width: 100%;
-        background-color: #4CAF50;
-        color: white;
-        padding: 0.75rem;
-        font-size: 1.1rem;
-    }
-    .success-box {
-        padding: 1rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        border-radius: 0.25rem;
-        color: #155724;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # Helper function: save PCM data as WAV in an in-memory buffer
 def save_wave_file(pcm_data, channels=1, rate=24000, sample_width=2):
@@ -124,6 +115,35 @@ def extract_text_from_file(uploaded_file):
         st.error(f"Error processing file: {str(e)}")
         return None
 
+# Summarize text using Gemini API
+def summarize_text(text, api_key, max_words=3500):
+    """
+    Summarize long text to fit within TTS token limits
+    """
+    try:
+        client = genai.Client(api_key=api_key)
+        
+        prompt = f"""Please provide a comprehensive summary of the following text. 
+Capture all key points, main ideas, and important details while keeping the summary under {max_words} words.
+Maintain the flow and context of the original content.
+
+TEXT TO SUMMARIZE:
+{text}
+
+SUMMARY:"""
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",  # or "gemini-1.5-pro" or "gemini-1.5-flash"
+            contents=prompt
+        )
+        
+        summary = response.text
+        return summary
+
+    except Exception as e:
+        st.error(f"Error during summarization: {str(e)}")
+        return None
+
 # Generate audio from text using Gemini 2.5 Flash TTS
 def generate_audio_tts(text, api_key, voice_name='Kore', speaking_style=''):
     try:
@@ -158,9 +178,12 @@ def main():
     st.markdown("### Convert your text files to natural-sounding audio using Google's Gemini AI")
     st.markdown("---")
 
+    # Configuration constants
+    MAX_WORDS_FOR_TTS = 4000  # Safe limit for TTS without hitting quota
+
     # Sidebar for configuration
-    with st.expander("Settings", expanded=False):
-        st.header("⚙️ Configuration")
+    with st.expander("⚙️ Settings", expanded=False):
+        st.header("Configuration")
 
         api_key = st.secrets["GOOGLE_API_KEY"]
 
@@ -194,7 +217,8 @@ def main():
 
         st.markdown("---")
         st.info("💡 **Supported file formats:** TXT, PDF, DOCX")
-        st.info("📊 **Free tier limits:** 3 RPM, 15 RPD for TTS model")
+        st.info(f"📊 **Word limit for direct conversion:** {MAX_WORDS_FOR_TTS} words")
+        st.info("🤖 **Auto-summarization:** Texts longer than the limit will be automatically summarized")
 
     col1, col2 = st.columns([1, 1])
 
@@ -219,14 +243,22 @@ def main():
                 if extracted_text:
                     st.session_state['input_text'] = extracted_text
                     st.text_area(
-                        "Extracted Text (editable)",
+                        "Extracted Text (preview)",
                         value=extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else ""),
                         height=300,
-                        key="extracted_display"
+                        key="extracted_display",
+                        disabled=True
                     )
 
                     word_count = len(extracted_text.split())
                     st.caption(f"📊 Word count: {word_count} words")
+                    
+                    if word_count > MAX_WORDS_FOR_TTS:
+                        st.markdown(
+                            f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
+                            f'It will be automatically summarized before audio conversion.</div>',
+                            unsafe_allow_html=True
+                        )
 
         with input_tab2:
             typed_text = st.text_area(
@@ -240,44 +272,91 @@ def main():
                 st.session_state['input_text'] = typed_text
                 word_count = len(typed_text.split())
                 st.caption(f"📊 Word count: {word_count} words")
+                
+                if word_count > MAX_WORDS_FOR_TTS:
+                    st.markdown(
+                        f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
+                        f'It will be automatically summarized before audio conversion.</div>',
+                        unsafe_allow_html=True
+                    )
 
     with col2:
         st.header("🔊 Generate Audio")
 
         if api_key and 'input_text' in st.session_state and st.session_state['input_text']:
+            input_text = st.session_state['input_text']
+            word_count = len(input_text.split())
+
+            # Determine if summarization is needed
+            needs_summarization = word_count > MAX_WORDS_FOR_TTS
+
+            if needs_summarization:
+                st.info(f"📝 Original text: {word_count} words
+
+"
+                       f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+
             if st.button("🎵 Convert to Audio", type="primary"):
-                input_text = st.session_state['input_text']
-                word_count = len(input_text.split())
+                use_text = input_text
+                
+                # Summarize if needed
+                if needs_summarization:
+                    st.markdown("### 🤖 Step 1: Summarizing Text")
+                    with st.spinner("Summarizing long text to fit TTS limits... This may take a moment."):
+                        summary = summarize_text(input_text, api_key=api_key, max_words=MAX_WORDS_FOR_TTS)
+                    
+                    if summary:
+                        summary_word_count = len(summary.split())
+                        st.success(f"✅ Summarization complete! Reduced from {word_count} to {summary_word_count} words")
+                        
+                        # Show summary in an expander
+                        with st.expander("📄 View Summarized Text", expanded=False):
+                            st.text_area(
+                                "Summary",
+                                value=summary,
+                                height=200,
+                                disabled=True,
+                                key="summary_display"
+                            )
+                        
+                        use_text = summary
+                    else:
+                        st.error("❌ Failed to summarize text. Please try with shorter text or check your API quota.")
+                        use_text = None
 
-                if word_count > 10000:
-                    st.warning(f"⚠️ Your text has {word_count} words. Consider splitting into smaller chunks (max ~5000 words recommended).")
+                # Generate audio if we have valid text
+                if use_text:
+                    st.markdown("### 🎙️ Step 2: Generating Audio")
+                    with st.spinner("Converting text to audio... This may take a moment."):
+                        audio_data = generate_audio_tts(
+                            text=use_text,
+                            api_key=api_key,
+                            voice_name=selected_voice,
+                            speaking_style=speaking_style
+                        )
 
-                with st.spinner("🎙️ Generating audio... This may take a moment."):
-                    audio_data = generate_audio_tts(
-                        text=input_text,
-                        api_key=api_key,
-                        voice_name=selected_voice,
-                        speaking_style=speaking_style
-                    )
+                    if audio_data:
+                        audio_buffer = save_wave_file(audio_data)
 
-                if audio_data:
-                    audio_buffer = save_wave_file(audio_data)
+                        st.markdown('<div class="success-box">✅ Audio generated successfully!</div>', unsafe_allow_html=True)
 
-                    st.markdown('<div class="success-box">✅ Audio generated successfully!</div>', unsafe_allow_html=True)
+                        st.audio(audio_buffer, format='audio/wav')
 
-                    st.audio(audio_buffer, format='audio/wav')
+                        timestamp = time.strftime("%Y%m%d-%H%M%S")
+                        filename = f"audio_output_{timestamp}.wav"
 
-                    timestamp = time.strftime("%Y%m%d-%H%M%S")
-                    filename = f"audio_output_{timestamp}.wav"
+                        st.download_button(
+                            label="⬇️ Download Audio File",
+                            data=audio_buffer,
+                            file_name=filename,
+                            mime="audio/wav"
+                        )
 
-                    st.download_button(
-                        label="⬇️ Download Audio File",
-                        data=audio_buffer,
-                        file_name=filename,
-                        mime="audio/wav"
-                    )
-
-                    st.info(f"🎵 Voice: {selected_voice} 📝 Words: {word_count}")
+                        final_word_count = len(use_text.split())
+                        st.info(f"🎵 Voice: {selected_voice} | 📝 Words converted: {final_word_count}")
+                        
+                        if needs_summarization:
+                            st.caption(f"ℹ️ Original text ({word_count} words) was summarized for audio conversion")
 
         else:
             st.info("👈 Please provide:")
@@ -285,8 +364,6 @@ def main():
                 st.warning("🔑 Enter your Gemini API key in the sidebar")
             if 'input_text' not in st.session_state or not st.session_state.get('input_text'):
                 st.warning("📝 Upload a file or type text in the left panel")
-
-
 
 if __name__ == "__main__":
     main()
