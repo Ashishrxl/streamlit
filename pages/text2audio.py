@@ -348,10 +348,7 @@ def main():
             needs_summarization = word_count > MAX_WORDS_FOR_TTS
 
             if needs_summarization and not st.session_state.audio_generated:
-                st.info(f"📝 Original text: {word_count} words
-
-"
-                       f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+                st.info(f"📝 Original text: {word_count} words " f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
 
             if st.button("🎵 Convert to Audio", type="primary", key="convert_audio_btn"):
                 use_text = input_text
