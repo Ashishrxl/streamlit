@@ -246,19 +246,6 @@ def main():
             if 'input_text' not in st.session_state or not st.session_state.get('input_text'):
                 st.warning("📝 Upload a file or type text in the left panel")
 
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style='text-align: center; color: #666;'>
-            <p>🚀 Powered by <strong>Google Gemini 2.5 Flash TTS</strong> | 
-            Built with <strong>Streamlit</strong></p>
-            <p style='font-size: 0.9em;'>
-            ⚡ Get your free API key at <a href='https://ai.google.dev/' target='_blank'>ai.google.dev</a>
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 if __name__ == "__main__":
