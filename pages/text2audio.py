@@ -27,7 +27,7 @@ disable_footer_click = """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
 
 st.set_page_config(
-    page_title="🎙️ TalkPlay – Voice Adventure",
+    page_title="🎙️ Text 2 Audio",
     layout="wide"
 )
 
@@ -206,7 +206,7 @@ def generate_audio_tts(text, api_key, voice_name='Kore', speaking_style=''):
 
 def main():
     st.title("🎙️ Text-to-Audio Converter")
-    st.markdown("### Convert your text files to natural-sounding audio using Google's Gemini AI")
+    st.markdown("### Convert your text files to natural-sound")
     st.markdown("---")
 
     # Configuration constants
@@ -276,7 +276,7 @@ def main():
                     st.session_state.text_confirmed = True  # Auto-confirm for file uploads
                     
                     st.text_area(
-                        "Extracted Text (preview)",
+                        "Extracted Text",
                         value=extracted_text,
                         height=300,
                         key="extracted_display",
@@ -404,7 +404,7 @@ def main():
                         
                         use_text = summary
                     else:
-                        st.error("❌ Failed to summarize text. Please try with shorter text or check your API quota.")
+                        st.error("❌ Failed to summarize text. Please try with shorter text")
                         use_text = None
 
                 # Generate audio if we have valid text
@@ -479,7 +479,7 @@ def main():
         else:
             st.info("👈 Please provide:")
             if not api_key:
-                st.warning("🔑 Enter your Gemini API key in the sidebar")
+                st.warning("🔑 API key not found")
             if not st.session_state.text_confirmed or not st.session_state.input_text:
                 st.warning("📝 Upload a file or type text and click '✅ Proceed with This Text'")
 
