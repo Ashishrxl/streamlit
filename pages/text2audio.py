@@ -73,8 +73,7 @@ def extract_text_from_file(uploaded_file):
             doc = docx.Document(BytesIO(uploaded_file.read()))
             text = ""
             for paragraph in doc.paragraphs:
-                text += paragraph.text + "
-"
+                text += paragraph.text + " "
             return text
 
         else:
