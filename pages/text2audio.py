@@ -119,7 +119,7 @@ def main():
     st.markdown("---")
 
     # Sidebar for configuration
-    with st.sidebar:
+    with st.expander("Settings", expanded=False):
         st.header("⚙️ Configuration")
 
         api_key = st.secrets["GOOGLE_API_KEY"]
