@@ -63,6 +63,13 @@ header > div:nth-child(2) { display: none; }
     border-radius: 0.25rem;
     color: #856404;
 }
+.info-box {
+    padding: 1rem;
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 0.25rem;
+    color: #0c5460;
+}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -82,6 +89,10 @@ if 'was_summarized' not in st.session_state:
     st.session_state.was_summarized = False
 if 'selected_voice_used' not in st.session_state:
     st.session_state.selected_voice_used = None
+if 'text_confirmed' not in st.session_state:
+    st.session_state.text_confirmed = False
+if 'input_text' not in st.session_state:
+    st.session_state.input_text = ""
 
 # Helper function: save PCM data as WAV in an in-memory buffer
 def save_wave_file(pcm_data, channels=1, rate=24000, sample_width=2):
@@ -257,7 +268,9 @@ def main():
                     extracted_text = extract_text_from_file(uploaded_file)
 
                 if extracted_text:
-                    st.session_state['input_text'] = extracted_text
+                    st.session_state.input_text = extracted_text
+                    st.session_state.text_confirmed = True  # Auto-confirm for file uploads
+                    
                     st.text_area(
                         "Extracted Text (preview)",
                         value=extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else ""),
@@ -281,11 +294,11 @@ def main():
                 "Type or paste your text here",
                 height=300,
                 placeholder="Enter the text you want to convert to audio...",
-                key="typed_input"
+                key="typed_input",
+                value=st.session_state.input_text if not st.session_state.text_confirmed else ""
             )
 
             if typed_text:
-                st.session_state['input_text'] = typed_text
                 word_count = len(typed_text.split())
                 st.caption(f"📊 Word count: {word_count} words")
                 
@@ -295,21 +308,52 @@ def main():
                         f'It will be automatically summarized before audio conversion.</div>',
                         unsafe_allow_html=True
                     )
+                
+                # Add "Proceed with Text" button
+                col_btn1, col_btn2 = st.columns([1, 1])
+                
+                with col_btn1:
+                    if st.button("✅ Proceed with This Text", type="primary", key="proceed_text_btn"):
+                        st.session_state.input_text = typed_text
+                        st.session_state.text_confirmed = True
+                        st.session_state.audio_generated = False  # Reset audio if new text
+                        st.success("✅ Text confirmed! You can now generate audio.")
+                        st.rerun()
+                
+                with col_btn2:
+                    if st.button("🔄 Clear Text", type="secondary", key="clear_text_btn"):
+                        st.session_state.input_text = ""
+                        st.session_state.text_confirmed = False
+                        st.session_state.audio_generated = False
+                        st.rerun()
+            
+            # Show confirmed text status
+            if st.session_state.text_confirmed and st.session_state.input_text and not uploaded_file:
+                confirmed_word_count = len(st.session_state.input_text.split())
+                st.markdown(
+                    f'<div class="info-box">✅ Text confirmed ({confirmed_word_count} words). '
+                    f'Ready to generate audio! ➡️</div>',
+                    unsafe_allow_html=True
+                )
 
     with col2:
         st.header("🔊 Generate Audio")
 
-        if api_key and 'input_text' in st.session_state and st.session_state['input_text']:
-            input_text = st.session_state['input_text']
+        # Check if text is confirmed before allowing audio generation
+        if api_key and st.session_state.text_confirmed and st.session_state.input_text:
+            input_text = st.session_state.input_text
             word_count = len(input_text.split())
 
             # Determine if summarization is needed
             needs_summarization = word_count > MAX_WORDS_FOR_TTS
 
             if needs_summarization and not st.session_state.audio_generated:
-                st.info(f"📝 Original text: {word_count} words " f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+                st.info(f"📝 Original text: {word_count} words
 
-            if st.button("🎵 Convert to Audio", type="primary"):
+"
+                       f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+
+            if st.button("🎵 Convert to Audio", type="primary", key="convert_audio_btn"):
                 use_text = input_text
                 
                 # Reset audio generated state
@@ -394,19 +438,21 @@ def main():
                     st.caption(f"ℹ️ Original text ({st.session_state.original_word_count} words) was summarized for audio conversion")
                 
                 # Add a button to clear and generate new audio
-                if st.button("🔄 Generate New Audio", type="secondary"):
+                if st.button("🔄 Generate New Audio", type="secondary", key="new_audio_btn"):
                     st.session_state.audio_generated = False
                     st.session_state.audio_buffer = None
                     st.session_state.summary_text = None
                     st.session_state.was_summarized = False
+                    st.session_state.text_confirmed = False
+                    st.session_state.input_text = ""
                     st.rerun()
 
         else:
             st.info("👈 Please provide:")
             if not api_key:
                 st.warning("🔑 Enter your Gemini API key in the sidebar")
-            if 'input_text' not in st.session_state or not st.session_state.get('input_text'):
-                st.warning("📝 Upload a file or type text in the left panel")
+            if not st.session_state.text_confirmed or not st.session_state.input_text:
+                st.warning("📝 Upload a file or type text and click '✅ Proceed with This Text'")
 
 if __name__ == "__main__":
     main()
