@@ -67,6 +67,22 @@ header > div:nth-child(2) { display: none; }
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+# Initialize session state variables
+if 'audio_generated' not in st.session_state:
+    st.session_state.audio_generated = False
+if 'audio_buffer' not in st.session_state:
+    st.session_state.audio_buffer = None
+if 'summary_text' not in st.session_state:
+    st.session_state.summary_text = None
+if 'original_word_count' not in st.session_state:
+    st.session_state.original_word_count = 0
+if 'final_word_count' not in st.session_state:
+    st.session_state.final_word_count = 0
+if 'was_summarized' not in st.session_state:
+    st.session_state.was_summarized = False
+if 'selected_voice_used' not in st.session_state:
+    st.session_state.selected_voice_used = None
+
 # Helper function: save PCM data as WAV in an in-memory buffer
 def save_wave_file(pcm_data, channels=1, rate=24000, sample_width=2):
     buffer = BytesIO()
@@ -290,11 +306,18 @@ def main():
             # Determine if summarization is needed
             needs_summarization = word_count > MAX_WORDS_FOR_TTS
 
-            if needs_summarization:
-                st.info(f"📝 Original text: {word_count} words " f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+            if needs_summarization and not st.session_state.audio_generated:
+                st.info(f"📝 Original text: {word_count} words
+
+"
+                       f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
 
             if st.button("🎵 Convert to Audio", type="primary"):
                 use_text = input_text
+                
+                # Reset audio generated state
+                st.session_state.audio_generated = False
+                st.session_state.was_summarized = False
                 
                 # Summarize if needed
                 if needs_summarization:
@@ -306,15 +329,10 @@ def main():
                         summary_word_count = len(summary.split())
                         st.success(f"✅ Summarization complete! Reduced from {word_count} to {summary_word_count} words")
                         
-                        # Show summary in an expander
-                        with st.expander("📄 View Summarized Text", expanded=False):
-                            st.text_area(
-                                "Summary",
-                                value=summary,
-                                height=200,
-                                disabled=True,
-                                key="summary_display"
-                            )
+                        # Store summary in session state
+                        st.session_state.summary_text = summary
+                        st.session_state.original_word_count = word_count
+                        st.session_state.was_summarized = True
                         
                         use_text = summary
                     else:
@@ -323,7 +341,7 @@ def main():
 
                 # Generate audio if we have valid text
                 if use_text:
-                    st.markdown("### 🎙️ Step 2: Generating Audio")
+                    st.markdown("### 🎙️ Step 2: Generating Audio" if needs_summarization else "### 🎙️ Generating Audio")
                     with st.spinner("Converting text to audio... This may take a moment."):
                         audio_data = generate_audio_tts(
                             text=use_text,
@@ -334,26 +352,57 @@ def main():
 
                     if audio_data:
                         audio_buffer = save_wave_file(audio_data)
-
-                        st.markdown('<div class="success-box">✅ Audio generated successfully!</div>', unsafe_allow_html=True)
-
-                        st.audio(audio_buffer, format='audio/wav')
-
-                        timestamp = time.strftime("%Y%m%d-%H%M%S")
-                        filename = f"audio_output_{timestamp}.wav"
-
-                        st.download_button(
-                            label="⬇️ Download Audio File",
-                            data=audio_buffer,
-                            file_name=filename,
-                            mime="audio/wav"
-                        )
-
-                        final_word_count = len(use_text.split())
-                        st.info(f"🎵 Voice: {selected_voice} | 📝 Words converted: {final_word_count}")
                         
-                        if needs_summarization:
-                            st.caption(f"ℹ️ Original text ({word_count} words) was summarized for audio conversion")
+                        # Store in session state
+                        st.session_state.audio_buffer = audio_buffer
+                        st.session_state.audio_generated = True
+                        st.session_state.final_word_count = len(use_text.split())
+                        st.session_state.selected_voice_used = selected_voice
+
+            # Display generated audio (persists after download button click)
+            if st.session_state.audio_generated and st.session_state.audio_buffer:
+                st.markdown('<div class="success-box">✅ Audio generated successfully!</div>', unsafe_allow_html=True)
+                
+                # Show summary if it was created
+                if st.session_state.was_summarized and st.session_state.summary_text:
+                    with st.expander("📄 View Summarized Text", expanded=False):
+                        st.text_area(
+                            "Summary",
+                            value=st.session_state.summary_text,
+                            height=200,
+                            disabled=True,
+                            key="summary_display_persist"
+                        )
+                
+                # Reset buffer position to beginning for audio player
+                st.session_state.audio_buffer.seek(0)
+                st.audio(st.session_state.audio_buffer, format='audio/wav')
+
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                filename = f"audio_output_{timestamp}.wav"
+
+                # Reset buffer position again for download
+                st.session_state.audio_buffer.seek(0)
+                st.download_button(
+                    label="⬇️ Download Audio File",
+                    data=st.session_state.audio_buffer,
+                    file_name=filename,
+                    mime="audio/wav",
+                    key="download_audio_btn"
+                )
+
+                st.info(f"🎵 Voice: {st.session_state.selected_voice_used} | 📝 Words converted: {st.session_state.final_word_count}")
+                
+                if st.session_state.was_summarized:
+                    st.caption(f"ℹ️ Original text ({st.session_state.original_word_count} words) was summarized for audio conversion")
+                
+                # Add a button to clear and generate new audio
+                if st.button("🔄 Generate New Audio", type="secondary"):
+                    st.session_state.audio_generated = False
+                    st.session_state.audio_buffer = None
+                    st.session_state.summary_text = None
+                    st.session_state.was_summarized = False
+                    st.rerun()
 
         else:
             st.info("👈 Please provide:")
