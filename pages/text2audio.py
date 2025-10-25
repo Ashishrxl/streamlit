@@ -237,8 +237,7 @@ def main():
                         mime="audio/wav"
                     )
 
-                    st.info(f"🎵 Voice: {selected_voice}
-📝 Words: {word_count}")
+                    st.info(f"🎵 Voice: {selected_voice} 📝 Words: {word_count}")
 
         else:
             st.info("👈 Please provide:")
