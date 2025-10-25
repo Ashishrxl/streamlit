@@ -93,6 +93,8 @@ if 'text_confirmed' not in st.session_state:
     st.session_state.text_confirmed = False
 if 'input_text' not in st.session_state:
     st.session_state.input_text = ""
+if 'typed_text_temp' not in st.session_state:
+    st.session_state.typed_text_temp = ""
 
 # Helper function: save PCM data as WAV in an in-memory buffer
 def save_wave_file(pcm_data, channels=1, rate=24000, sample_width=2):
@@ -290,33 +292,61 @@ def main():
                         )
 
         with input_tab2:
-            typed_text = st.text_area(
-                "Type or paste your text here",
-                height=300,
-                placeholder="Enter the text you want to convert to audio...",
-                key="typed_input",
-                value=st.session_state.input_text if not st.session_state.text_confirmed else ""
-            )
+            # Display confirmed text or text area
+            if st.session_state.text_confirmed and st.session_state.input_text and not uploaded_file:
+                confirmed_word_count = len(st.session_state.input_text.split())
+                st.markdown(
+                    f'<div class="info-box">✅ Text confirmed ({confirmed_word_count} words). '
+                    f'Ready to generate audio! ➡️</div>',
+                    unsafe_allow_html=True
+                )
+                
+                # Show preview of confirmed text
+                st.text_area(
+                    "Confirmed Text (preview)",
+                    value=st.session_state.input_text[:500] + ("..." if len(st.session_state.input_text) > 500 else ""),
+                    height=150,
+                    disabled=True,
+                    key="confirmed_text_preview"
+                )
+                
+                if st.button("🔄 Edit/Change Text", type="secondary", key="edit_text_btn"):
+                    st.session_state.text_confirmed = False
+                    st.session_state.typed_text_temp = st.session_state.input_text
+                    st.session_state.audio_generated = False
+                    st.rerun()
+            else:
+                # Text area and buttons always visible together
+                typed_text = st.text_area(
+                    "Type or paste your text here",
+                    height=300,
+                    placeholder="Enter the text you want to convert to audio...",
+                    value=st.session_state.typed_text_temp,
+                    key="typed_input"
+                )
 
-            if typed_text:
-                word_count = len(typed_text.split())
-                st.caption(f"📊 Word count: {word_count} words")
+                # Show word count if there's text
+                if typed_text:
+                    word_count = len(typed_text.split())
+                    st.caption(f"📊 Word count: {word_count} words")
+                    
+                    if word_count > MAX_WORDS_FOR_TTS:
+                        st.markdown(
+                            f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
+                            f'It will be automatically summarized before audio conversion.</div>',
+                            unsafe_allow_html=True
+                        )
                 
-                if word_count > MAX_WORDS_FOR_TTS:
-                    st.markdown(
-                        f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
-                        f'It will be automatically summarized before audio conversion.</div>',
-                        unsafe_allow_html=True
-                    )
-                
-                # Add "Proceed with Text" button
+                # Buttons are always visible
                 col_btn1, col_btn2 = st.columns([1, 1])
                 
                 with col_btn1:
-                    if st.button("✅ Proceed with This Text", type="primary", key="proceed_text_btn"):
+                    proceed_disabled = not typed_text or len(typed_text.strip()) == 0
+                    if st.button("✅ Proceed with This Text", type="primary", key="proceed_text_btn", disabled=proceed_disabled):
                         st.session_state.input_text = typed_text
                         st.session_state.text_confirmed = True
                         st.session_state.audio_generated = False  # Reset audio if new text
+                        st.session_state.typed_text_temp = ""
                         st.success("✅ Text confirmed! You can now generate audio.")
                         st.rerun()
                 
@@ -325,16 +355,8 @@ def main():
                         st.session_state.input_text = ""
                         st.session_state.text_confirmed = False
                         st.session_state.audio_generated = False
+                        st.session_state.typed_text_temp = ""
                         st.rerun()
-            
-            # Show confirmed text status
-            if st.session_state.text_confirmed and st.session_state.input_text and not uploaded_file:
-                confirmed_word_count = len(st.session_state.input_text.split())
-                st.markdown(
-                    f'<div class="info-box">✅ Text confirmed ({confirmed_word_count} words). '
-                    f'Ready to generate audio! ➡️</div>',
-                    unsafe_allow_html=True
-                )
 
     with col2:
         st.header("🔊 Generate Audio")
@@ -442,6 +464,7 @@ def main():
                     st.session_state.was_summarized = False
                     st.session_state.text_confirmed = False
                     st.session_state.input_text = ""
+                    st.session_state.typed_text_temp = ""
                     st.rerun()
 
         else:
