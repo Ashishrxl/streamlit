@@ -63,8 +63,7 @@ def extract_text_from_file(uploaded_file):
             pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
             text = ""
             for page in pdf_reader.pages:
-                text += page.extract_text() + "
-"
+                text += page.extract_text() + " "
             return text
 
         elif file_type in ['doc', 'docx']:
