@@ -277,7 +277,7 @@ def main():
                     
                     st.text_area(
                         "Extracted Text (preview)",
-                        value=extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else ""),
+                        value=extracted_text,
                         height=300,
                         key="extracted_display",
                         disabled=True
