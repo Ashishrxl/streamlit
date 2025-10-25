@@ -301,6 +301,14 @@ def main():
                     unsafe_allow_html=True
                 )
                 
+                # Show word count warning if needed
+                if confirmed_word_count > MAX_WORDS_FOR_TTS:
+                    st.markdown(
+                        f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
+                        f'It will be automatically summarized before audio conversion.</div>',
+                        unsafe_allow_html=True
+                    )
+                
                 # Show preview of confirmed text
                 st.text_area(
                     "Confirmed Text (preview)",
@@ -325,17 +333,7 @@ def main():
                     key="typed_input"
                 )
 
-                # Show word count if there's text
-                if typed_text:
-                    word_count = len(typed_text.split())
-                    st.caption(f"📊 Word count: {word_count} words")
-                    
-                    if word_count > MAX_WORDS_FOR_TTS:
-                        st.markdown(
-                            f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
-                            f'It will be automatically summarized before audio conversion.</div>',
-                            unsafe_allow_html=True
-                        )
+                # DON'T show word count here - only after clicking Proceed
                 
                 # Buttons are always visible
                 col_btn1, col_btn2 = st.columns([1, 1])
