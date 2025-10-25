@@ -4,6 +4,46 @@ from google.genai import types
 import wave
 from io import BytesIO
 import time
+from streamlit.components.v1 import html
+
+# Hide Streamlit default elements
+html(
+    """
+    <script>
+    try {
+      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+      sel.forEach(e => e.style.display='none');
+    } catch(e) { console.warn('parent DOM not reachable', e); }
+    </script>
+    """,
+    height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+st.set_page_config(
+    page_title="🎙️ TalkPlay – Voice Adventure",
+    layout="wide"
+)
+
+# CSS to hide unwanted elements
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+header > div:nth-child(2) { display: none; }
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Streamlit page config
 st.set_page_config(
