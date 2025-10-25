@@ -95,6 +95,8 @@ if 'input_text' not in st.session_state:
     st.session_state.input_text = ""
 if 'typed_text_temp' not in st.session_state:
     st.session_state.typed_text_temp = ""
+if 'current_typed_text' not in st.session_state:
+    st.session_state.current_typed_text = ""
 
 # Helper function: save PCM data as WAV in an in-memory buffer
 def save_wave_file(pcm_data, channels=1, rate=24000, sample_width=2):
@@ -324,37 +326,45 @@ def main():
                     st.session_state.audio_generated = False
                     st.rerun()
             else:
-                # Text area and buttons always visible together
-                typed_text = st.text_area(
-                    "Type or paste your text here",
-                    height=300,
-                    placeholder="Enter the text you want to convert to audio...",
-                    value=st.session_state.typed_text_temp,
-                    key="typed_input"
-                )
+                # Use form for better mobile experience - immediate button response
+                with st.form(key="text_input_form", clear_on_submit=False):
+                    typed_text = st.text_area(
+                        "Type or paste your text here",
+                        height=300,
+                        placeholder="Enter the text you want to convert to audio...",
+                        value=st.session_state.typed_text_temp,
+                        key="typed_input_form_area"
+                    )
 
-                # DON'T show word count here - only after clicking Proceed
+                    # Form buttons - these respond immediately
+                    col_btn1, col_btn2 = st.columns([1, 1])
+                    
+                    with col_btn1:
+                        submit_button = st.form_submit_button("✅ Proceed with This Text", type="primary")
+                    
+                    with col_btn2:
+                        clear_button = st.form_submit_button("🔄 Clear Text", type="secondary")
                 
-                # Buttons are always visible
-                col_btn1, col_btn2 = st.columns([1, 1])
-                
-                with col_btn1:
-                    proceed_disabled = not typed_text or len(typed_text.strip()) == 0
-                    if st.button("✅ Proceed with This Text", type="primary", key="proceed_text_btn", disabled=proceed_disabled):
+                # Handle form submission
+                if submit_button:
+                    if typed_text and len(typed_text.strip()) > 0:
                         st.session_state.input_text = typed_text
                         st.session_state.text_confirmed = True
                         st.session_state.audio_generated = False  # Reset audio if new text
                         st.session_state.typed_text_temp = ""
+                        st.session_state.current_typed_text = ""
                         st.success("✅ Text confirmed! You can now generate audio.")
                         st.rerun()
+                    else:
+                        st.warning("⚠️ Please enter some text before proceeding.")
                 
-                with col_btn2:
-                    if st.button("🔄 Clear Text", type="secondary", key="clear_text_btn"):
-                        st.session_state.input_text = ""
-                        st.session_state.text_confirmed = False
-                        st.session_state.audio_generated = False
-                        st.session_state.typed_text_temp = ""
-                        st.rerun()
+                if clear_button:
+                    st.session_state.input_text = ""
+                    st.session_state.text_confirmed = False
+                    st.session_state.audio_generated = False
+                    st.session_state.typed_text_temp = ""
+                    st.session_state.current_typed_text = ""
+                    st.rerun()
 
     with col2:
         st.header("🔊 Generate Audio")
@@ -463,6 +473,7 @@ def main():
                     st.session_state.text_confirmed = False
                     st.session_state.input_text = ""
                     st.session_state.typed_text_temp = ""
+                    st.session_state.current_typed_text = ""
                     st.rerun()
 
         else:
