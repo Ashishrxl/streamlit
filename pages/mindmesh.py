@@ -58,8 +58,8 @@ EMB_MODEL = "embedding-001"
 
 
 # ---------------- HELPERS ----------------
-def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
-    """Generate a natural language reply using Gemini 2.5 Pro with robust parsing."""
+def gemini_generate(prompt, temperature=0.4, max_output_tokens=1024):
+    """Generate a natural language reply using Gemini 2.5 Pro with full response parsing."""
     url = f"{BASE_GEMINI_URL}/models/{GEN_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -69,30 +69,41 @@ def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
         }
     }
 
-    r = requests.post(url, json=body, timeout=60)
-    if r.status_code != 200:
-        st.error(f"❌ Gemini API error: {r.status_code} — {r.text}")
-        st.stop()
-
-    data = r.json()
-
-    # ✅ More robust parsing logic
     try:
-        candidates = data.get("candidates", [])
-        if candidates:
-            content = candidates[0].get("content", {})
+        r = requests.post(url, json=body, timeout=90)
+        r.raise_for_status()
+        data = r.json()
+
+        # ✅ 1. Normal path — look inside candidates > content > parts
+        if "candidates" in data and data["candidates"]:
+            content = data["candidates"][0].get("content", {})
             parts = content.get("parts", [])
-            if parts and "text" in parts[0]:
-                return parts[0]["text"].strip()
-        # fallback: try "outputText" if available
+            if isinstance(parts, list) and parts:
+                # Collect all text parts (some replies are chunked)
+                text_parts = [p.get("text", "") for p in parts if isinstance(p, dict)]
+                result = " ".join(t.strip() for t in text_parts if t.strip())
+                if result:
+                    return result
+
+        # ✅ 2. Some responses may return text directly
         if "outputText" in data:
             return data["outputText"].strip()
+
+        # ✅ 3. If Gemini truncated output, show what we have
+        if "finishReason" in data.get("candidates", [{}])[0]:
+            finish_reason = data["candidates"][0]["finishReason"]
+            if finish_reason == "MAX_TOKENS":
+                return "⚠️ Gemini stopped early (token limit). Try increasing max_output_tokens."
+
+        # ✅ 4. Last fallback — pretty print JSON for debugging
+        return json.dumps(data, indent=2)
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"🌐 API request failed: {e}")
+        return "⚠️ Connection error. Please check your API key or network."
     except Exception as e:
-        st.warning(f"⚠️ Parsing error: {e}")
-
-    # if nothing parsed, show full JSON for debugging
-    return json.dumps(data, indent=2)
-
+        st.error(f"⚙️ Parsing error: {e}")
+        return "⚠️ Unable to parse Gemini response."
 
 def gemini_extract_concepts(conversation_text):
     """Ask Gemini to extract a semantic graph from conversation text."""
