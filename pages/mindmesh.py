@@ -8,6 +8,42 @@ from sklearn.metrics.pairwise import cosine_similarity
 import networkx as nx
 from pyvis.network import Network
 import tempfile
+from streamlit.components.v1 import html
+
+# --- Hide Streamlit UI elements ---
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+header > div:nth-child(2) {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ------------ Configuration & helpers ------------
 GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY_1"]  # Put in Streamlit Cloud secrets
@@ -15,6 +51,23 @@ GEMINI_MODEL = "models/gemini-2.5-pro"        # generation model
 EMBED_MODEL = "models/gemini-embedding-001"  # embedding model
 
 BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta2"
+
+def draw_pyvis(nodes, edges, vectors):
+    G = Network(height="650px", width="100%", bgcolor="#ffffff", font_color="black")
+    # add nodes
+    for n in nodes:
+        G.add_node(n["id"], label=n["label"], title=n["label"], shape="dot", size=20)
+    # add edges
+    for e in edges:
+        src = e.get("source")
+        tgt = e.get("target")
+        lab = e.get("label", "")
+        if src and tgt:
+            G.add_edge(src, tgt, title=lab, label=lab)
+    # ✅ FIX: use write_html() instead of show()
+    path = tempfile.NamedTemporaryFile(suffix=".html", delete=False).name
+    G.write_html(path)  # <- this avoids .render() call
+    return path
 
 def gemini_generate(prompt, temperature=0.2, max_output_tokens=512):
     """
@@ -176,22 +229,7 @@ with col2:
     st.header("Graph / Map")
     st.markdown("The semantic graph built from extracted concepts. Drag nodes to explore.")
 
-    def draw_pyvis(nodes, edges, vectors):
-        G = Network(height="650px", width="100%", bgcolor="#ffffff", font_color="black")
-        # add nodes
-        for n in nodes:
-            G.add_node(n["id"], label=n["label"], title=n["label"], shape="dot", size=20)
-        # add edges
-        for e in edges:
-            src = e.get("source")
-            tgt = e.get("target")
-            lab = e.get("label", "")
-            if src and tgt:
-                G.add_edge(src, tgt, title=lab, label=lab)
-        # Save to temp and return HTML
-        path = tempfile.NamedTemporaryFile(suffix=".html", delete=False).name
-        G.show(path)
-        return path
+    
 
     graph_html_path = draw_pyvis(st.session_state.nodes, st.session_state.edges, st.session_state.vectors)
     # Show HTML
