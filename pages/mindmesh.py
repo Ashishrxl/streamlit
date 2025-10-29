@@ -121,16 +121,33 @@ Return ONLY JSON with:
 Keep ids short. Avoid duplicates.
 """
     resp = gemini_generate(extraction_prompt, temperature=0.0, max_output_tokens=400)
+
+    # --- Clean model output ---
     try:
+        # Try to isolate JSON part between first '{' and last '}'
         start, end = resp.find("{"), resp.rfind("}")
         if start != -1 and end != -1:
             json_text = resp[start:end + 1]
-            return json.loads(json_text)
-    except Exception:
-        st.warning("⚠️ Could not parse JSON from Gemini.")
-        st.text(resp)
-    return {"nodes": [], "edges": []}
+            parsed = json.loads(json_text)
+        else:
+            raise ValueError("No JSON found")
 
+        # ✅ Validate structure
+        if "nodes" not in parsed or "edges" not in parsed:
+            raise ValueError("Invalid structure")
+        if not parsed["nodes"]:
+            raise ValueError("Empty nodes")
+
+        return parsed
+
+    except Exception as e:
+        st.warning(f"⚠️ Could not parse valid JSON from Gemini. Showing raw text instead.")
+        st.text(resp)
+        # Optional: add dummy node so graph shows something
+        return {
+            "nodes": [{"id": "n0", "label": "No valid concepts extracted"}],
+            "edges": []
+        }
 
 def gemini_embed(texts):
     """Generate embeddings using embedding-001 model."""
