@@ -58,7 +58,7 @@ EMB_MODEL = "embedding-001"
 
 
 # ---------------- HELPERS ----------------
-def gemini_generate(prompt, temperature=0.4, max_output_tokens=1024):
+def gemini_generate(prompt, temperature=0.4, max_output_tokens=2048):
     """Generate a natural language reply using Gemini 2.5 Pro with full response parsing."""
     url = f"{BASE_GEMINI_URL}/models/{GEN_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body = {
