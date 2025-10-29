@@ -8,41 +8,7 @@ from pyvis.network import Network
 import tempfile
 from streamlit.components.v1 import html
 
-# --- OPTIONAL: Preload a demo conversation for testing ---
-if "sample_loaded" not in st.session_state:
-    st.session_state.sample_loaded = False
 
-if st.button("📦 Load Sample Conversation (AI Demo)"):
-    # Load predefined conversation
-    st.session_state.conversations = [
-        {"role": "user", "text": "Hi Gemini, can you explain what Artificial Intelligence is?"},
-        {"role": "assistant", "text": "Artificial Intelligence (AI) is the simulation of human intelligence in computers and machines that are programmed to think and learn like humans."},
-        {"role": "user", "text": "How is machine learning related to AI?"},
-        {"role": "assistant", "text": "Machine learning is a subset of AI that focuses on algorithms and statistical models that allow systems to learn patterns from data and make predictions."},
-        {"role": "user", "text": "And what about deep learning?"},
-        {"role": "assistant", "text": "Deep learning is a subset of machine learning that uses neural networks with many layers to process data in complex ways, similar to how the human brain works."}
-    ]
-
-    # --- Auto concept extraction ---
-    convo_text = "\n".join([f"{c['role']}: {c['text']}" for c in st.session_state.conversations])
-    with st.spinner("Extracting concepts from sample..."):
-        parsed = gemini_extract_concepts(convo_text)
-    nodes = parsed.get("nodes", [])
-    edges = parsed.get("edges", [])
-
-    # Merge with session state
-    st.session_state.nodes = nodes
-    st.session_state.edges = edges
-
-    # --- Auto embeddings generation ---
-    if nodes:
-        new_labels = [n["label"] for n in nodes if n.get("label")]
-        with st.spinner("Embedding sample concepts..."):
-            st.session_state.vectors = gemini_embed(new_labels)
-
-    st.session_state.sample_loaded = True
-    st.success("✅ Sample conversation loaded, concepts extracted & embeddings ready!")
-    st.rerun()
 
 # --- Hide Streamlit UI elements ---
 html(
@@ -202,6 +168,42 @@ if "vectors" not in st.session_state:
 if "conversations" not in st.session_state:
     st.session_state.conversations = []  # list of {role,text}
 
+
+# --- OPTIONAL: Preload a demo conversation for testing ---
+if "sample_loaded" not in st.session_state:
+    st.session_state.sample_loaded = False
+
+if st.button("📦 Load Sample Conversation (AI Demo)"):
+    # Load predefined conversation
+    st.session_state.conversations = [
+        {"role": "user", "text": "Hi Gemini, can you explain what Artificial Intelligence is?"},
+        {"role": "assistant", "text": "Artificial Intelligence (AI) is the simulation of human intelligence in computers and machines that are programmed to think and learn like humans."},
+        {"role": "user", "text": "How is machine learning related to AI?"},
+        {"role": "assistant", "text": "Machine learning is a subset of AI that focuses on algorithms and statistical models that allow systems to learn patterns from data and make predictions."},
+        {"role": "user", "text": "And what about deep learning?"},
+        {"role": "assistant", "text": "Deep learning is a subset of machine learning that uses neural networks with many layers to process data in complex ways, similar to how the human brain works."}
+    ]
+
+    # --- Auto concept extraction ---
+    convo_text = "\n".join([f"{c['role']}: {c['text']}" for c in st.session_state.conversations])
+    with st.spinner("Extracting concepts from sample..."):
+        parsed = gemini_extract_concepts(convo_text)
+    nodes = parsed.get("nodes", [])
+    edges = parsed.get("edges", [])
+
+    # Merge with session state
+    st.session_state.nodes = nodes
+    st.session_state.edges = edges
+
+    # --- Auto embeddings generation ---
+    if nodes:
+        new_labels = [n["label"] for n in nodes if n.get("label")]
+        with st.spinner("Embedding sample concepts..."):
+            st.session_state.vectors = gemini_embed(new_labels)
+
+    st.session_state.sample_loaded = True
+    st.success("✅ Sample conversation loaded, concepts extracted & embeddings ready!")
+    st.rerun()
 
 # ---------------- UI ----------------
 st.set_page_config(page_title="MindMesh – Conversational Knowledge Mapper", layout="wide")
