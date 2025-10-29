@@ -51,15 +51,15 @@ if not GEMINI_API_KEY:
     st.error("❌ Missing GEMINI_API_KEY. Please add it to Streamlit secrets.")
     st.stop()
 
-# API endpoints
-BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1"
-GEN_MODEL = "gemini-2.0-pro"
-EMB_MODEL = "text-embedding-004"
+# ✅ FIXED API endpoints and models
+BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta"
+GEN_MODEL = "gemini-1.5-pro"
+EMB_MODEL = "embedding-001"
 
 
 # ---------------- HELPERS ----------------
 def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
-    """Generate a natural language reply using Gemini 2.0 Pro."""
+    """Generate a natural language reply using Gemini 1.5 Pro."""
     url = f"{BASE_GEMINI_URL}/models/{GEN_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -105,7 +105,7 @@ Keep ids short. Avoid duplicates.
 
 
 def gemini_embed(texts):
-    """Generate embeddings using text-embedding-004 model."""
+    """Generate embeddings using embedding-001 model."""
     vectors = []
     for text in texts:
         url = f"{BASE_GEMINI_URL}/models/{EMB_MODEL}:embedContent?key={GEMINI_API_KEY}"
@@ -203,8 +203,8 @@ with col2:
     if st.session_state.nodes:
         html_path = draw_pyvis(st.session_state.nodes, st.session_state.edges)
         with open(html_path, "r", encoding="utf-8") as f:
-            html = f.read()
-        st.components.v1.html(html, height=700, scrolling=True)
+            html_content = f.read()
+        st.components.v1.html(html_content, height=700, scrolling=True)
     else:
         st.info("No concepts yet. Start chatting and extract concepts to see your graph!")
 
