@@ -8,6 +8,23 @@ from pyvis.network import Network
 import tempfile
 from streamlit.components.v1 import html
 
+# --- OPTIONAL: Preload a demo conversation for testing ---
+if "sample_loaded" not in st.session_state:
+    st.session_state.sample_loaded = False
+
+if st.button("📦 Load Sample Conversation (AI Demo)"):
+    st.session_state.conversations = [
+        {"role": "user", "text": "Hi Gemini, can you explain what Artificial Intelligence is?"},
+        {"role": "assistant", "text": "Artificial Intelligence (AI) is the simulation of human intelligence in computers and machines that are programmed to think and learn like humans."},
+        {"role": "user", "text": "How is machine learning related to AI?"},
+        {"role": "assistant", "text": "Machine learning is a subset of AI that focuses on algorithms and statistical models that allow systems to learn patterns from data and make predictions."},
+        {"role": "user", "text": "And what about deep learning?"},
+        {"role": "assistant", "text": "Deep learning is a subset of machine learning that uses neural networks with many layers to process data in complex ways, similar to how the human brain works."}
+    ]
+    st.session_state.sample_loaded = True
+    st.success("✅ Sample conversation loaded! Click '🧩 Extract Concepts & Update Graph' to see the knowledge map.")
+    st.rerun()
+
 # --- Hide Streamlit UI elements ---
 html(
   """
