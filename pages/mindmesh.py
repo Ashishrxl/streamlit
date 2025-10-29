@@ -6,6 +6,43 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from pyvis.network import Network
 import tempfile
+from streamlit.components.v1 import html
+
+# --- Hide Streamlit UI elements ---
+html(
+  """
+  <script>
+  try {
+    const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+    sel.forEach(e => e.style.display='none');
+  } catch(e) { console.warn('parent DOM not reachable', e); }
+  </script>
+  """,
+  height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+header > div:nth-child(2) {
+    display: none;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 
 # ---------------- CONFIG ----------------
 # Your Google Generative Language API key
