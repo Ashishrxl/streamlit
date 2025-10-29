@@ -51,15 +51,15 @@ if not GEMINI_API_KEY:
     st.error("❌ Missing GEMINI_API_KEY. Please add it to Streamlit secrets.")
     st.stop()
 
-# ✅ FIXED API endpoints and models
+# ✅ Latest verified Gemini endpoints and models (valid in India & globally)
 BASE_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta"
-GEN_MODEL = "gemini-1.5-pro"
+GEN_MODEL = "gemini-2.5-pro"
 EMB_MODEL = "embedding-001"
 
 
 # ---------------- HELPERS ----------------
 def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
-    """Generate a natural language reply using Gemini 1.5 Pro."""
+    """Generate a natural language reply using Gemini 2.5 Pro."""
     url = f"{BASE_GEMINI_URL}/models/{GEN_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -69,7 +69,9 @@ def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
         }
     }
     r = requests.post(url, json=body, timeout=60)
-    r.raise_for_status()
+    if r.status_code != 200:
+        st.error(f"❌ Gemini API error: {r.status_code} — {r.text}")
+        st.stop()
     data = r.json()
     try:
         return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -109,9 +111,14 @@ def gemini_embed(texts):
     vectors = []
     for text in texts:
         url = f"{BASE_GEMINI_URL}/models/{EMB_MODEL}:embedContent?key={GEMINI_API_KEY}"
-        body = {"model": f"models/{EMB_MODEL}", "content": {"parts": [{"text": text}]}}
+        body = {
+            "model": f"models/{EMB_MODEL}",
+            "content": {"parts": [{"text": text}]}
+        }
         r = requests.post(url, json=body, timeout=60)
-        r.raise_for_status()
+        if r.status_code != 200:
+            st.error(f"❌ Embedding API error: {r.status_code} — {r.text}")
+            st.stop()
         data = r.json()
         emb = data.get("embedding", {}).get("values", [])
         vectors.append(np.array(emb, dtype=float))
@@ -197,7 +204,7 @@ with col2:
             if src and tgt:
                 g.add_edge(src, tgt, title=e.get("label", ""), label=e.get("label", ""))
         path = tempfile.NamedTemporaryFile(suffix=".html", delete=False).name
-        g.write_html(path)  # ✅ fixed render bug
+        g.write_html(path)
         return path
 
     if st.session_state.nodes:
@@ -225,4 +232,4 @@ with col2:
                 st.markdown(f"- {st.session_state.nodes[i]['label']}  —  *(similarity {sims[i]:.3f})*")
 
 st.markdown("---")
-st.caption("MindMesh • Built with Gemini API + Streamlit • Keep your API key safe in Streamlit Secrets.")
+st.caption("MindMesh • Built with Gemini 2.5 Pro + Streamlit • Keep your API key safe in Streamlit Secrets.")
