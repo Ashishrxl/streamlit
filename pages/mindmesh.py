@@ -59,7 +59,7 @@ EMB_MODEL = "embedding-001"
 
 # ---------------- HELPERS ----------------
 def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
-    """Generate a natural language reply using Gemini 2.5 Pro."""
+    """Generate a natural language reply using Gemini 2.5 Pro with robust parsing."""
     url = f"{BASE_GEMINI_URL}/models/{GEN_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -68,15 +68,30 @@ def gemini_generate(prompt, temperature=0.4, max_output_tokens=512):
             "maxOutputTokens": max_output_tokens
         }
     }
+
     r = requests.post(url, json=body, timeout=60)
     if r.status_code != 200:
         st.error(f"❌ Gemini API error: {r.status_code} — {r.text}")
         st.stop()
+
     data = r.json()
+
+    # ✅ More robust parsing logic
     try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        return json.dumps(data, indent=2)
+        candidates = data.get("candidates", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            if parts and "text" in parts[0]:
+                return parts[0]["text"].strip()
+        # fallback: try "outputText" if available
+        if "outputText" in data:
+            return data["outputText"].strip()
+    except Exception as e:
+        st.warning(f"⚠️ Parsing error: {e}")
+
+    # if nothing parsed, show full JSON for debugging
+    return json.dumps(data, indent=2)
 
 
 def gemini_extract_concepts(conversation_text):
