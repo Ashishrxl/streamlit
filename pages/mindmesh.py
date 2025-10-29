@@ -12,7 +12,7 @@ from streamlit.components.v1 import html
 if "sample_loaded" not in st.session_state:
     st.session_state.sample_loaded = False
 
-if st.sidebar.button("📦 Load Sample Conversation (AI Demo)"):
+if st.button("📦 Load Sample Conversation (AI Demo)"):
     # Load predefined conversation
     st.session_state.conversations = [
         {"role": "user", "text": "Hi Gemini, can you explain what Artificial Intelligence is?"},
