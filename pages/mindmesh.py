@@ -125,46 +125,34 @@ def gemini_generate(prompt, temperature=0.4, max_output_tokens=2048):
 def gemini_extract_concepts(conversation_text):
     """Ask Gemini to extract a semantic graph from conversation text."""
     extraction_prompt = f"""
-Extract a semantic network of concepts from this conversation as valid JSON.
+Extract a semantic network of concepts from this conversation as **valid JSON** only.
 
 Conversation:
 \"\"\"{conversation_text}\"\"\"
 
-Return ONLY JSON with:
+Return **ONLY JSON**, exactly in this format:
+
 {{
   "nodes": [{{"id":"n1","label":"<concept>"}}],
   "edges": [{{"source":"n1","target":"n2","label":"relation"}}]
 }}
-Keep ids short. Avoid duplicates.
-"""
-    resp = gemini_generate(extraction_prompt, temperature=0.0, max_output_tokens=400)
 
-    # --- Clean model output ---
+Rules:
+- Use short ids (n1, n2, n3…)
+- Avoid duplicates
+- Do not include any explanations or text outside the JSON
+"""
+    resp = gemini_generate(extraction_prompt, temperature=0.0, max_output_tokens=800)
     try:
-        # Try to isolate JSON part between first '{' and last '}'
         start, end = resp.find("{"), resp.rfind("}")
         if start != -1 and end != -1:
             json_text = resp[start:end + 1]
             parsed = json.loads(json_text)
-        else:
-            raise ValueError("No JSON found")
-
-        # ✅ Validate structure
-        if "nodes" not in parsed or "edges" not in parsed:
-            raise ValueError("Invalid structure")
-        if not parsed["nodes"]:
-            raise ValueError("Empty nodes")
-
-        return parsed
-
+            if "nodes" in parsed and "edges" in parsed:
+                return parsed
     except Exception as e:
-        st.warning(f"⚠️ Could not parse valid JSON from Gemini. Showing raw text instead.")
-        st.text(resp)
-        # Optional: add dummy node so graph shows something
-        return {
-            "nodes": [{"id": "n0", "label": "No valid concepts extracted"}],
-            "edges": []
-        }
+        st.warning(f"⚠️ Could not parse valid JSON from Gemini. Showing raw text instead.\n\n{resp}")
+    return {"nodes": [], "edges": []}
 
 def gemini_embed(texts):
     """Generate embeddings using embedding-001 model."""
