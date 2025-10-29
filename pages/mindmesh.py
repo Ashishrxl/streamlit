@@ -159,7 +159,7 @@ with col1:
             with st.spinner("Thinking..."):
                 assistant_text = gemini_generate(convo_text)
             st.session_state.conversations.append({"role": "assistant", "text": assistant_text})
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("### Conversation")
     for turn in st.session_state.conversations:
