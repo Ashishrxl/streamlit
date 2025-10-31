@@ -1,226 +1,167 @@
 import streamlit as st
 import tempfile
 import numpy as np
+import soundfile as sf
+from pydub import AudioSegment
 import matplotlib.pyplot as plt
-import pandas as pd
-import re
-import io
 import google.generativeai as genai
+from google.generativeai.types import Part
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RTCConfiguration
 
+# ==============================
+# Streamlit Page Setup
+# ==============================
+st.set_page_config(page_title="🎵 AI Vocal Coach", layout="wide")
 
-# Try importing soundfile; fallback to pydub
-try:
-    import soundfile as sf
-    HAVE_SF = True
-except Exception:
-    from pydub import AudioSegment
-    HAVE_SF = False
+st.title("🎙️ AI Vocal Coach using Google Gemini")
+st.write("Practice singing — record your voice, compare to the reference, and get AI-powered feedback!")
 
+# ==============================
+# Google API Key Setup
+# ==============================
+if "GOOGLE_API_KEY" not in st.secrets:
+    st.error("❌ Missing GOOGLE_API_KEY in Streamlit Secrets.")
+    st.stop()
 
-from streamlit.components.v1 import html
-
-# Hide Streamlit default elements
-html(
-    """
-    <script>
-    try {
-      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-      sel.forEach(e => e.style.display='none');
-    } catch(e) { console.warn('parent DOM not reachable', e); }
-    </script>
-    """,
-    height=0
-)
-
-disable_footer_click = """
-    <style>
-    footer {pointer-events: none;}
-    </style>
-"""
-st.markdown(disable_footer_click, unsafe_allow_html=True)
-
-st.set_page_config(
-    page_title="🎙️ Text 2 Audio",
-    layout="wide"
-)
-
-# CSS to hide unwanted elements
-hide_streamlit_style = """
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-[data-testid="stStatusWidget"] {display: none;}
-[data-testid="stToolbar"] {display: none;}
-a[href^="https://github.com"] {display: none !important;}
-a[href^="https://streamlit.io"] {display: none !important;}
-header > div:nth-child(2) { display: none; }
-.main { padding: 2rem; }
-.stButton > button {
-    width: 100%;
-    background-color: #4CAF50;
-    color: white;
-    padding: 0.75rem;
-    font-size: 1.1rem;
-}
-.success-box {
-    padding: 1rem;
-    background-color: #d4edda;
-    border: 1px solid #c3e6cb;
-    border-radius: 0.25rem;
-    color: #155724;
-}
-.warning-box {
-    padding: 1rem;
-    background-color: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: 0.25rem;
-    color: #856404;
-}
-.info-box {
-    padding: 1rem;
-    background-color: #d1ecf1;
-    border: 1px solid #bee5eb;
-    border-radius: 0.25rem;
-    color: #0c5460;
-}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-# --------------------------------------------------------
-# CONFIGURATION
-# --------------------------------------------------------
-
-
-st.set_page_config(page_title="SingPerfect 🎶", layout="wide")
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-# --------------------------------------------------------
-# UTILITY: read audio safely
-# --------------------------------------------------------
-def read_audio(file_path_or_bytes):
-    """Return samples (numpy array) and sample rate."""
-    if HAVE_SF:
-        data, sr = sf.read(file_path_or_bytes, always_2d=False)
-        if data.ndim > 1:
-            data = np.mean(data, axis=1)
-        return data, sr
-    else:
-        # Fallback: PyDub
-        audio = AudioSegment.from_file(file_path_or_bytes)
-        samples = np.array(audio.get_array_of_samples()).astype(float)
+# ==============================
+# Helper: Load audio + energy contour
+# ==============================
+def load_audio_energy(path):
+    try:
+        y, sr = sf.read(path, always_2d=False)
+        if y.ndim > 1:
+            y = np.mean(y, axis=1)
+    except Exception:
+        audio = AudioSegment.from_file(path)
+        y = np.array(audio.get_array_of_samples()).astype(float)
         sr = audio.frame_rate
-        return samples, sr
 
-# --------------------------------------------------------
-# PURE NUMPY ENERGY ANALYSIS
-# --------------------------------------------------------
-def energy_contour(audio_path_or_bytes):
-    """Return normalized energy contour (no scipy/librosa)."""
-    y, sr = read_audio(audio_path_or_bytes)
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
     energies = []
 
     for i in range(0, len(y) - frame_len, hop):
         frame = y[i:i + frame_len]
-        env = np.abs(np.fft.ifft(np.fft.fft(frame)))  # simple energy proxy
-        energies.append(np.mean(env))
+        energies.append(np.mean(np.abs(frame)))
 
     energies = np.array(energies)
     return energies / np.max(energies) if np.max(energies) != 0 else energies
 
-# --------------------------------------------------------
-# UI
-# --------------------------------------------------------
-st.title("🎶 SingPerfect: AI Vocal Coach (Cloud-Safe)")
-st.write("Upload or record your singing. The AI compares it with a reference and gives friendly feedback!")
 
-col1, col2 = st.columns(2)
-with col1:
-    ref_audio = st.file_uploader("🎵 Reference Song", type=["mp3", "wav"])
-with col2:
-    user_audio = st.file_uploader("🎙️ Your Singing", type=["mp3", "wav"])
+# ==============================
+# Section 1: Upload or Record
+# ==============================
+st.header("🎧 Step 1: Provide Reference Song")
+ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3", "wav"])
 
-record_audio = st.audio_input("Or record directly here")
-if record_audio and not user_audio:
-    user_audio = record_audio
+st.header("🎤 Step 2: Record Your Singing")
+st.markdown("Click below to record directly from your microphone 🎙️")
 
-# --------------------------------------------------------
-# MAIN LOGIC
-# --------------------------------------------------------
-if ref_audio and user_audio:
-    with st.spinner("Analyzing your singing using Gemini… 🎧"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as ref_tmp, \
-             tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as user_tmp:
-            ref_tmp.write(ref_audio.read())
-            user_tmp.write(user_audio.read())
+# WebRTC configuration for mic recording
+RTC_CONFIG = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
-            model = genai.GenerativeModel("models/gemini-2.5-flash-native-audio-latest")
-            prompt = """You are a vocal coach. Compare these two audio clips:
-            1️⃣ Reference song (ideal)
-            2️⃣ User singing attempt.
-            Provide constructive, friendly feedback and a score out of 100.
-            """
+class AudioProcessor(AudioProcessorBase):
+    def __init__(self):
+        self.frames = []
 
-            response = model.generate_content([
-                {"mime_type": "text/plain", "text": prompt},
-                {"mime_type": "audio/wav", "data": open(ref_tmp.name, "rb").read()},
-                {"mime_type": "audio/wav", "data": open(user_tmp.name, "rb").read()},
-            ])
+    def recv_audio(self, frame):
+        self.frames.append(frame.to_ndarray().flatten())
+        return frame
 
-    st.subheader("🎧 Vocal Feedback")
+webrtc_ctx = webrtc_streamer(
+    key="singing-demo",
+    mode=WebRtcMode.SENDONLY,
+    audio_receiver_size=256,
+    rtc_configuration=RTC_CONFIG,
+    media_stream_constraints={"audio": True, "video": False},
+    async_processing=True,
+)
+
+# Save mic recording
+recorded_file_path = None
+if webrtc_ctx.audio_receiver:
+    audio_frames = []
+    while True:
+        try:
+            frame = webrtc_ctx.audio_receiver.get_frame(timeout=1)
+        except:
+            break
+        audio_frames.append(frame.to_ndarray().flatten())
+
+    if audio_frames:
+        audio_data = np.concatenate(audio_frames)
+        recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+        sf.write(recorded_file_path, audio_data, 44100)
+        st.audio(recorded_file_path, format="audio/wav")
+        st.success("✅ Recording captured!")
+
+# ==============================
+# Section 2: Analysis & Feedback
+# ==============================
+if ref_file and recorded_file_path:
+    ref_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    ref_tmp.write(ref_file.read())
+
+    # Visualization
+    st.subheader("📊 Comparing Energy Contours")
+    ref_energy = load_audio_energy(ref_tmp.name)
+    user_energy = load_audio_energy(recorded_file_path)
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(ref_energy, label="Reference Song", linewidth=2)
+    ax.plot(user_energy, label="Your Singing", linewidth=2)
+    ax.legend()
+    ax.set_title("Energy Contour Comparison")
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Normalized Energy")
+    st.pyplot(fig)
+
+    # Gemini feedback
+    st.subheader("🎶 AI Feedback")
+    model = genai.GenerativeModel("models/gemini-2.5-pro")
+
+    prompt = (
+        "You are a professional vocal coach. "
+        "Compare the user's singing to the reference song and give detailed feedback "
+        "on pitch, rhythm, and expression. Be constructive and motivating."
+    )
+
+    with st.spinner("🎧 Analyzing vocals with Gemini..."):
+        response = model.generate_content([
+            Part(text=prompt),
+            Part(inline_data={"mime_type": "audio/wav", "data": open(ref_tmp.name, "rb").read()}),
+            Part(inline_data={"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}),
+        ])
+
+    st.success("✅ Feedback Ready!")
     st.write(response.text)
 
-    match = re.search(r"(\d{1,3})/100", response.text)
-    score = int(match.group(1)) if match else np.random.randint(60, 95)
-    st.session_state.history.append({"score": score, "feedback": response.text})
+    # Optional TTS playback
+    st.subheader("🔊 AI Spoken Feedback")
+    tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
+    tts_prompt = f"Speak this feedback in an encouraging tone: {response.text}"
 
-    # --------------------------------------------------------
-    # SPEAK FEEDBACK
-    # --------------------------------------------------------
-    with st.spinner("Generating spoken feedback… 🎙️"):
-        tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
-        tts_response = tts_model.generate_content(
-            f"Speak this in a warm and motivating tone: {response.text}"
-        )
-        if hasattr(tts_response, "audio") and tts_response.audio:
-            st.audio(tts_response.audio, format="audio/wav")
+    with st.spinner("🎙️ Generating spoken feedback..."):
+        tts_response = tts_model.generate_content([Part(text=tts_prompt)])
 
-    # --------------------------------------------------------
-    # VISUALIZATION
-    # --------------------------------------------------------
-    st.subheader("🎛 Energy Pattern (approx. vocal dynamics)")
-    ref_curve = energy_contour(ref_tmp.name)
-    user_curve = energy_contour(user_tmp.name)
+    try:
+        st.audio(tts_response.audio, format="audio/mp3")
+    except Exception:
+        st.warning("⚠️ Audio feedback unavailable.")
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(ref_curve, label="Reference", alpha=0.8)
-    plt.plot(user_curve, label="You", alpha=0.8)
-    plt.xlabel("Frame index")
-    plt.ylabel("Relative energy")
-    plt.title("Performance comparison")
-    plt.legend()
-    st.pyplot(plt)
+    # Future roadmap
+    with st.expander("🌟 Future Enhancements"):
+        st.markdown("""
+        - 🎯 Real-time pitch tracking and correction visualization  
+        - 🧠 Emotion and tone analysis  
+        - 🎶 Harmony and background vocal generation  
+        - 🗣️ Pronunciation coaching  
+        - 📈 Long-term progress tracking  
+        """)
 
-# --------------------------------------------------------
-# HISTORY
-# --------------------------------------------------------
-if len(st.session_state.history) > 1:
-    st.subheader("📈 Improvement Over Time")
-    df = pd.DataFrame(st.session_state.history)
-    st.line_chart(df["score"], use_container_width=True)
-    st.write("Average score:", np.mean(df["score"]).round(1))
-
-# --------------------------------------------------------
-# KARAOKE MODE
-# --------------------------------------------------------
-st.markdown("---")
-st.header("🎤 Karaoke Practice Mode")
-lyrics = st.text_area("Paste lyrics here (optional):", height=150)
-if lyrics:
-    st.text_area("Lyrics display", lyrics, height=300)
-
-st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (auto-fallback audio engine)")
+else:
+    st.info("Please upload a reference song and record your singing above.")
