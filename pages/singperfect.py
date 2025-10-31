@@ -7,6 +7,7 @@ import re
 import io
 import google.generativeai as genai
 
+
 # Try importing soundfile; fallback to pydub
 try:
     import soundfile as sf
@@ -15,9 +16,81 @@ except Exception:
     from pydub import AudioSegment
     HAVE_SF = False
 
+
+from streamlit.components.v1 import html
+
+# Hide Streamlit default elements
+html(
+    """
+    <script>
+    try {
+      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
+      sel.forEach(e => e.style.display='none');
+    } catch(e) { console.warn('parent DOM not reachable', e); }
+    </script>
+    """,
+    height=0
+)
+
+disable_footer_click = """
+    <style>
+    footer {pointer-events: none;}
+    </style>
+"""
+st.markdown(disable_footer_click, unsafe_allow_html=True)
+
+st.set_page_config(
+    page_title="🎙️ Text 2 Audio",
+    layout="wide"
+)
+
+# CSS to hide unwanted elements
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stStatusWidget"] {display: none;}
+[data-testid="stToolbar"] {display: none;}
+a[href^="https://github.com"] {display: none !important;}
+a[href^="https://streamlit.io"] {display: none !important;}
+header > div:nth-child(2) { display: none; }
+.main { padding: 2rem; }
+.stButton > button {
+    width: 100%;
+    background-color: #4CAF50;
+    color: white;
+    padding: 0.75rem;
+    font-size: 1.1rem;
+}
+.success-box {
+    padding: 1rem;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 0.25rem;
+    color: #155724;
+}
+.warning-box {
+    padding: 1rem;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 0.25rem;
+    color: #856404;
+}
+.info-box {
+    padding: 1rem;
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 0.25rem;
+    color: #0c5460;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # --------------------------------------------------------
 # CONFIGURATION
 # --------------------------------------------------------
+
+
 st.set_page_config(page_title="SingPerfect 🎶", layout="wide")
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
