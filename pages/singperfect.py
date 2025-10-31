@@ -4,7 +4,7 @@ import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import aubio
+import parselmouth
 import os
 from google import genai
 
@@ -48,46 +48,15 @@ if record_audio and not user_audio:
     user_audio = record_audio
 
 # --------------------------------------------------------
-# AUDIO ANALYSIS HELPERS (Using Aubio)
+# HELPER FUNCTIONS
 # --------------------------------------------------------
-
-def extract_pitch_aubio(path):
-    """Extract pitch contour from audio using aubio."""
-    samplerate = 44100
-    win_s = 2048
-    hop_s = 512
-    pitch_o = aubio.pitch("yin", win_s, hop_s, samplerate)
-    pitch_o.set_unit("Hz")
-    pitch_o.set_tolerance(0.8)
-
-    s = aubio.source(path, samplerate, hop_s)
-    pitches = []
-    while True:
-        samples, read = s()
-        pitch = pitch_o(samples)[0]
-        pitches.append(pitch)
-        if read < hop_s:
-            break
-    return np.array(pitches), samplerate
-
-
-def detect_onsets_aubio(path):
-    """Detect onset times in seconds."""
-    samplerate = 44100
-    win_s = 1024
-    hop_s = 512
-    onset_o = aubio.onset("default", win_s, hop_s, samplerate)
-
-    s = aubio.source(path, samplerate, hop_s)
-    onsets = []
-    while True:
-        samples, read = s()
-        if onset_o(samples):
-            onsets.append(onset_o.get_last_s())
-        if read < hop_s:
-            break
-    return onsets
-
+def extract_pitch_parselmouth(path):
+    """Extract pitch (Hz) using Praat via Parselmouth."""
+    snd = parselmouth.Sound(path)
+    pitch = snd.to_pitch()
+    pitch_values = pitch.selected_array['frequency']
+    pitch_values[pitch_values == 0] = np.nan  # handle unvoiced frames
+    return pitch_values, pitch.get_time_step()
 
 def get_audio_duration(path):
     """Get audio duration in seconds."""
@@ -124,12 +93,12 @@ if ref_audio and user_audio:
     st.subheader("🎧 Vocal Feedback")
     st.write(response.text)
 
-    # Extract score
+    # Extract score from response
     import re
     score_match = re.search(r"(\d{1,3})/100", response.text)
     score = int(score_match.group(1)) if score_match else np.random.randint(60, 95)
 
-    # Save to history
+    # Save to session history
     st.session_state.history.append({"score": score, "feedback": response.text})
 
     # --------------------------------------------------------
@@ -146,9 +115,9 @@ if ref_audio and user_audio:
     # --------------------------------------------------------
     # PITCH VISUALIZATION
     # --------------------------------------------------------
-    st.subheader("🎛 Pitch Analysis (Aubio)")
-    ref_pitch, _ = extract_pitch_aubio(ref_tmp.name)
-    user_pitch, _ = extract_pitch_aubio(user_tmp.name)
+    st.subheader("🎛 Pitch Analysis (via Parselmouth)")
+    ref_pitch, _ = extract_pitch_parselmouth(ref_tmp.name)
+    user_pitch, _ = extract_pitch_parselmouth(user_tmp.name)
 
     plt.figure(figsize=(10, 4))
     plt.plot(ref_pitch, label="Reference", alpha=0.8)
@@ -164,7 +133,6 @@ if ref_audio and user_audio:
 # --------------------------------------------------------
 if len(st.session_state.history) > 1:
     st.subheader("📈 Your Improvement Over Time")
-
     df = pd.DataFrame(st.session_state.history)
     st.line_chart(df["score"], use_container_width=True)
     st.write("Average score:", np.mean(df["score"]).round(1))
@@ -186,4 +154,4 @@ st.caption("💡 Tip: Paste your lyrics to practice line-by-line as you record!"
 # FOOTER
 # --------------------------------------------------------
 st.markdown("---")
-st.caption("Built with ❤️ using Google Gemini 2.5 Flash Native Audio + TTS | Powered by Streamlit & Aubio")
+st.caption("Built with ❤️ using Google Gemini 2.5 Flash Native Audio + TTS | Powered by Streamlit & Parselmouth")
