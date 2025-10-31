@@ -1,5 +1,4 @@
-setuptools 
-wheel
+
 
 reportlab
 Pillow
@@ -59,12 +58,11 @@ python-docx
 
 # Sing perfect
 
+
+aubio==0.4.9
 pydub==0.25.1
-tqdm==4.66.5
+scipy==1.13.1
 protobuf==5.28.2
-numba==0.58.1 
-llvmlite==0.41.1
-librosa==0.10.1 
 
 
 
