@@ -4,9 +4,9 @@ import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import parselmouth
-import os
+from scipy.signal import hilbert
 from google import genai
+import os, re
 
 # --------------------------------------------------------
 # CONFIGURATION
@@ -14,76 +14,55 @@ from google import genai
 st.set_page_config(page_title="SingPerfect 🎤", layout="wide")
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
-# --------------------------------------------------------
-# SESSION STATE
-# --------------------------------------------------------
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # --------------------------------------------------------
-# HEADER
+# SIMPLE ENERGY-BASED ANALYSIS (no compiled libs)
 # --------------------------------------------------------
-st.title("🎶 SingPerfect: Your AI Vocal Coach")
-st.write("""
-Welcome to **SingPerfect**!  
-Upload or record your song, and let AI analyze your **pitch, rhythm, tone, and pronunciation**.  
-Then, track your improvement and practice karaoke-style! 🎤
-""")
+def energy_contour(path):
+    """Return a pseudo-pitch curve based on short-time energy."""
+    y, sr = sf.read(path, always_2d=False)
+    if y.ndim > 1:
+        y = np.mean(y, axis=1)
+    frame_len = int(0.05 * sr)
+    hop = int(0.025 * sr)
+    energy = []
+    for i in range(0, len(y) - frame_len, hop):
+        frame = y[i:i + frame_len]
+        env = np.abs(hilbert(frame))
+        energy.append(np.mean(env))
+    return np.array(energy)
 
 # --------------------------------------------------------
-# FILE UPLOADS
+# UI
 # --------------------------------------------------------
+st.title("🎶 SingPerfect: Your AI Vocal Coach (Cloud-Safe)")
+st.write("Upload or record your singing. The AI compares it with a reference and gives feedback.")
+
 col1, col2 = st.columns(2)
-
 with col1:
-    ref_audio = st.file_uploader("🎵 Upload Reference Song", type=["mp3", "wav"])
-
+    ref_audio = st.file_uploader("🎵 Reference Song", type=["mp3", "wav"])
 with col2:
-    user_audio = st.file_uploader("🎙️ Upload or Record Your Singing", type=["mp3", "wav"])
+    user_audio = st.file_uploader("🎙️ Your Singing", type=["mp3", "wav"])
 
-st.markdown("Or record directly 👇")
-record_audio = st.audio_input("Record your singing here")
-
+record_audio = st.audio_input("Or record here")
 if record_audio and not user_audio:
     user_audio = record_audio
 
 # --------------------------------------------------------
-# HELPER FUNCTIONS
-# --------------------------------------------------------
-def extract_pitch_parselmouth(path):
-    """Extract pitch (Hz) using Praat via Parselmouth."""
-    snd = parselmouth.Sound(path)
-    pitch = snd.to_pitch()
-    pitch_values = pitch.selected_array['frequency']
-    pitch_values[pitch_values == 0] = np.nan  # handle unvoiced frames
-    return pitch_values, pitch.get_time_step()
-
-def get_audio_duration(path):
-    """Get audio duration in seconds."""
-    with sf.SoundFile(path) as f:
-        duration = len(f) / f.samplerate
-    return duration
-
-# --------------------------------------------------------
-# MAIN LOGIC
+# MAIN
 # --------------------------------------------------------
 if ref_audio and user_audio:
-    with st.spinner("Analyzing your performance with Gemini... 🎧"):
+    with st.spinner("Analyzing with Gemini…"):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as ref_tmp, \
              tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as user_tmp:
             ref_tmp.write(ref_audio.read())
             user_tmp.write(user_audio.read())
 
             model = genai.GenerativeModel("models/gemini-2.5-flash-native-audio-latest")
-            prompt = """
-            You are an expert vocal coach.
-            Compare the two audio clips:
-            1️⃣ Reference song (ideal performance)
-            2️⃣ User singing attempt.
-            Analyze pitch, rhythm, tone, pronunciation, and emotion.
-            Give friendly, structured feedback and score performance out of 100.
-            """
-
+            prompt = """You are a vocal coach. Compare the two clips (reference vs user) 
+            and give constructive feedback with a score out of 100."""
             response = model.generate_content([
                 {"mime_type": "text/plain", "text": prompt},
                 {"mime_type": "audio/wav", "data": open(ref_tmp.name, "rb").read()},
@@ -93,18 +72,12 @@ if ref_audio and user_audio:
     st.subheader("🎧 Vocal Feedback")
     st.write(response.text)
 
-    # Extract score from response
-    import re
-    score_match = re.search(r"(\d{1,3})/100", response.text)
-    score = int(score_match.group(1)) if score_match else np.random.randint(60, 95)
-
-    # Save to session history
+    match = re.search(r"(\d{1,3})/100", response.text)
+    score = int(match.group(1)) if match else np.random.randint(60, 95)
     st.session_state.history.append({"score": score, "feedback": response.text})
 
-    # --------------------------------------------------------
-    # SPOKEN FEEDBACK (TTS)
-    # --------------------------------------------------------
-    with st.spinner("Generating spoken feedback... 🎙️"):
+    # TTS
+    with st.spinner("Generating spoken feedback…"):
         tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
         tts_response = tts_model.generate_content(
             f"Speak this in a warm and motivating tone: {response.text}"
@@ -112,27 +85,25 @@ if ref_audio and user_audio:
         if hasattr(tts_response, "audio") and tts_response.audio:
             st.audio(tts_response.audio, format="audio/wav")
 
-    # --------------------------------------------------------
-    # PITCH VISUALIZATION
-    # --------------------------------------------------------
-    st.subheader("🎛 Pitch Analysis (via Parselmouth)")
-    ref_pitch, _ = extract_pitch_parselmouth(ref_tmp.name)
-    user_pitch, _ = extract_pitch_parselmouth(user_tmp.name)
+    # Pseudo-pitch/energy plot
+    st.subheader("🎛 Energy Pattern (approx. vocal dynamics)")
+    ref_curve = energy_contour(ref_tmp.name)
+    user_curve = energy_contour(user_tmp.name)
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(ref_pitch, label="Reference", alpha=0.8)
-    plt.plot(user_pitch, label="You", alpha=0.8)
-    plt.title("Pitch Comparison (Hz)")
-    plt.xlabel("Time (frames)")
-    plt.ylabel("Pitch Frequency (Hz)")
+    plt.figure(figsize=(10,4))
+    plt.plot(ref_curve, label="Reference", alpha=0.8)
+    plt.plot(user_curve, label="You", alpha=0.8)
+    plt.xlabel("Frame index")
+    plt.ylabel("Relative energy")
+    plt.title("Performance comparison")
     plt.legend()
     st.pyplot(plt)
 
 # --------------------------------------------------------
-# IMPROVEMENT TRACKING
+# HISTORY
 # --------------------------------------------------------
 if len(st.session_state.history) > 1:
-    st.subheader("📈 Your Improvement Over Time")
+    st.subheader("📈 Improvement Over Time")
     df = pd.DataFrame(st.session_state.history)
     st.line_chart(df["score"], use_container_width=True)
     st.write("Average score:", np.mean(df["score"]).round(1))
@@ -142,16 +113,8 @@ if len(st.session_state.history) > 1:
 # --------------------------------------------------------
 st.markdown("---")
 st.header("🎤 Karaoke Practice Mode")
-
-lyrics = st.text_area("Paste lyrics here (optional):", height=150, placeholder="Enter your song lyrics...")
+lyrics = st.text_area("Paste lyrics here (optional):", height=150)
 if lyrics:
-    st.markdown("**Karaoke Mode Active!** Scroll lyrics while singing your track 🎶")
     st.text_area("Lyrics display", lyrics, height=300)
 
-st.caption("💡 Tip: Paste your lyrics to practice line-by-line as you record!")
-
-# --------------------------------------------------------
-# FOOTER
-# --------------------------------------------------------
-st.markdown("---")
-st.caption("Built with ❤️ using Google Gemini 2.5 Flash Native Audio + TTS | Powered by Streamlit & Parselmouth")
+st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (pure-Python version)")
