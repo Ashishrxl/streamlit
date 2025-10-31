@@ -5,7 +5,6 @@ import soundfile as sf
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
 import google.generativeai as genai
-from google.generativeai.types import Part
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RTCConfiguration
 
 # ==============================
@@ -14,7 +13,7 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RT
 st.set_page_config(page_title="🎵 AI Vocal Coach", layout="wide")
 
 st.title("🎙️ AI Vocal Coach using Google Gemini")
-st.write("Practice singing — record your voice, compare to the reference, and get AI-powered feedback!")
+st.write("Record your voice, compare it with the reference song, and get AI-powered singing feedback!")
 
 # ==============================
 # Google API Key Setup
@@ -26,9 +25,10 @@ if "GOOGLE_API_KEY" not in st.secrets:
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 # ==============================
-# Helper: Load audio + energy contour
+# Helper: Load Audio + Energy Contour
 # ==============================
 def load_audio_energy(path):
+    """Returns a normalized energy contour for visualization."""
     try:
         y, sr = sf.read(path, always_2d=False)
         if y.ndim > 1:
@@ -51,18 +51,18 @@ def load_audio_energy(path):
 
 
 # ==============================
-# Section 1: Upload or Record
+# Step 1: Upload Reference Song
 # ==============================
-st.header("🎧 Step 1: Provide Reference Song")
+st.header("🎧 Step 1: Upload Reference Song")
 ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3", "wav"])
 
+# ==============================
+# Step 2: Record Singing
+# ==============================
 st.header("🎤 Step 2: Record Your Singing")
 st.markdown("Click below to record directly from your microphone 🎙️")
 
-# WebRTC configuration for mic recording
-RTC_CONFIG = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
+RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
 class AudioProcessor(AudioProcessorBase):
     def __init__(self):
@@ -99,14 +99,15 @@ if webrtc_ctx.audio_receiver:
         st.audio(recorded_file_path, format="audio/wav")
         st.success("✅ Recording captured!")
 
+
 # ==============================
-# Section 2: Analysis & Feedback
+# Step 3: Analyze and Get Feedback
 # ==============================
 if ref_file and recorded_file_path:
     ref_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     ref_tmp.write(ref_file.read())
 
-    # Visualization
+    # --- Energy Visualization ---
     st.subheader("📊 Comparing Energy Contours")
     ref_energy = load_audio_energy(ref_tmp.name)
     user_energy = load_audio_energy(recorded_file_path)
@@ -120,47 +121,73 @@ if ref_file and recorded_file_path:
     ax.set_ylabel("Normalized Energy")
     st.pyplot(fig)
 
-    # Gemini feedback
-    st.subheader("🎶 AI Feedback")
+    # --- Gemini AI Analysis ---
+    st.subheader("🎶 AI Vocal Feedback")
     model = genai.GenerativeModel("models/gemini-2.5-pro")
 
     prompt = (
         "You are a professional vocal coach. "
-        "Compare the user's singing to the reference song and give detailed feedback "
-        "on pitch, rhythm, and expression. Be constructive and motivating."
+        "Compare the user's singing to the reference song and provide constructive feedback "
+        "about pitch accuracy, rhythm, tone, and expression. "
+        "Be supportive and motivating."
     )
 
     with st.spinner("🎧 Analyzing vocals with Gemini..."):
-        response = model.generate_content([
-            Part(text=prompt),
-            Part(inline_data={"mime_type": "audio/wav", "data": open(ref_tmp.name, "rb").read()}),
-            Part(inline_data={"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}),
-        ])
+        response = model.generate_content(
+            [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": open(ref_tmp.name, "rb").read(),
+                            }
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": open(recorded_file_path, "rb").read(),
+                            }
+                        },
+                    ],
+                }
+            ]
+        )
 
     st.success("✅ Feedback Ready!")
     st.write(response.text)
 
-    # Optional TTS playback
-    st.subheader("🔊 AI Spoken Feedback")
+    # --- AI Spoken Feedback (TTS) ---
+    st.subheader("🔊 Listen to AI Feedback")
     tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
-    tts_prompt = f"Speak this feedback in an encouraging tone: {response.text}"
 
     with st.spinner("🎙️ Generating spoken feedback..."):
-        tts_response = tts_model.generate_content([Part(text=tts_prompt)])
+        tts_response = tts_model.generate_content(
+            [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": f"Speak this feedback in a warm, encouraging tone: {response.text}"}
+                    ],
+                }
+            ]
+        )
 
     try:
         st.audio(tts_response.audio, format="audio/mp3")
     except Exception:
         st.warning("⚠️ Audio feedback unavailable.")
 
-    # Future roadmap
+    # --- Future Enhancements ---
     with st.expander("🌟 Future Enhancements"):
         st.markdown("""
-        - 🎯 Real-time pitch tracking and correction visualization  
-        - 🧠 Emotion and tone analysis  
-        - 🎶 Harmony and background vocal generation  
-        - 🗣️ Pronunciation coaching  
-        - 📈 Long-term progress tracking  
+        - 🎯 **Live pitch visualization** (real-time tuner)
+        - 🧠 **Emotion & expression analysis**
+        - 🎶 **Harmony & duet generation**
+        - 🗣️ **Pronunciation feedback**
+        - 📈 **Progress tracking dashboard**
         """)
 
 else:
