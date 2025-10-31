@@ -1,32 +1,52 @@
 import streamlit as st
 import tempfile
-import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import re
+import io
 import google.generativeai as genai
+
+# Try importing soundfile; fallback to pydub
+try:
+    import soundfile as sf
+    HAVE_SF = True
+except Exception:
+    from pydub import AudioSegment
+    HAVE_SF = False
 
 # --------------------------------------------------------
 # CONFIGURATION
 # --------------------------------------------------------
-st.set_page_config(page_title="SingPerfect 🎤", layout="wide")
-
-# Configure Google API Key
+st.set_page_config(page_title="SingPerfect 🎶", layout="wide")
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # --------------------------------------------------------
-# PURE NUMPY ANALYSIS (no scipy/librosa/aubio)
+# UTILITY: read audio safely
 # --------------------------------------------------------
-def energy_contour(path):
-    """Return a pseudo pitch/energy contour using only numpy."""
-    y, sr = sf.read(path, always_2d=False)
-    if y.ndim > 1:
-        y = np.mean(y, axis=1)
+def read_audio(file_path_or_bytes):
+    """Return samples (numpy array) and sample rate."""
+    if HAVE_SF:
+        data, sr = sf.read(file_path_or_bytes, always_2d=False)
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
+        return data, sr
+    else:
+        # Fallback: PyDub
+        audio = AudioSegment.from_file(file_path_or_bytes)
+        samples = np.array(audio.get_array_of_samples()).astype(float)
+        sr = audio.frame_rate
+        return samples, sr
 
+# --------------------------------------------------------
+# PURE NUMPY ENERGY ANALYSIS
+# --------------------------------------------------------
+def energy_contour(audio_path_or_bytes):
+    """Return normalized energy contour (no scipy/librosa)."""
+    y, sr = read_audio(audio_path_or_bytes)
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
     energies = []
@@ -42,8 +62,8 @@ def energy_contour(path):
 # --------------------------------------------------------
 # UI
 # --------------------------------------------------------
-st.title("🎶 SingPerfect: Your AI Vocal Coach (Cloud-Safe)")
-st.write("Upload or record your singing. The AI compares it with a reference and gives feedback.")
+st.title("🎶 SingPerfect: AI Vocal Coach (Cloud-Safe)")
+st.write("Upload or record your singing. The AI compares it with a reference and gives friendly feedback!")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -51,25 +71,25 @@ with col1:
 with col2:
     user_audio = st.file_uploader("🎙️ Your Singing", type=["mp3", "wav"])
 
-record_audio = st.audio_input("Or record here")
+record_audio = st.audio_input("Or record directly here")
 if record_audio and not user_audio:
     user_audio = record_audio
 
 # --------------------------------------------------------
-# MAIN
+# MAIN LOGIC
 # --------------------------------------------------------
 if ref_audio and user_audio:
-    with st.spinner("Analyzing with Gemini…"):
+    with st.spinner("Analyzing your singing using Gemini… 🎧"):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as ref_tmp, \
              tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as user_tmp:
             ref_tmp.write(ref_audio.read())
             user_tmp.write(user_audio.read())
 
             model = genai.GenerativeModel("models/gemini-2.5-flash-native-audio-latest")
-
-            prompt = """You are a vocal coach.
-            Compare these two audio clips (reference vs. user singing)
-            and give friendly, constructive feedback with a score out of 100.
+            prompt = """You are a vocal coach. Compare these two audio clips:
+            1️⃣ Reference song (ideal)
+            2️⃣ User singing attempt.
+            Provide constructive, friendly feedback and a score out of 100.
             """
 
             response = model.generate_content([
@@ -85,8 +105,10 @@ if ref_audio and user_audio:
     score = int(match.group(1)) if match else np.random.randint(60, 95)
     st.session_state.history.append({"score": score, "feedback": response.text})
 
-    # TTS feedback
-    with st.spinner("Generating spoken feedback…"):
+    # --------------------------------------------------------
+    # SPEAK FEEDBACK
+    # --------------------------------------------------------
+    with st.spinner("Generating spoken feedback… 🎙️"):
         tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
         tts_response = tts_model.generate_content(
             f"Speak this in a warm and motivating tone: {response.text}"
@@ -94,7 +116,9 @@ if ref_audio and user_audio:
         if hasattr(tts_response, "audio") and tts_response.audio:
             st.audio(tts_response.audio, format="audio/wav")
 
-    # Visualization
+    # --------------------------------------------------------
+    # VISUALIZATION
+    # --------------------------------------------------------
     st.subheader("🎛 Energy Pattern (approx. vocal dynamics)")
     ref_curve = energy_contour(ref_tmp.name)
     user_curve = energy_contour(user_tmp.name)
@@ -126,4 +150,4 @@ lyrics = st.text_area("Paste lyrics here (optional):", height=150)
 if lyrics:
     st.text_area("Lyrics display", lyrics, height=300)
 
-st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (zero-build version)")
+st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (auto-fallback audio engine)")
