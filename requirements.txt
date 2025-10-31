@@ -1,3 +1,5 @@
+--upgrade pip setuptools wheel
+
 reportlab
 Pillow
 
