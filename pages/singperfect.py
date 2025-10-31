@@ -4,35 +4,40 @@ import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from scipy.signal import hilbert
-from google import genai
-import os, re
+import re
+import google.generativeai as genai
 
 # --------------------------------------------------------
 # CONFIGURATION
 # --------------------------------------------------------
 st.set_page_config(page_title="SingPerfect 🎤", layout="wide")
+
+# Configure Google API Key
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
 # --------------------------------------------------------
-# SIMPLE ENERGY-BASED ANALYSIS (no compiled libs)
+# PURE NUMPY ANALYSIS (no scipy/librosa/aubio)
 # --------------------------------------------------------
 def energy_contour(path):
-    """Return a pseudo-pitch curve based on short-time energy."""
+    """Return a pseudo pitch/energy contour using only numpy."""
     y, sr = sf.read(path, always_2d=False)
     if y.ndim > 1:
         y = np.mean(y, axis=1)
+
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
-    energy = []
+    energies = []
+
     for i in range(0, len(y) - frame_len, hop):
         frame = y[i:i + frame_len]
-        env = np.abs(hilbert(frame))
-        energy.append(np.mean(env))
-    return np.array(energy)
+        env = np.abs(np.fft.ifft(np.fft.fft(frame)))  # simple energy proxy
+        energies.append(np.mean(env))
+
+    energies = np.array(energies)
+    return energies / np.max(energies) if np.max(energies) != 0 else energies
 
 # --------------------------------------------------------
 # UI
@@ -61,8 +66,12 @@ if ref_audio and user_audio:
             user_tmp.write(user_audio.read())
 
             model = genai.GenerativeModel("models/gemini-2.5-flash-native-audio-latest")
-            prompt = """You are a vocal coach. Compare the two clips (reference vs user) 
-            and give constructive feedback with a score out of 100."""
+
+            prompt = """You are a vocal coach.
+            Compare these two audio clips (reference vs. user singing)
+            and give friendly, constructive feedback with a score out of 100.
+            """
+
             response = model.generate_content([
                 {"mime_type": "text/plain", "text": prompt},
                 {"mime_type": "audio/wav", "data": open(ref_tmp.name, "rb").read()},
@@ -76,7 +85,7 @@ if ref_audio and user_audio:
     score = int(match.group(1)) if match else np.random.randint(60, 95)
     st.session_state.history.append({"score": score, "feedback": response.text})
 
-    # TTS
+    # TTS feedback
     with st.spinner("Generating spoken feedback…"):
         tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
         tts_response = tts_model.generate_content(
@@ -85,12 +94,12 @@ if ref_audio and user_audio:
         if hasattr(tts_response, "audio") and tts_response.audio:
             st.audio(tts_response.audio, format="audio/wav")
 
-    # Pseudo-pitch/energy plot
+    # Visualization
     st.subheader("🎛 Energy Pattern (approx. vocal dynamics)")
     ref_curve = energy_contour(ref_tmp.name)
     user_curve = energy_contour(user_tmp.name)
 
-    plt.figure(figsize=(10,4))
+    plt.figure(figsize=(10, 4))
     plt.plot(ref_curve, label="Reference", alpha=0.8)
     plt.plot(user_curve, label="You", alpha=0.8)
     plt.xlabel("Frame index")
@@ -117,4 +126,4 @@ lyrics = st.text_area("Paste lyrics here (optional):", height=150)
 if lyrics:
     st.text_area("Lyrics display", lyrics, height=300)
 
-st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (pure-Python version)")
+st.caption("Built with ❤️ using Google Gemini 2.5 Flash + Streamlit Cloud (zero-build version)")
