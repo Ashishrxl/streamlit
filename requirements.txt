@@ -59,9 +59,10 @@ python-docx
 # Sing perfect
 
 
-aubio==0.4.9
+
+praat-parselmouth==0.4.3
 pydub==0.25.1
-scipy==1.13.1
+scipy==1.12.0
 protobuf==5.28.2
 
 
