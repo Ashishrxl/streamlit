@@ -2,7 +2,7 @@ name: Keep Streamlit App Awake
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # Runs every 6 hours
+    - cron: "0 * * * *"  # ⏰ Runs every hour
   workflow_dispatch:       # Allows manual run from GitHub Actions tab
 
 jobs:
@@ -11,5 +11,32 @@ jobs:
     steps:
       - name: Wake up Streamlit app
         run: |
-          echo "Pinging Streamlit app..."
-          curl -s -o /dev/null -w "%{http_code}\n" https://ashishraxaul.streamlit.app
+          echo "🔄 Attempting to wake up Streamlit app..."
+          
+          URL="https://ashishraxaul.streamlit.app/"
+          ATTEMPTS=3
+          SLEEP_BETWEEN=60  # seconds
+
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "➡️  Attempt $i of $ATTEMPTS..."
+            
+            STATUS=$(curl -L -s -o /dev/null -w "%{http_code}" \
+              -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+              "$URL")
+
+            echo "Response code: $STATUS"
+
+            if [ "$STATUS" -eq 200 ]; then
+              echo "✅ Streamlit app is awake and responding (HTTP 200)"
+              exit 0
+            else
+              echo "⚠️  Attempt $i failed (HTTP $STATUS)"
+              if [ "$i" -lt "$ATTEMPTS" ]; then
+                echo "⏳ Waiting $SLEEP_BETWEEN seconds before retry..."
+                sleep $SLEEP_BETWEEN
+              fi
+            fi
+          done
+
+          echo "❌ All attempts failed — Streamlit app may still be asleep or unreachable."
+          exit 1
