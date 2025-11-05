@@ -6,7 +6,6 @@ from pydub import AudioSegment
 import matplotlib.pyplot as plt
 from google import genai
 from google.genai import types
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RTCConfiguration
 from streamlit.components.v1 import html
 import wave
 
@@ -42,8 +41,6 @@ hide_streamlit_style = """
 footer {visibility: hidden;}
 [data-testid="stStatusWidget"] {display: none;}
 [data-testid="stToolbar"] {display: none;}
-a[href^="https://github.com"] {display: none !important;}
-a[href^="https://streamlit.io"] {display: none !important;}
 header > div:nth-child(2) { display: none; }
 .main { padding: 2rem; }
 .stButton > button {
@@ -64,8 +61,8 @@ if "GOOGLE_API_KEY_1" not in st.secrets:
     st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
     st.stop()
 
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
-client = genai.Client()
+# ✅ new SDK: initialize client directly
+client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 # ==============================
 # Helper: Load Audio + Energy Contour
@@ -137,7 +134,6 @@ if ref_file and recorded_file_path:
 
     # --- Gemini AI Feedback (Text) ---
     st.subheader("🎶 AI Vocal Feedback")
-    model = client.models.get("gemini-2.5-pro")
 
     prompt = (
         "You are a professional vocal coach. "
