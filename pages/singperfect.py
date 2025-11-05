@@ -223,23 +223,34 @@ if ref_file and recorded_file_path:
         with st.spinner(f"🎙️ Generating spoken feedback ({voice_style})..."):
             tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
             tts_response = tts_model.generate_content(
-                f"Speak this feedback {voice_prompts[voice_style]}: {response.text}",
-                response_modalities=["AUDIO"]
+                f"Speak this feedback {voice_prompts[voice_style]}: {response.text}"
             )
 
-            # Extract PCM data (audio bytes)
-            audio_bytes = tts_response.candidates[0].content.parts[0].inline_data.data
+            # Extract audio bytes from the TTS response
+            audio_part = None
+            for candidate in tts_response.candidates:
+                for part in candidate.content.parts:
+                    if hasattr(part, "inline_data") and "data" in part.inline_data:
+                        audio_part = part.inline_data.data
+                        break
 
-            # Write PCM bytes as WAV for playback
+            if audio_part is None:
+                raise ValueError("No audio data found in TTS response")
+
+            # Write audio bytes to a WAV file
             tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
             with wave.open(tts_path, "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(24000)
-                wf.writeframes(audio_bytes)
+                wf.writeframes(audio_part)
 
         st.audio(tts_path, format="audio/wav")
         st.success(f"✅ Audio feedback generated in {voice_style} voice!")
+
+        # Optional: download button
+        with open(tts_path, "rb") as f:
+            st.download_button("💾 Download Feedback Audio", f, file_name="AI_Vocal_Feedback.wav")
 
     except Exception as e:
         st.warning(f"⚠️ Audio feedback unavailable. ({e})")
