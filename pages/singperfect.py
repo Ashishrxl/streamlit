@@ -4,7 +4,9 @@ import numpy as np
 import soundfile as sf
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RTCConfiguration
 from streamlit.components.v1 import html
 import wave
 
@@ -29,11 +31,11 @@ disable_footer_click = """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
 
 st.set_page_config(
-    page_title="🎙️ Text 2 Audio",
+    page_title="🎙️ AI Vocal Coach using Google Gemini",
     layout="wide"
 )
 
-# CSS to hide unwanted elements
+# CSS styling
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -51,47 +53,19 @@ header > div:nth-child(2) { display: none; }
     padding: 0.75rem;
     font-size: 1.1rem;
 }
-.success-box {
-    padding: 1rem;
-    background-color: #d4edda;
-    border: 1px solid #c3e6cb;
-    border-radius: 0.25rem;
-    color: #155724;
-}
-.warning-box {
-    padding: 1rem;
-    background-color: #fff3cd;
-    border: 1px solid #ffeaa7;
-    border-radius: 0.25rem;
-    color: #856404;
-}
-.info-box {
-    padding: 1rem;
-    background-color: #d1ecf1;
-    border: 1px solid #bee5eb;
-    border-radius: 0.25rem;
-    color: #0c5460;
-}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ==============================
-# Streamlit Page Setup
-# ==============================
-st.set_page_config(page_title="🎵 AI Vocal Coach", layout="wide")
-
-st.title("🎙️ AI Vocal Coach using Google Gemini")
-st.write("Record your voice, compare it with the reference song, and get AI-powered singing feedback!")
-
-# ==============================
 # Google API Key Setup
 # ==============================
-if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("❌ Missing GOOGLE_API_KEY in Streamlit Secrets.")
+if "GOOGLE_API_KEY_1" not in st.secrets:
+    st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
     st.stop()
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
+client = genai.Client()
 
 # ==============================
 # Helper: Load Audio + Energy Contour
@@ -129,19 +103,16 @@ ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3",
 # Step 2: Record Singing
 # ==============================
 st.header("🎤 Step 2: Record Your Singing")
-st.markdown("Click below to record directly from your microphone 🎙️")
-
-# ✅ Updated Recording Section
 recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
+# Save uploaded/recorded audio
 recorded_file_path = None
 if recorded_audio_native:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
-        tmpfile.write(recorded_audio_native.read())
-        recorded_file_path = tmpfile.name
+    recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+    with open(recorded_file_path, "wb") as f:
+        f.write(recorded_audio_native.getvalue())
     st.audio(recorded_file_path, format="audio/wav")
     st.success("✅ Recording captured!")
-
 
 # ==============================
 # Step 3: Analyze and Get Feedback
@@ -164,9 +135,9 @@ if ref_file and recorded_file_path:
     ax.set_ylabel("Normalized Energy")
     st.pyplot(fig)
 
-    # --- Gemini AI Analysis ---
+    # --- Gemini AI Feedback (Text) ---
     st.subheader("🎶 AI Vocal Feedback")
-    model = genai.GenerativeModel("models/gemini-2.5-pro")
+    model = client.models.get("gemini-2.5-pro")
 
     prompt = (
         "You are a professional vocal coach. "
@@ -176,8 +147,9 @@ if ref_file and recorded_file_path:
     )
 
     with st.spinner("🎧 Analyzing vocals with Gemini..."):
-        response = model.generate_content(
-            [
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=[
                 {
                     "role": "user",
                     "parts": [
@@ -196,61 +168,44 @@ if ref_file and recorded_file_path:
                         },
                     ],
                 }
-            ]
+            ],
         )
 
     st.success("✅ Feedback Ready!")
-    st.write(response.text)
+    feedback_text = response.candidates[0].content.parts[0].text
+    st.write(feedback_text)
 
-    # --- Voice Style Selection ---
-    st.subheader("🎙️ Choose Voice Style for Feedback")
-    voice_style = st.selectbox(
-        "Select how you want the AI to sound:",
-        ["Warm & Encouraging", "Energetic & Excited", "Calm & Soothing", "Deep & Confident"]
-    )
-
-    voice_prompts = {
-        "Warm & Encouraging": "in a warm, encouraging, supportive tone",
-        "Energetic & Excited": "in an energetic, upbeat, excited tone",
-        "Calm & Soothing": "in a calm, peaceful, and soothing tone",
-        "Deep & Confident": "in a deep, confident, and motivational tone"
-    }
-
-    # --- AI Spoken Feedback (TTS) ---
+    # --- Gemini TTS Feedback ---
     st.subheader("🔊 Listen to AI Feedback")
 
     try:
-        with st.spinner(f"🎙️ Generating spoken feedback ({voice_style})..."):
-            tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
-            tts_response = tts_model.generate_content(
-                f"Speak this feedback {voice_prompts[voice_style]}: {response.text}"
+        with st.spinner("🎙️ Generating spoken feedback..."):
+            tts_response = client.models.generate_content(
+                model="gemini-2.5-flash-preview-tts",
+                contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name="Kore"
+                            )
+                        )
+                    )
+                ),
             )
 
-            # Extract audio bytes from the TTS response
-            audio_part = None
-            for candidate in tts_response.candidates:
-                for part in candidate.content.parts:
-                    if hasattr(part, "inline_data") and "data" in part.inline_data:
-                        audio_part = part.inline_data.data
-                        break
-
-            if audio_part is None:
-                raise ValueError("No audio data found in TTS response")
-
-            # Write audio bytes to a WAV file
+            # Extract audio bytes and save as .wav
+            audio_data = tts_response.candidates[0].content.parts[0].inline_data.data
             tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
             with wave.open(tts_path, "wb") as wf:
                 wf.setnchannels(1)
-                wf.setsampwidth(2)  # 16-bit
+                wf.setsampwidth(2)
                 wf.setframerate(24000)
-                wf.writeframes(audio_part)
+                wf.writeframes(audio_data)
 
         st.audio(tts_path, format="audio/wav")
-        st.success(f"✅ Audio feedback generated in {voice_style} voice!")
-
-        # Optional: download button
-        with open(tts_path, "rb") as f:
-            st.download_button("💾 Download Feedback Audio", f, file_name="AI_Vocal_Feedback.wav")
+        st.success("✅ Audio feedback generated!")
 
     except Exception as e:
         st.warning(f"⚠️ Audio feedback unavailable. ({e})")
