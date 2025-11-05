@@ -5,6 +5,7 @@ import wave
 from io import BytesIO
 import time
 from streamlit.components.v1 import html
+import base64
 
 # Hide Streamlit default elements
 html(
@@ -153,7 +154,7 @@ def summarize_text(text, api_key, max_words=3500):
     """
     try:
         client = genai.Client(api_key=api_key)
-        
+
         prompt = f"""Please provide a comprehensive summary of the following text. 
 Capture all key points, main ideas, and important details while keeping the summary under {max_words} words.
 Maintain the flow and context of the original content.
@@ -164,10 +165,10 @@ TEXT TO SUMMARIZE:
 SUMMARY:"""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",  # or "gemini-1.5-pro" or "gemini-1.5-flash"
+            model="gemini-2.0-flash-exp",
             contents=prompt
         )
-        
+
         summary = response.text
         return summary
 
@@ -175,7 +176,7 @@ SUMMARY:"""
         st.error(f"Error during summarization: {str(e)}")
         return None
 
-# Generate audio from text using Gemini 2.5 Flash TTS
+# ✅ Fixed Generate Audio function
 def generate_audio_tts(text, api_key, voice_name='Kore', speaking_style=''):
     try:
         client = genai.Client(api_key=api_key)
@@ -197,8 +198,22 @@ def generate_audio_tts(text, api_key, voice_name='Kore', speaking_style=''):
             )
         )
 
-        audio_data = response.candidates[0].content.parts[0].inline_data.data
-        return audio_data
+        # ✅ Safe handling and Base64 decoding
+        if (
+            hasattr(response, "candidates")
+            and response.candidates
+            and hasattr(response.candidates[0], "content")
+            and response.candidates[0].content
+            and response.candidates[0].content.parts
+        ):
+            audio_part = response.candidates[0].content.parts[0]
+
+            if hasattr(audio_part, "inline_data") and audio_part.inline_data.data:
+                audio_data = base64.b64decode(audio_part.inline_data.data)
+                return audio_data
+
+        st.error("❌ No audio data returned from the model. Check your API key or input text.")
+        return None
 
     except Exception as e:
         st.error(f"Error generating audio: {str(e)}")
@@ -210,7 +225,7 @@ def main():
     st.markdown("---")
 
     # Configuration constants
-    MAX_WORDS_FOR_TTS = 4000  # Safe limit for TTS without hitting quota
+    MAX_WORDS_FOR_TTS = 4000
 
     # Sidebar for configuration
     with st.expander("⚙️ Settings", expanded=False):
@@ -273,8 +288,8 @@ def main():
 
                 if extracted_text:
                     st.session_state.input_text = extracted_text
-                    st.session_state.text_confirmed = True  # Auto-confirm for file uploads
-                    
+                    st.session_state.text_confirmed = True
+
                     st.text_area(
                         "Extracted Text",
                         value=extracted_text,
@@ -285,7 +300,7 @@ def main():
 
                     word_count = len(extracted_text.split())
                     st.caption(f"📊 Word count: {word_count} words")
-                    
+
                     if word_count > MAX_WORDS_FOR_TTS:
                         st.markdown(
                             f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
@@ -294,24 +309,20 @@ def main():
                         )
 
         with input_tab2:
-            # Display confirmed text or text area
             if st.session_state.text_confirmed and st.session_state.input_text and not uploaded_file:
                 confirmed_word_count = len(st.session_state.input_text.split())
                 st.markdown(
-                    f'<div class="info-box">✅ Text confirmed ({confirmed_word_count} words). '
-                    f'Ready to generate audio! ➡️</div>',
+                    f'<div class="info-box">✅ Text confirmed ({confirmed_word_count} words). Ready to generate audio! ➡️</div>',
                     unsafe_allow_html=True
                 )
-                
-                # Show word count warning if needed
+
                 if confirmed_word_count > MAX_WORDS_FOR_TTS:
                     st.markdown(
                         f'<div class="warning-box">⚠️ Text exceeds {MAX_WORDS_FOR_TTS} words. '
                         f'It will be automatically summarized before audio conversion.</div>',
                         unsafe_allow_html=True
                     )
-                
-                # Show preview of confirmed text
+
                 st.text_area(
                     "Confirmed Text (preview)",
                     value=st.session_state.input_text[:500] + ("..." if len(st.session_state.input_text) > 500 else ""),
@@ -319,14 +330,13 @@ def main():
                     disabled=True,
                     key="confirmed_text_preview"
                 )
-                
+
                 if st.button("🔄 Edit/Change Text", type="secondary", key="edit_text_btn"):
                     st.session_state.text_confirmed = False
                     st.session_state.typed_text_temp = st.session_state.input_text
                     st.session_state.audio_generated = False
                     st.rerun()
             else:
-                # Use form for better mobile experience - immediate button response
                 with st.form(key="text_input_form", clear_on_submit=False):
                     typed_text = st.text_area(
                         "Type or paste your text here",
@@ -336,28 +346,26 @@ def main():
                         key="typed_input_form_area"
                     )
 
-                    # Form buttons - these respond immediately
                     col_btn1, col_btn2 = st.columns([1, 1])
-                    
+
                     with col_btn1:
                         submit_button = st.form_submit_button("✅ Proceed with This Text", type="primary")
-                    
+
                     with col_btn2:
                         clear_button = st.form_submit_button("🔄 Clear Text", type="secondary")
-                
-                # Handle form submission
+
                 if submit_button:
                     if typed_text and len(typed_text.strip()) > 0:
                         st.session_state.input_text = typed_text
                         st.session_state.text_confirmed = True
-                        st.session_state.audio_generated = False  # Reset audio if new text
+                        st.session_state.audio_generated = False
                         st.session_state.typed_text_temp = ""
                         st.session_state.current_typed_text = ""
                         st.success("✅ Text confirmed! You can now generate audio.")
                         st.rerun()
                     else:
                         st.warning("⚠️ Please enter some text before proceeding.")
-                
+
                 if clear_button:
                     st.session_state.input_text = ""
                     st.session_state.text_confirmed = False
@@ -369,48 +377,40 @@ def main():
     with col2:
         st.header("🔊 Generate Audio")
 
-        # Check if text is confirmed before allowing audio generation
         if api_key and st.session_state.text_confirmed and st.session_state.input_text:
             input_text = st.session_state.input_text
             word_count = len(input_text.split())
 
-            # Determine if summarization is needed
             needs_summarization = word_count > MAX_WORDS_FOR_TTS
 
             if needs_summarization and not st.session_state.audio_generated:
-                st.info(f"📝 Original text: {word_count} words " f"🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
+                st.info(f"📝 Original text: {word_count} words 🤖 Will be summarized to ~{MAX_WORDS_FOR_TTS} words before conversion")
 
             if st.button("🎵 Convert to Audio", type="primary", key="convert_audio_btn"):
                 use_text = input_text
-                
-                # Reset audio generated state
+
                 st.session_state.audio_generated = False
                 st.session_state.was_summarized = False
-                
-                # Summarize if needed
+
                 if needs_summarization:
                     st.markdown("### 🤖 Step 1: Summarizing Text")
-                    with st.spinner("Summarizing long text to fit TTS limits... This may take a moment."):
+                    with st.spinner("Summarizing long text..."):
                         summary = summarize_text(input_text, api_key=api_key, max_words=MAX_WORDS_FOR_TTS)
-                    
+
                     if summary:
                         summary_word_count = len(summary.split())
                         st.success(f"✅ Summarization complete! Reduced from {word_count} to {summary_word_count} words")
-                        
-                        # Store summary in session state
                         st.session_state.summary_text = summary
                         st.session_state.original_word_count = word_count
                         st.session_state.was_summarized = True
-                        
                         use_text = summary
                     else:
-                        st.error("❌ Failed to summarize text. Please try with shorter text")
+                        st.error("❌ Failed to summarize text.")
                         use_text = None
 
-                # Generate audio if we have valid text
                 if use_text:
-                    st.markdown("### 🎙️ Step 2: Generating Audio" if needs_summarization else "### 🎙️ Generating Audio")
-                    with st.spinner("Converting text to audio... This may take a moment."):
+                    st.markdown("### 🎙️ Generating Audio")
+                    with st.spinner("Converting text to audio..."):
                         audio_data = generate_audio_tts(
                             text=use_text,
                             api_key=api_key,
@@ -420,18 +420,14 @@ def main():
 
                     if audio_data:
                         audio_buffer = save_wave_file(audio_data)
-                        
-                        # Store in session state
                         st.session_state.audio_buffer = audio_buffer
                         st.session_state.audio_generated = True
                         st.session_state.final_word_count = len(use_text.split())
                         st.session_state.selected_voice_used = selected_voice
 
-            # Display generated audio (persists after download button click)
             if st.session_state.audio_generated and st.session_state.audio_buffer:
                 st.markdown('<div class="success-box">✅ Audio generated successfully!</div>', unsafe_allow_html=True)
-                
-                # Show summary if it was created
+
                 if st.session_state.was_summarized and st.session_state.summary_text:
                     with st.expander("📄 View Summarized Text", expanded=False):
                         st.text_area(
@@ -441,15 +437,13 @@ def main():
                             disabled=True,
                             key="summary_display_persist"
                         )
-                
-                # Reset buffer position to beginning for audio player
+
                 st.session_state.audio_buffer.seek(0)
                 st.audio(st.session_state.audio_buffer, format='audio/wav')
 
                 timestamp = time.strftime("%Y%m%d-%H%M%S")
                 filename = f"audio_output_{timestamp}.wav"
 
-                # Reset buffer position again for download
                 st.session_state.audio_buffer.seek(0)
                 st.download_button(
                     label="⬇️ Download Audio File",
@@ -460,11 +454,10 @@ def main():
                 )
 
                 st.info(f"🎵 Voice: {st.session_state.selected_voice_used} | 📝 Words converted: {st.session_state.final_word_count}")
-                
+
                 if st.session_state.was_summarized:
                     st.caption(f"ℹ️ Original text ({st.session_state.original_word_count} words) was summarized for audio conversion")
-                
-                # Add a button to clear and generate new audio
+
                 if st.button("🔄 Generate New Audio", type="secondary", key="new_audio_btn"):
                     st.session_state.audio_generated = False
                     st.session_state.audio_buffer = None
