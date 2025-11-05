@@ -203,24 +203,23 @@ if ref_file and recorded_file_path:
 
     # --- AI Spoken Feedback (TTS) ---
     st.subheader("🔊 Listen to AI Feedback")
-    tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
 
     with st.spinner("🎙️ Generating spoken feedback..."):
+        tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
         tts_response = tts_model.generate_content(
-            [
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": f"Speak this feedback in a warm, encouraging tone: {response.text}"}
-                    ],
-                }
-            ]
+            f"Speak this feedback in a warm, encouraging tone: {response.text}",
+            generation_config={"response_mime_type": "audio/mp3"}
         )
 
     try:
-        st.audio(tts_response.audio, format="audio/mp3")
-    except Exception:
-        st.warning("⚠️ Audio feedback unavailable.")
+        # Save audio bytes to temporary file for Streamlit playback
+        tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+        with open(tts_path, "wb") as f:
+            f.write(tts_response.audio)
+        st.audio(tts_path, format="audio/mp3")
+        st.success("✅ Audio feedback generated!")
+    except Exception as e:
+        st.warning(f"⚠️ Audio feedback unavailable. ({e})")
 
     # --- Future Enhancements ---
     with st.expander("🌟 Future Enhancements"):
