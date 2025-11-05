@@ -4,9 +4,7 @@ import numpy as np
 import soundfile as sf
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
-# NOTE: use google.genai client and types for the TTS path
 import google.generativeai as genai
-from google.genai import types
 from streamlit.components.v1 import html
 import wave
 
@@ -93,7 +91,6 @@ if "GOOGLE_API_KEY" not in st.secrets:
     st.error("❌ Missing GOOGLE_API_KEY in Streamlit Secrets.")
     st.stop()
 
-# configure API key (you already used this pattern)
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 # ==============================
@@ -205,43 +202,45 @@ if ref_file and recorded_file_path:
     st.success("✅ Feedback Ready!")
     st.write(response.text)
 
+    # --- Voice Style Selection ---
+    st.subheader("🎙️ Choose Voice Style for Feedback")
+    voice_style = st.selectbox(
+        "Select how you want the AI to sound:",
+        ["Warm & Encouraging", "Energetic & Excited", "Calm & Soothing", "Deep & Confident"]
+    )
+
+    voice_prompts = {
+        "Warm & Encouraging": "in a warm, encouraging, supportive tone",
+        "Energetic & Excited": "in an energetic, upbeat, excited tone",
+        "Calm & Soothing": "in a calm, peaceful, and soothing tone",
+        "Deep & Confident": "in a deep, confident, and motivational tone"
+    }
+
     # --- AI Spoken Feedback (TTS) ---
     st.subheader("🔊 Listen to AI Feedback")
 
-    # === FIXED TTS PATH using response_modalities=["AUDIO"] and speech_config ===
     try:
-        with st.spinner("🎙️ Generating spoken feedback..."):
-            client = genai.Client()  # use the client interface for TTS per docs
-            tts_prompt = f"Speak this feedback in a warm, encouraging tone: {response.text}"
-
-            tts_response = client.models.generate_content(
-                model="gemini-2.5-flash-preview-tts",
-                contents=tts_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name="Kore"  # choose any available prebuilt voice
-                            )
-                        )
-                    ),
-                ),
+        with st.spinner(f"🎙️ Generating spoken feedback ({voice_style})..."):
+            tts_model = genai.GenerativeModel("models/gemini-2.5-flash-preview-tts")
+            tts_response = tts_model.generate_content(
+                f"Speak this feedback {voice_prompts[voice_style]}: {response.text}",
+                response_modalities=["AUDIO"]
             )
 
-            # Extract PCM data (bytes) from the response (per official example)
-            data = tts_response.candidates[0].content.parts[0].inline_data.data
+            # Extract PCM data (audio bytes)
+            audio_bytes = tts_response.candidates[0].content.parts[0].inline_data.data
 
-            # Save PCM as a proper WAV file (24kHz, 16-bit, mono) so Streamlit can play it
+            # Write PCM bytes as WAV for playback
             tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
             with wave.open(tts_path, "wb") as wf:
                 wf.setnchannels(1)
-                wf.setsampwidth(2)          # 16-bit = 2 bytes
-                wf.setframerate(24000)     # Gemini TTS PCM uses 24000 Hz
-                wf.writeframes(data)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(24000)
+                wf.writeframes(audio_bytes)
 
         st.audio(tts_path, format="audio/wav")
-        st.success("✅ Audio feedback generated!")
+        st.success(f"✅ Audio feedback generated in {voice_style} voice!")
+
     except Exception as e:
         st.warning(f"⚠️ Audio feedback unavailable. ({e})")
 
