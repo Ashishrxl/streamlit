@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 from streamlit.components.v1 import html
 import wave
+import base64
 
 # Hide Streamlit default elements
 html(
@@ -61,7 +62,7 @@ if "GOOGLE_API_KEY_1" not in st.secrets:
     st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
     st.stop()
 
-# ✅ new SDK: initialize client directly
+# ✅ New GenAI SDK initialization
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 # ==============================
@@ -203,7 +204,15 @@ if ref_file and recorded_file_path:
         st.audio(tts_path, format="audio/wav")
         st.success("✅ Audio feedback generated!")
 
+        # --- Download Option ---
+        with open(tts_path, "rb") as f:
+            audio_bytes = f.read()
+            b64 = base64.b64encode(audio_bytes).decode()
+            href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
     except Exception as e:
         st.warning(f"⚠️ Audio feedback unavailable. ({e})")
 
-    
+else:
+    st.info("Please upload a reference song and record your singing above.")
