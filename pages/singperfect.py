@@ -5,7 +5,6 @@ import soundfile as sf
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
 import google.generativeai as genai
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase, RTCConfiguration
 from streamlit.components.v1 import html
 
 # Hide Streamlit default elements
@@ -131,42 +130,16 @@ ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3",
 st.header("🎤 Step 2: Record Your Singing")
 st.markdown("Click below to record directly from your microphone 🎙️")
 
-RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
+# ✅ Updated Recording Section
+recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
-class AudioProcessor(AudioProcessorBase):
-    def __init__(self):
-        self.frames = []
-
-    def recv_audio(self, frame):
-        self.frames.append(frame.to_ndarray().flatten())
-        return frame
-
-webrtc_ctx = webrtc_streamer(
-    key="singing-demo",
-    mode=WebRtcMode.SENDONLY,
-    audio_receiver_size=256,
-    rtc_configuration=RTC_CONFIG,
-    media_stream_constraints={"audio": True, "video": False},
-    async_processing=True,
-)
-
-# Save mic recording
 recorded_file_path = None
-if webrtc_ctx.audio_receiver:
-    audio_frames = []
-    while True:
-        try:
-            frame = webrtc_ctx.audio_receiver.get_frame(timeout=1)
-        except:
-            break
-        audio_frames.append(frame.to_ndarray().flatten())
-
-    if audio_frames:
-        audio_data = np.concatenate(audio_frames)
-        recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        sf.write(recorded_file_path, audio_data, 44100)
-        st.audio(recorded_file_path, format="audio/wav")
-        st.success("✅ Recording captured!")
+if recorded_audio_native:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
+        tmpfile.write(recorded_audio_native.read())
+        recorded_file_path = tmpfile.name
+    st.audio(recorded_file_path, format="audio/wav")
+    st.success("✅ Recording captured!")
 
 
 # ==============================
