@@ -92,15 +92,28 @@ def load_audio_energy(path):
 
 
 # ==============================
-# Step 1: Upload Reference Song
+# Step 1: User Options
 # ==============================
-st.header("🎧 Step 1: Upload Reference Song")
+st.header("⚙️ Step 1: Choose Feedback Options")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    feedback_lang = st.selectbox("🗣️ Choose feedback language", ["English", "Hindi"])
+
+with col2:
+    enable_audio_feedback = st.checkbox("🔊 Generate Audio Feedback (optional)", value=False)
+
+# ==============================
+# Step 2: Upload Reference Song
+# ==============================
+st.header("🎧 Step 2: Upload Reference Song")
 ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3", "wav"])
 
 # ==============================
-# Step 2: Record Singing
+# Step 3: Record Singing
 # ==============================
-st.header("🎤 Step 2: Record Your Singing")
+st.header("🎤 Step 3: Record Your Singing")
 recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
 # Save uploaded/recorded audio
@@ -113,7 +126,7 @@ if recorded_audio_native:
     st.success("✅ Recording captured!")
 
 # ==============================
-# Step 3: Analyze and Get Feedback
+# Step 4: Analyze and Get Feedback
 # ==============================
 if ref_file and recorded_file_path:
     ref_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
@@ -136,11 +149,15 @@ if ref_file and recorded_file_path:
     # --- Gemini AI Feedback (Text) ---
     st.subheader("🎶 AI Vocal Feedback")
 
+    lang_instruction = (
+        "Provide feedback in English."
+        if feedback_lang == "English"
+        else "Provide feedback in Hindi using natural, encouraging tone."
+    )
+
     prompt = (
-        "You are a professional vocal coach. "
-        "Compare the user's singing to the reference song and provide constructive feedback "
-        "about pitch accuracy, rhythm, tone, and expression. "
-        "Be supportive and motivating."
+        f"You are a professional vocal coach. Compare the user's singing to the reference song "
+        f"and give supportive feedback about pitch, rhythm, tone, and expression. {lang_instruction}"
     )
 
     with st.spinner("🎧 Analyzing vocals with Gemini..."):
@@ -172,47 +189,48 @@ if ref_file and recorded_file_path:
     feedback_text = response.candidates[0].content.parts[0].text
     st.write(feedback_text)
 
-    # --- Gemini TTS Feedback ---
-    st.subheader("🔊 Listen to AI Feedback")
+    # --- Gemini TTS Feedback (Optional) ---
+    if enable_audio_feedback:
+        st.subheader("🔊 Listen to AI Feedback")
 
-    try:
-        with st.spinner("🎙️ Generating spoken feedback..."):
-            tts_response = client.models.generate_content(
-                model="gemini-2.5-flash-preview-tts",
-                contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name="Kore"
+        try:
+            with st.spinner("🎙️ Generating spoken feedback..."):
+                tts_response = client.models.generate_content(
+                    model="gemini-2.5-flash-preview-tts",
+                    contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name="Kore"
+                                )
                             )
                         )
-                    )
-                ),
-            )
+                    ),
+                )
 
-            # Extract audio bytes and save as .wav
-            audio_data = tts_response.candidates[0].content.parts[0].inline_data.data
-            tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-            with wave.open(tts_path, "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(24000)
-                wf.writeframes(audio_data)
+                # Extract audio bytes and save as .wav
+                audio_data = tts_response.candidates[0].content.parts[0].inline_data.data
+                tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+                with wave.open(tts_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(24000)
+                    wf.writeframes(audio_data)
 
-        st.audio(tts_path, format="audio/wav")
-        st.success("✅ Audio feedback generated!")
+            st.audio(tts_path, format="audio/wav")
+            st.success("✅ Audio feedback generated!")
 
-        # --- Download Option ---
-        with open(tts_path, "rb") as f:
-            audio_bytes = f.read()
-            b64 = base64.b64encode(audio_bytes).decode()
-            href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
-            st.markdown(href, unsafe_allow_html=True)
+            # --- Download Option ---
+            with open(tts_path, "rb") as f:
+                audio_bytes = f.read()
+                b64 = base64.b64encode(audio_bytes).decode()
+                href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
+                st.markdown(href, unsafe_allow_html=True)
 
-    except Exception as e:
-        st.warning(f"⚠️ Audio feedback unavailable. ({e})")
+        except Exception as e:
+            st.warning(f"⚠️ Audio feedback unavailable. ({e})")
 
 else:
     st.info("Please upload a reference song and record your singing above.")
