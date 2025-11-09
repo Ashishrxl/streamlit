@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 from google import genai
 from google.genai import types
 from streamlit.components.v1 import html
-import wave
 import base64
 import os
 from contextlib import contextmanager
 import threading
 import queue
 import sounddevice as sd
+import websocket
+import json
 
 # ==============================
 # Hide Streamlit elements
@@ -65,7 +66,6 @@ def temp_wav_file(suffix=".wav"):
             pass
 
 def safe_read_audio(path):
-    """Try reading audio robustly."""
     try:
         y, sr = sf.read(path, always_2d=False)
         if y.ndim > 1:
@@ -96,24 +96,25 @@ def load_audio_energy(path):
 # ==============================
 @st.cache_resource
 def get_gemini_client():
-    if "GOOGLE_API_KEY_1" not in st.secrets:
+    if "GOOGLE_API_KEY" not in st.secrets:
         return None
-    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
+    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 client = get_gemini_client()
 if client is None:
     st.error("❌ Missing GOOGLE_API_KEY in secrets.")
     st.stop()
 
+API_KEY = st.secrets["GOOGLE_API_KEY"]
+
 # ==============================
 # Mode Selection
 # ==============================
 st.title("🎙️ AI Vocal Coach")
-
 mode = st.radio("Choose Mode:", ["Upload & Compare", "🎧 Live Coaching"])
 
 # =======================================================
-#  MODE 1: UPLOAD & COMPARE (original functionality)
+# MODE 1: UPLOAD & COMPARE
 # =======================================================
 if mode == "Upload & Compare":
     st.header("⚙️ Step 1: Choose Feedback Options")
@@ -122,7 +123,6 @@ if mode == "Upload & Compare":
         feedback_lang = st.selectbox("🗣️ Feedback language", ["English", "Hindi"])
     with col2:
         enable_audio_feedback = st.checkbox("🔊 Generate Audio Feedback", value=False)
-
     voice_choice = st.selectbox("🎤 Choose AI voice", ["Kore", "Ava", "Wave"], index=0)
 
     # Step 2: Upload Song
@@ -285,54 +285,53 @@ if mode == "Upload & Compare":
         st.info("Please upload a song and record your voice to continue.")
 
 # =======================================================
-#  MODE 2: REALTIME COACHING
+# MODE 2: LIVE COACHING (WEBSOCKET FALLBACK)
 # =======================================================
 else:
-    st.header("🎧 Live Coaching Mode (Real-Time AI)")
+    st.header("🎧 Live Coaching Mode (Realtime WebSocket)")
 
-    q = queue.Queue()
+    REALTIME_URL = (
+        "wss://generativelanguage.googleapis.com/v1alpha/realtime:model="
+        "gemini-2.5-flash-native-audio-dialog?key=" + API_KEY
+    )
 
-    def stream_microphone_audio(session):
-        def callback(indata, frames, time, status):
-            q.put(bytes(indata))
-        with sd.RawInputStream(samplerate=16000, blocksize=1024, dtype="int16", channels=1, callback=callback):
-            st.info("🎙️ Listening... (Press Stop below when done)")
+    def start_realtime_session():
+        ws = websocket.WebSocket()
+        ws.connect(REALTIME_URL)
+
+        def send_audio():
+            def callback(indata, frames, time, status):
+                audio_b64 = base64.b64encode(indata).decode("utf-8")
+                ws.send(json.dumps({"type": "input_audio_buffer.append", "data": audio_b64}))
+
+            with sd.RawInputStream(
+                samplerate=16000, blocksize=1024, dtype="int16", channels=1, callback=callback
+            ):
+                st.info("🎙️ Singing... Press Stop below when done.")
+                while st.session_state.get("recording", True):
+                    pass
+
+        def receive_feedback():
+            st.markdown("**AI Feedback (Live):**")
             while True:
-                data = q.get()
-                if data == b"STOP":
-                    break
-                session.send_input({"audio": data})
+                msg = ws.recv()
+                data = json.loads(msg)
+                if data.get("type") == "response.output_text.delta":
+                    st.write(data.get("data"))
+                elif data.get("type") == "response.output_audio.delta":
+                    audio_data = base64.b64decode(data["data"])
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+                    tmp.write(audio_data)
+                    tmp.close()
+                    st.audio(tmp.name, format="audio/wav")
 
-    def receive_responses(session):
-        st.markdown("**AI Feedback (Live):**")
-        for event in session.receive():
-            if event.type == "response.output_text.delta":
-                st.write(event.data, end="")
-            elif event.type == "response.output_audio.delta":
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
-                    f.write(event.data)
-                    st.audio(f.name, format="audio/wav")
+        st.session_state["recording"] = True
+        threading.Thread(target=send_audio, daemon=True).start()
+        threading.Thread(target=receive_feedback, daemon=True).start()
 
     if st.button("🎤 Start Live Coaching"):
-        session = client.live.start(
-            model="gemini-2.5-flash-native-audio-dialog",
-            config=types.LiveConfig(
-                response_modalities=["AUDIO", "TEXT"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Ava")
-                    )
-                ),
-            ),
-        )
+        start_realtime_session()
 
-        sender = threading.Thread(target=stream_microphone_audio, args=(session,))
-        receiver = threading.Thread(target=receive_responses, args=(session,))
-
-        sender.start()
-        receiver.start()
-
-        if st.button("🛑 Stop"):
-            q.put(b"STOP")
-            session.close()
-            st.success("✅ Session ended.")
+    if st.button("🛑 Stop"):
+        st.session_state["recording"] = False
+        st.success("✅ Session ended.")
