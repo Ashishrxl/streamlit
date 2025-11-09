@@ -70,7 +70,6 @@ if not shutil.which("ffmpeg"):
 # ==============================
 @contextmanager
 def temp_wav_file(suffix=".wav"):
-    """Context manager for a temporary WAV file."""
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     tmp.close()
     try:
@@ -83,28 +82,21 @@ def temp_wav_file(suffix=".wav"):
 
 
 def safe_read_audio(path):
-    """Read audio robustly with soundfile or fallback to pydub."""
     try:
         y, sr = sf.read(path, always_2d=False)
         if y.ndim > 1:
             y = np.mean(y, axis=1)
         return y.astype(float), sr
     except Exception:
-        try:
-            audio = AudioSegment.from_file(path)
-            y = np.array(audio.get_array_of_samples()).astype(float)
-            sr = audio.frame_rate
-            return y, sr
-        except Exception as e:
-            st.error(f"❌ Could not decode audio file: {e}")
-            raise e
+        audio = AudioSegment.from_file(path)
+        y = np.array(audio.get_array_of_samples()).astype(float)
+        sr = audio.frame_rate
+        return y, sr
 
 
 @st.cache_data(show_spinner=False)
 def load_audio_energy(path):
-    """Returns normalized energy contour for visualization."""
     y, sr = safe_read_audio(path)
-
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
     energies = []
@@ -122,7 +114,6 @@ def load_audio_energy(path):
 
 
 def write_bytes_to_wav(path, audio_bytes, nchannels=1, sampwidth=2, framerate=24000):
-    """Write PCM bytes to WAV file safely."""
     try:
         with wave.open(path, "wb") as wf:
             wf.setnchannels(nchannels)
@@ -135,7 +126,7 @@ def write_bytes_to_wav(path, audio_bytes, nchannels=1, sampwidth=2, framerate=24
 
 
 # ==============================
-# Gemini client (cached)
+# Gemini client
 # ==============================
 @st.cache_resource
 def get_gemini_client():
@@ -144,8 +135,13 @@ def get_gemini_client():
     return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
 
+client = get_gemini_client()
+if client is None:
+    st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
+    st.stop()
+
 # ==============================
-# Step 1: Choose feedback options
+# Step 1: Choose Feedback Options
 # ==============================
 st.header("⚙️ Step 1: Choose Feedback Options")
 
@@ -164,18 +160,8 @@ voice_choice = st.selectbox("🎤 Choose AI voice (for TTS)", ["Kore", "Ava", "W
 st.header("🎧 Step 2: Upload Reference Song")
 ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3", "wav"])
 
-MAX_MB = 50
-if ref_file is not None and hasattr(ref_file, "size"):
-    size_mb = ref_file.size / (1024 * 1024)
-    if size_mb > MAX_MB:
-        st.warning(f"⚠️ File size {size_mb:.1f} MB may take longer to process.")
-
 lyrics_text = ""
-
-client = get_gemini_client()
-if client is None:
-    st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
-    st.stop()
+ref_tmp_path = None
 
 if ref_file:
     st.subheader("📝 Extracting Lyrics")
@@ -207,20 +193,7 @@ if ref_file:
             lyrics_text = "Lyrics could not be extracted."
 
 # ==============================
-# Step 3: Record Singing
-# ==============================
-st.header("🎤 Step 3: Record Your Singing")
-recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
-
-recorded_file_path = None
-if recorded_audio_native:
-    recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-    with open(recorded_file_path, "wb") as f:
-        f.write(recorded_audio_native.getvalue())
-    st.success("✅ Recording captured!")
-
-# ==============================
-# Show Lyrics (Karaoke View)
+# Step 3: Sing Along Section (before recording)
 # ==============================
 if ref_file and lyrics_text:
     st.header("📜 Lyrics (Sing Along)")
@@ -283,13 +256,27 @@ if ref_file and lyrics_text:
             html(karaoke_html, height=420)
 
 # ==============================
-# Step 4: Analyze and Get Feedback
+# Step 4: Record Singing
 # ==============================
-if ref_file and recorded_file_path:
-    ref_tmp_name = ref_tmp_path
+st.header("🎤 Step 3: Record Your Singing")
+recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
+
+recorded_file_path = None
+if recorded_audio_native:
+    recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+    with open(recorded_file_path, "wb") as f:
+        f.write(recorded_audio_native.getvalue())
+    st.success("✅ Recording captured!")
+
+# ==============================
+# Step 5: Analyze & Feedback (after recording)
+# ==============================
+if ref_file and recorded_file_path and ref_tmp_path:
+    st.header("🎶 Step 4: Analyze and Get Feedback")
+
     st.subheader("📊 Comparing Energy Contours")
     with st.spinner("🔎 Computing energy contours..."):
-        ref_energy = load_audio_energy(ref_tmp_name)
+        ref_energy = load_audio_energy(ref_tmp_path)
         user_energy = load_audio_energy(recorded_file_path)
 
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -301,18 +288,14 @@ if ref_file and recorded_file_path:
     ax.set_ylabel("Normalized Energy")
     st.pyplot(fig)
 
-    # Side-by-side players
     st.markdown("**🎧 Listen to both recordings:**")
     c1, c2 = st.columns(2)
     with c1:
-        st.audio(ref_tmp_name)
+        st.audio(ref_tmp_path)
         st.caption("Reference Song")
     with c2:
         st.audio(recorded_file_path)
         st.caption("Your Recording")
-
-    # --- Gemini AI Feedback ---
-    st.subheader("🎶 AI Vocal Feedback")
 
     lang_instruction = (
         "Provide feedback in English."
@@ -333,70 +316,13 @@ if ref_file and recorded_file_path:
                     "role": "user",
                     "parts": [
                         {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/wav",
-                                "data": open(ref_tmp_name, "rb").read(),
-                            }
-                        },
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/wav",
-                                "data": open(recorded_file_path, "rb").read(),
-                            }
-                        },
+                        {"inline_data": {"mime_type": "audio/wav", "data": open(ref_tmp_path, "rb").read()}},
+                        {"inline_data": {"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}},
                     ],
                 }
             ],
         )
 
+    feedback_text = response.candidates[0].content.parts[0].text
     st.success("✅ Feedback Ready!")
-    try:
-        feedback_text = response.candidates[0].content.parts[0].text
-    except Exception:
-        feedback_text = getattr(response.candidates[0].content, "text", "") or "(No feedback returned.)"
-
     st.write(feedback_text)
-
-    # --- Gemini TTS Feedback (Optional) ---
-    if enable_audio_feedback:
-        st.subheader("🔊 Listen to AI Feedback")
-        try:
-            with st.spinner("🎙️ Generating spoken feedback..."):
-                tts_response = client.models.generate_content(
-                    model="gemini-2.5-flash-preview-tts",
-                    contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
-                    config=types.GenerateContentConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=voice_choice
-                                )
-                            )
-                        )
-                    ),
-                )
-
-                audio_part = tts_response.candidates[0].content.parts[0]
-                audio_data = audio_part.inline_data.data
-                tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                success_write = write_bytes_to_wav(tts_path, audio_data)
-                if not success_write:
-                    with open(tts_path, "wb") as f:
-                        f.write(audio_data)
-
-            st.audio(tts_path, format="audio/wav")
-            st.success("✅ Audio feedback generated!")
-
-            with open(tts_path, "rb") as f:
-                audio_bytes = f.read()
-                b64 = base64.b64encode(audio_bytes).decode()
-                href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
-                st.markdown(href, unsafe_allow_html=True)
-
-        except Exception as e:
-            st.warning(f"⚠️ Audio feedback unavailable. ({e})")
-
-else:
-    st.info("Please upload a reference song and record your singing above.")
