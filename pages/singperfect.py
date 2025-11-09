@@ -11,7 +11,6 @@ import wave
 import base64
 import os
 from contextlib import contextmanager
-import shutil
 
 # ==============================
 # Hide Streamlit default elements
@@ -60,12 +59,6 @@ st.set_page_config(
 )
 
 # ==============================
-# Check ffmpeg availability
-# ==============================
-if not shutil.which("ffmpeg"):
-    st.warning("⚠️ ffmpeg not found — please ensure ffmpeg is installed for MP3 decoding.")
-
-# ==============================
 # Helper utilities
 # ==============================
 @contextmanager
@@ -82,6 +75,7 @@ def temp_wav_file(suffix=".wav"):
 
 
 def safe_read_audio(path):
+    """Read audio robustly with soundfile or fallback to pydub."""
     try:
         y, sr = sf.read(path, always_2d=False)
         if y.ndim > 1:
@@ -96,7 +90,9 @@ def safe_read_audio(path):
 
 @st.cache_data(show_spinner=False)
 def load_audio_energy(path):
+    """Returns normalized energy contour for visualization."""
     y, sr = safe_read_audio(path)
+
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
     energies = []
@@ -126,7 +122,7 @@ def write_bytes_to_wav(path, audio_bytes, nchannels=1, sampwidth=2, framerate=24
 
 
 # ==============================
-# Gemini client
+# Gemini client (cached)
 # ==============================
 @st.cache_resource
 def get_gemini_client():
@@ -141,7 +137,7 @@ if client is None:
     st.stop()
 
 # ==============================
-# Step 1: Choose Feedback Options
+# Step 1: Choose feedback options
 # ==============================
 st.header("⚙️ Step 1: Choose Feedback Options")
 
@@ -164,12 +160,10 @@ lyrics_text = ""
 ref_tmp_path = None
 
 if ref_file:
-    st.subheader("📝 Extracting Lyrics")
-    with st.spinner("🎶 Extracting lyrics from the song using Gemini..."):
+    with st.spinner("📝 Extracting Lyrics"):
         ref_tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        ref_bytes = ref_file.read()
         with open(ref_tmp_path, "wb") as f:
-            f.write(ref_bytes)
+            f.write(ref_file.read())
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-pro",
@@ -177,7 +171,7 @@ if ref_file:
                     {
                         "role": "user",
                         "parts": [
-                            {"text": "Extract the complete lyrics (if any) from this audio and return only the lyrics, no commentary."},
+                            {"text": "Extract the complete lyrics from this song and return only the text."},
                             {
                                 "inline_data": {
                                     "mime_type": "audio/wav",
@@ -193,16 +187,17 @@ if ref_file:
             lyrics_text = "Lyrics could not be extracted."
 
 # ==============================
-# Step 3: Sing Along Section (before recording)
+# Step 3: Record Singing + Lyrics
 # ==============================
-if ref_file and lyrics_text:
-    st.header("📜 Lyrics (Sing Along)")
+st.header("🎤 Step 3: Record Your Singing")
+
+if ref_tmp_path and lyrics_text:
+    st.subheader("📜 Lyrics (Sing Along)")
 
     col_audio, col_lyrics = st.columns([1, 1.5])
-
     with col_audio:
-        st.audio(ref_tmp_path, format="audio/wav")
         st.caption("🎧 Reference Song")
+        st.audio(ref_tmp_path, format="audio/wav")  # ✅ only one audio player
 
     with col_lyrics:
         try:
@@ -211,15 +206,14 @@ if ref_file and lyrics_text:
         except Exception:
             duration_sec = 60
 
-        lines = [line.strip() for line in lyrics_text.strip().split("\n") if line.strip()]
-        if len(lines) == 0:
-            st.info("Lyrics unavailable or empty.")
-        else:
+        lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
+        if len(lines) > 0:
             n_lines = len(lines)
             timestamps = [round(i * (duration_sec / n_lines), 2) for i in range(n_lines)]
             lines_html = "".join(
                 [f'<p class="lyric-line" data-time="{timestamps[i]}">{lines[i]}</p>' for i in range(n_lines)]
             )
+
             karaoke_html = f"""
             <div>
                 <audio id="karaokePlayer" controls style="width:100%;">
@@ -254,11 +248,10 @@ if ref_file and lyrics_text:
             </script>
             """
             html(karaoke_html, height=420)
+        else:
+            st.info("Lyrics not found or could not be extracted.")
 
-# ==============================
-# Step 4: Record Singing
-# ==============================
-st.header("🎤 Step 3: Record Your Singing")
+# Record user voice
 recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
 recorded_file_path = None
@@ -269,12 +262,11 @@ if recorded_audio_native:
     st.success("✅ Recording captured!")
 
 # ==============================
-# Step 5: Analyze & Feedback (after recording)
+# Step 4: Analyze and Get Feedback
 # ==============================
-if ref_file and recorded_file_path and ref_tmp_path:
-    st.header("🎶 Step 4: Analyze and Get Feedback")
-
+if ref_tmp_path and recorded_file_path:
     st.subheader("📊 Comparing Energy Contours")
+
     with st.spinner("🔎 Computing energy contours..."):
         ref_energy = load_audio_energy(ref_tmp_path)
         user_energy = load_audio_energy(recorded_file_path)
@@ -288,6 +280,7 @@ if ref_file and recorded_file_path and ref_tmp_path:
     ax.set_ylabel("Normalized Energy")
     st.pyplot(fig)
 
+    # Side-by-side players
     st.markdown("**🎧 Listen to both recordings:**")
     c1, c2 = st.columns(2)
     with c1:
@@ -297,10 +290,12 @@ if ref_file and recorded_file_path and ref_tmp_path:
         st.audio(recorded_file_path)
         st.caption("Your Recording")
 
+    st.subheader("🎶 AI Vocal Feedback")
+
     lang_instruction = (
         "Provide feedback in English."
         if feedback_lang == "English"
-        else "Provide feedback in Hindi using natural, encouraging tone."
+        else "Provide feedback in Hindi using a natural, encouraging tone."
     )
 
     prompt = (
@@ -316,13 +311,62 @@ if ref_file and recorded_file_path and ref_tmp_path:
                     "role": "user",
                     "parts": [
                         {"text": prompt},
-                        {"inline_data": {"mime_type": "audio/wav", "data": open(ref_tmp_path, "rb").read()}},
-                        {"inline_data": {"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": open(ref_tmp_path, "rb").read(),
+                            }
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/wav",
+                                "data": open(recorded_file_path, "rb").read(),
+                            }
+                        },
                     ],
                 }
             ],
         )
 
-    feedback_text = response.candidates[0].content.parts[0].text
     st.success("✅ Feedback Ready!")
+    try:
+        feedback_text = response.candidates[0].content.parts[0].text
+    except Exception:
+        feedback_text = "(No feedback returned.)"
+
     st.write(feedback_text)
+
+    if enable_audio_feedback:
+        st.subheader("🔊 Listen to AI Feedback")
+        try:
+            with st.spinner("🎙️ Generating spoken feedback..."):
+                tts_response = client.models.generate_content(
+                    model="gemini-2.5-flash-preview-tts",
+                    contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name=voice_choice
+                                )
+                            )
+                        )
+                    ),
+                )
+                audio_part = tts_response.candidates[0].content.parts[0]
+                audio_data = audio_part.inline_data.data
+                tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+                with open(tts_path, "wb") as f:
+                    f.write(audio_data)
+            st.audio(tts_path, format="audio/wav")
+            st.success("✅ Audio feedback generated!")
+
+            with open(tts_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+                href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
+                st.markdown(href, unsafe_allow_html=True)
+        except Exception as e:
+            st.warning(f"⚠️ Audio feedback unavailable. ({e})")
+else:
+    st.info("Please upload a reference song and record your singing above.")
