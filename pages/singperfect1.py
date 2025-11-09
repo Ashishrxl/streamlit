@@ -1,337 +1,151 @@
 import streamlit as st
-import tempfile
-import numpy as np
-import soundfile as sf
-from pydub import AudioSegment
-import matplotlib.pyplot as plt
-from google import genai
-from google.genai import types
-from streamlit.components.v1 import html
+import websocket
+import json
 import base64
-import os
-from contextlib import contextmanager
 import threading
 import queue
 import sounddevice as sd
-import websocket
-import json
+import tempfile
+import time
+import os
 
-# ==============================
-# Hide Streamlit elements
-# ==============================
-html(
-    """
-    <script>
-    try {
-      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-      sel.forEach(e => e.style.display='none');
-    } catch(e) { console.warn('parent DOM not reachable', e); }
-    </script>
-    """,
-    height=0
-)
+# ========================================
+# CONFIG
+# ========================================
+st.set_page_config(page_title="🎤 Live AI Vocal Coach", layout="wide")
 
 st.markdown("""
 <style>
-footer {pointer-events:none;}
-#MainMenu {visibility:hidden;}
 footer {visibility:hidden;}
-[data-testid="stStatusWidget"], [data-testid="stToolbar"] {display:none;}
-.main {padding:2rem;}
-.stButton>button {
-    width:100%;
-    background:#4CAF50;
-    color:white;
-    padding:0.75rem;
-    font-size:1.1rem;
-}
+#MainMenu {visibility:hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="🎙️ AI Vocal Coach", layout="wide")
+st.title("🎵 Live AI Vocal Coach (Gemini Realtime)")
 
-# ==============================
-# Utility functions
-# ==============================
-@contextmanager
-def temp_wav_file(suffix=".wav"):
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    tmp.close()
-    try:
-        yield tmp.name
-    finally:
-        try:
-            os.remove(tmp.name)
-        except Exception:
-            pass
-
-def safe_read_audio(path):
-    try:
-        y, sr = sf.read(path, always_2d=False)
-        if y.ndim > 1:
-            y = np.mean(y, axis=1)
-        return y.astype(float), sr
-    except Exception:
-        audio = AudioSegment.from_file(path)
-        y = np.array(audio.get_array_of_samples()).astype(float)
-        sr = audio.frame_rate
-        return y, sr
-
-@st.cache_data(show_spinner=False)
-def load_audio_energy(path):
-    y, sr = safe_read_audio(path)
-    frame_len = int(0.05 * sr)
-    hop = int(0.025 * sr)
-    energies = []
-    for i in range(0, len(y) - frame_len, hop):
-        frame = y[i:i + frame_len]
-        energies.append(np.mean(np.abs(frame)))
-    energies = np.array(energies)
-    if np.max(energies) > 0:
-        energies /= np.max(energies)
-    return energies
-
-# ==============================
-# Gemini client
-# ==============================
-@st.cache_resource
-def get_gemini_client():
-    if "GOOGLE_API_KEY" not in st.secrets:
-        return None
-    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-
-client = get_gemini_client()
-if client is None:
-    st.error("❌ Missing GOOGLE_API_KEY in secrets.")
+# ========================================
+# API KEY
+# ========================================
+if "GOOGLE_API_KEY_1" not in st.secrets:
+    st.error("❌ Missing GOOGLE_API_KEY in Streamlit secrets.")
     st.stop()
 
-API_KEY = st.secrets["GOOGLE_API_KEY"]
+API_KEY = st.secrets["GOOGLE_API_KEY_1"]
 
-# ==============================
-# Mode Selection
-# ==============================
-st.title("🎙️ AI Vocal Coach")
-mode = st.radio("Choose Mode:", ["Upload & Compare", "🎧 Live Coaching"])
+# ========================================
+# Correct Gemini Realtime WebSocket endpoint
+# ========================================
+REALTIME_URL = (
+    "wss://generativelanguage.googleapis.com/ws/"
+    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+    f"?key={API_KEY}"
+)
 
-# =======================================================
-# MODE 1: UPLOAD & COMPARE
-# =======================================================
-if mode == "Upload & Compare":
-    st.header("⚙️ Step 1: Choose Feedback Options")
-    col1, col2 = st.columns(2)
-    with col1:
-        feedback_lang = st.selectbox("🗣️ Feedback language", ["English", "Hindi"])
-    with col2:
-        enable_audio_feedback = st.checkbox("🔊 Generate Audio Feedback", value=False)
-    voice_choice = st.selectbox("🎤 Choose AI voice", ["Kore", "Ava", "Wave"], index=0)
+# ========================================
+# Globals
+# ========================================
+q = queue.Queue()
+stop_flag = threading.Event()
 
-    # Step 2: Upload Song
-    st.header("🎧 Step 2: Upload Reference Song")
-    ref_file = st.file_uploader("Upload a song (mp3 or wav)", type=["mp3", "wav"])
+# ========================================
+# Audio Stream to Gemini
+# ========================================
+def stream_microphone_audio(ws):
+    """Capture microphone input and send to Gemini as base64 audio."""
+    def callback(indata, frames, time, status):
+        if stop_flag.is_set():
+            raise sd.CallbackStop()
+        audio_b64 = base64.b64encode(indata).decode("utf-8")
+        msg = {"input_audio_buffer": {"data": audio_b64}}
+        ws.send(json.dumps(msg))
 
-    if "lyrics_text" not in st.session_state:
-        st.session_state.lyrics_text = ""
-    if "ref_tmp_path" not in st.session_state:
-        st.session_state.ref_tmp_path = None
+    with sd.RawInputStream(
+        samplerate=16000, blocksize=1024, dtype="int16", channels=1, callback=callback
+    ):
+        while not stop_flag.is_set():
+            time.sleep(0.05)
 
-    if ref_file and not st.session_state.lyrics_text:
-        with st.spinner("🎵 Extracting lyrics..."):
-            tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-            with open(tmp_path, "wb") as f:
-                f.write(ref_file.read())
-            st.session_state.ref_tmp_path = tmp_path
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash-live",
-                    contents=[
-                        {"role": "user", "parts": [
-                            {"text": "Extract the complete lyrics from this song and return only the text."},
-                            {"inline_data": {"mime_type": "audio/wav", "data": open(tmp_path, "rb").read()}}
-                        ]}
-                    ]
-                )
-                st.session_state.lyrics_text = response.candidates[0].content.parts[0].text.strip()
-            except Exception:
-                st.session_state.lyrics_text = "Lyrics could not be extracted."
+    # tell model input is complete
+    ws.send(json.dumps({"input_audio_buffer": {"complete": True}}))
 
-    if st.session_state.ref_tmp_path and st.session_state.lyrics_text:
-        st.subheader("📜 Lyrics (Sing Along)")
-        lines = [line.strip() for line in st.session_state.lyrics_text.split("\n") if line.strip()]
+
+# ========================================
+# Handle Gemini Responses
+# ========================================
+def receive_from_gemini(ws):
+    """Continuously receive responses from Gemini."""
+    while not stop_flag.is_set():
         try:
-            audio = AudioSegment.from_file(st.session_state.ref_tmp_path)
-            duration = audio.duration_seconds
-        except Exception:
-            duration = 60
-        timestamps = [round(i * (duration / len(lines)), 2) for i in range(len(lines))]
-        lines_html = "".join([f'<p class="lyric-line" data-time="{timestamps[i]}">{lines[i]}</p>' for i in range(len(lines))])
-        karaoke_html = f"""
-        <div>
-          <audio id="karaokePlayer" controls style="width:100%;">
-            <source src="data:audio/wav;base64,{base64.b64encode(open(st.session_state.ref_tmp_path,'rb').read()).decode()}" type="audio/wav">
-          </audio>
-          <div id="lyrics-box" style="height:350px;overflow-y:auto;border:1px solid #ccc;
-            padding:10px;font-size:1.1rem;line-height:1.6;margin-top:10px;">{lines_html}</div>
-        </div>
-        <script>
-        const audio=document.getElementById('karaokePlayer');
-        const lines=Array.from(document.querySelectorAll('.lyric-line'));
-        const times=lines.map(l=>parseFloat(l.dataset.time));
-        let active=0;
-        function highlight(time){{
-            for(let i=0;i<lines.length;i++){{
-                if(time>=times[i]&&(i===lines.length-1||time<times[i+1])){{
-                    if(active!==i){{
-                        lines.forEach(l=>l.style.color='#444');
-                        lines[i].style.color='#ff4081';
-                        lines[i].scrollIntoView({{behavior:'smooth',block:'center'}});
-                        active=i;
-                    }}
-                    break;
-                }}
-            }}
-        }}
-        audio.addEventListener('timeupdate',()=>highlight(audio.currentTime));
-        </script>
-        """
-        html(karaoke_html, height=420)
+            msg = ws.recv()
+        except websocket.WebSocketConnectionClosedException:
+            break
+        if not msg:
+            continue
 
-    # Step 3: Record
-    st.header("🎤 Step 3: Record Your Singing")
-    recorded_audio_native = st.audio_input("🎙️ Record your voice", key="recorder")
+        data = json.loads(msg)
+        if data.get("response") and data["response"].get("output"):
+            outputs = data["response"]["output"]
 
-    recorded_file_path = None
-    if recorded_audio_native:
-        recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        with open(recorded_file_path, "wb") as f:
-            f.write(recorded_audio_native.getvalue())
-        st.success("✅ Recording captured!")
+            # Process text response
+            for part in outputs:
+                if "text" in part:
+                    st.write("🗣️ " + part["text"])
 
-    # Step 4: Compare + Feedback
-    if st.session_state.ref_tmp_path and recorded_file_path:
-        st.subheader("🎶 Reference vs Your Singing")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.audio(st.session_state.ref_tmp_path)
-            st.caption("🎧 Reference Song")
-        with col_b:
-            st.audio(recorded_file_path)
-            st.caption("🎤 Your Recording")
+                # Process audio response
+                if "data" in part:
+                    audio_bytes = base64.b64decode(part["data"])
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                        f.write(audio_bytes)
+                        audio_path = f.name
+                    st.audio(audio_path, format="audio/wav")
 
-        with st.spinner("🔍 Analyzing energy patterns..."):
-            ref_energy = load_audio_energy(st.session_state.ref_tmp_path)
-            user_energy = load_audio_energy(recorded_file_path)
 
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(ref_energy, label="Reference", linewidth=2)
-        ax.plot(user_energy, label="You", linewidth=2)
-        ax.legend()
-        ax.set_title("Energy Contour Comparison")
-        st.pyplot(fig)
+# ========================================
+# Main Live Coaching Logic
+# ========================================
+def start_live_coaching():
+    """Start WebSocket connection and stream audio to Gemini."""
+    st.info("Connecting to Gemini Live API...")
 
-        st.subheader("💬 AI Vocal Feedback")
+    ws = websocket.WebSocket()
+    ws.connect(REALTIME_URL)
 
-        lang_instruction = (
-            "Provide feedback in English."
-            if feedback_lang == "English"
-            else "Provide feedback in Hindi using a natural tone."
-        )
+    # Send setup message to initialize session
+    setup_message = {
+        "setup": {
+            "model": "gemini-2.5-flash-native-audio-dialog",
+            "generation_config": {
+                "response_modalities": ["AUDIO", "TEXT"],
+                "speech_config": {
+                    "voice_config": {
+                        "prebuilt_voice_config": {"voice_name": "Ava"}
+                    }
+                },
+            },
+        }
+    }
+    ws.send(json.dumps(setup_message))
 
-        prompt = f"You are a professional vocal coach. Compare the user's singing to the reference and give supportive feedback about pitch, rhythm, tone, and expression. {lang_instruction}"
+    st.success("✅ Connected! Start singing...")
 
-        with st.spinner("🎧 Generating feedback..."):
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-live",
-                contents=[
-                    {"role": "user", "parts": [
-                        {"text": prompt},
-                        {"inline_data": {"mime_type": "audio/wav", "data": open(st.session_state.ref_tmp_path, "rb").read()}},
-                        {"inline_data": {"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}},
-                    ]}
-                ]
-            )
+    # Threads: one sends audio, one receives feedback
+    t1 = threading.Thread(target=stream_microphone_audio, args=(ws,))
+    t2 = threading.Thread(target=receive_from_gemini, args=(ws,))
+    t1.start()
+    t2.start()
 
-        try:
-            feedback_text = response.candidates[0].content.parts[0].text
-        except Exception:
-            feedback_text = "No feedback generated."
-
-        st.write(feedback_text)
-
-        if enable_audio_feedback:
-            with st.spinner("🔊 Generating spoken feedback..."):
-                try:
-                    tts = client.models.generate_content(
-                        model="gemini-2.5-flash-live",
-                        contents=f"Speak this feedback warmly: {feedback_text}",
-                        config=types.GenerateContentConfig(
-                            response_modalities=["AUDIO"],
-                            speech_config=types.SpeechConfig(
-                                voice_config=types.VoiceConfig(
-                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_choice)
-                                )
-                            )
-                        ),
-                    )
-                    audio_part = tts.candidates[0].content.parts[0]
-                    audio_data = audio_part.inline_data.data
-                    tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                    with open(tts_path, "wb") as f:
-                        f.write(audio_data)
-                    st.audio(tts_path)
-                    st.success("✅ Audio feedback ready!")
-                except Exception as e:
-                    st.warning(f"⚠️ Audio feedback failed: {e}")
-    else:
-        st.info("Please upload a song and record your voice to continue.")
-
-# =======================================================
-# MODE 2: LIVE COACHING (WEBSOCKET FALLBACK)
-# =======================================================
-else:
-    st.header("🎧 Live Coaching Mode (Realtime WebSocket)")
-
-    REALTIME_URL = (
-        "wss://generativelanguage.googleapis.com/v1alpha/realtime:model="
-        "gemini-2.5-flash-native-audio-dialog?key=" + API_KEY
-    )
-
-    def start_realtime_session():
-        ws = websocket.WebSocket()
-        ws.connect(REALTIME_URL)
-
-        def send_audio():
-            def callback(indata, frames, time, status):
-                audio_b64 = base64.b64encode(indata).decode("utf-8")
-                ws.send(json.dumps({"type": "input_audio_buffer.append", "data": audio_b64}))
-
-            with sd.RawInputStream(
-                samplerate=16000, blocksize=1024, dtype="int16", channels=1, callback=callback
-            ):
-                st.info("🎙️ Singing... Press Stop below when done.")
-                while st.session_state.get("recording", True):
-                    pass
-
-        def receive_feedback():
-            st.markdown("**AI Feedback (Live):**")
-            while True:
-                msg = ws.recv()
-                data = json.loads(msg)
-                if data.get("type") == "response.output_text.delta":
-                    st.write(data.get("data"))
-                elif data.get("type") == "response.output_audio.delta":
-                    audio_data = base64.b64decode(data["data"])
-                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-                    tmp.write(audio_data)
-                    tmp.close()
-                    st.audio(tmp.name, format="audio/wav")
-
-        st.session_state["recording"] = True
-        threading.Thread(target=send_audio, daemon=True).start()
-        threading.Thread(target=receive_feedback, daemon=True).start()
-
-    if st.button("🎤 Start Live Coaching"):
-        start_realtime_session()
-
-    if st.button("🛑 Stop"):
-        st.session_state["recording"] = False
+    # Stop button
+    if st.button("🛑 Stop Session"):
+        stop_flag.set()
+        ws.close()
         st.success("✅ Session ended.")
+
+
+# ========================================
+# Streamlit UI
+# ========================================
+st.markdown("### 🎙️ Real-Time AI Feedback")
+st.write("This mode streams your voice directly to Gemini and gives instant spoken + text feedback.")
+
+if st.button("🚀 Start Live Coaching"):
+    start_live_coaching()
