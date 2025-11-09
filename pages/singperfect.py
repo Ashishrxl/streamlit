@@ -75,6 +75,7 @@ def temp_wav_file(suffix=".wav"):
 
 
 def safe_read_audio(path):
+    """Read audio robustly with soundfile or fallback to pydub."""
     try:
         y, sr = sf.read(path, always_2d=False)
         if y.ndim > 1:
@@ -89,6 +90,7 @@ def safe_read_audio(path):
 
 @st.cache_data(show_spinner=False)
 def load_audio_energy(path):
+    """Returns normalized energy contour for visualization."""
     y, sr = safe_read_audio(path)
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
@@ -107,6 +109,7 @@ def load_audio_energy(path):
 
 
 def write_bytes_to_wav(path, audio_bytes, nchannels=1, sampwidth=2, framerate=24000):
+    """Write PCM bytes to WAV file safely."""
     try:
         with wave.open(path, "wb") as wf:
             wf.setnchannels(nchannels)
@@ -156,16 +159,25 @@ if ref_file is not None and hasattr(ref_file, "size"):
     if size_mb > MAX_MB:
         st.warning(f"⚠️ File size {size_mb:.1f} MB may take longer to process.")
 
-    # --- Gemini Lyrics Extraction ---
     client = get_gemini_client()
     if client is None:
         st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
         st.stop()
 
+    # --- Convert any audio to WAV safely ---
     ref_tmp_for_lyrics = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    ref_tmp_for_lyrics.write(ref_file.read())
-    ref_tmp_for_lyrics.flush()
+    try:
+        if ref_file.type == "audio/mpeg" or ref_file.name.lower().endswith(".mp3"):
+            audio_seg = AudioSegment.from_file(ref_file, format="mp3")
+            audio_seg.export(ref_tmp_for_lyrics.name, format="wav")
+        else:
+            audio_seg = AudioSegment.from_file(ref_file)
+            audio_seg.export(ref_tmp_for_lyrics.name, format="wav")
+    except Exception as e:
+        st.error(f"❌ Could not convert audio file. ({e})")
+        st.stop()
 
+    # --- Extract lyrics ---
     st.subheader("📝 Extracted Lyrics from Song")
     with st.spinner("🎵 Extracting lyrics using Gemini..."):
         try:
@@ -210,10 +222,19 @@ with col_rec:
 
     recorded_file_path = None
     if recorded_audio_native:
-        recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        with open(recorded_file_path, "wb") as f:
+        recorded_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        with open(recorded_tmp.name, "wb") as f:
             f.write(recorded_audio_native.getvalue())
-        st.success("✅ Recording captured!")
+
+        # --- Ensure WAV format ---
+        try:
+            audio_seg = AudioSegment.from_file(recorded_tmp.name)
+            recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+            audio_seg.export(recorded_file_path, format="wav")
+            st.success("✅ Recording captured and converted!")
+        except Exception as e:
+            st.error(f"❌ Could not process your recording. ({e})")
+            st.stop()
 
 with col_lyrics:
     if lyrics_text:
@@ -254,11 +275,12 @@ if client is None:
     st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
     st.stop()
 
-if ref_file and recorded_audio_native:
+if ref_file and recorded_audio_native and recorded_file_path:
     ref_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     try:
-        ref_tmp.write(ref_file.read())
-        ref_tmp.flush()
+        # Convert reference again for consistent format
+        audio_seg = AudioSegment.from_file(ref_file)
+        audio_seg.export(ref_tmp.name, format="wav")
         ref_tmp_name = ref_tmp.name
 
         # --- Energy Visualization ---
