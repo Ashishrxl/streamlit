@@ -7,80 +7,29 @@ import matplotlib.pyplot as plt
 from google import genai
 from google.genai import types
 from streamlit.components.v1 import html
-import wave
 import base64
-import os
-from contextlib import contextmanager
 
-# ==============================
-# Hide Streamlit default elements
-# ==============================
-html(
-    """
-    <script>
-    try {
-      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-      sel.forEach(e => e.style.display='none');
-    } catch(e) { console.warn('parent DOM not reachable', e); }
-    </script>
-    """,
-    height=0
-)
+# ===============================
+# STREAMLIT PAGE SETTINGS
+# ===============================
+st.set_page_config(page_title="🎙️ AI Vocal Coach", layout="wide")
 
-disable_footer_click = """
-    <style>
-    footer {pointer-events: none;}
-    </style>
-"""
-st.markdown(disable_footer_click, unsafe_allow_html=True)
-
-hide_streamlit_style = """
+st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-[data-testid="stStatusWidget"] {display: none;}
-[data-testid="stToolbar"] {display: none;}
-header > div:nth-child(2) { display: none; }
-.main { padding: 2rem; }
-.stButton > button {
-    width: 100%;
-    background-color: #4CAF50;
-    color: white;
-    padding: 0.75rem;
-    font-size: 1.1rem;
-}
+#MainMenu, footer, header {visibility: hidden;}
+.main {padding: 2rem;}
 </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.set_page_config(
-    page_title="🎙️ AI Vocal Coach using Google Gemini",
-    layout="wide"
-)
-
-# ==============================
-# Helper utilities
-# ==============================
-@contextmanager
-def temp_wav_file(suffix=".wav"):
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    tmp.close()
-    try:
-        yield tmp.name
-    finally:
-        try:
-            os.remove(tmp.name)
-        except Exception:
-            pass
-
-
+# ===============================
+# HELPER FUNCTIONS
+# ===============================
 def safe_read_audio(path):
-    """Read audio robustly with soundfile or fallback to pydub."""
     try:
-        y, sr = sf.read(path, always_2d=False)
+        y, sr = sf.read(path)
         if y.ndim > 1:
             y = np.mean(y, axis=1)
-        return y.astype(float), sr
+        return y, sr
     except Exception:
         audio = AudioSegment.from_file(path)
         y = np.array(audio.get_array_of_samples()).astype(float)
@@ -88,285 +37,198 @@ def safe_read_audio(path):
         return y, sr
 
 
-@st.cache_data(show_spinner=False)
 def load_audio_energy(path):
-    """Returns normalized energy contour for visualization."""
     y, sr = safe_read_audio(path)
-
     frame_len = int(0.05 * sr)
     hop = int(0.025 * sr)
     energies = []
-
-    if len(y) < frame_len:
-        return np.array([0.0])
-
     for i in range(0, len(y) - frame_len, hop):
-        frame = y[i:i + frame_len]
-        energies.append(np.mean(np.abs(frame)))
-
+        energies.append(np.mean(np.abs(y[i:i + frame_len])))
     energies = np.array(energies)
-    max_e = np.max(energies) if energies.size else 0.0
-    return energies / max_e if max_e != 0 else energies
+    return energies / np.max(energies) if np.max(energies) != 0 else energies
 
 
-def write_bytes_to_wav(path, audio_bytes, nchannels=1, sampwidth=2, framerate=24000):
-    try:
-        with wave.open(path, "wb") as wf:
-            wf.setnchannels(nchannels)
-            wf.setsampwidth(sampwidth)
-            wf.setframerate(framerate)
-            wf.writeframes(audio_bytes)
-        return True
-    except Exception:
-        return False
-
-
-# ==============================
-# Gemini client (cached)
-# ==============================
+# ===============================
+# GEMINI CLIENT
+# ===============================
 @st.cache_resource
-def get_gemini_client():
+def get_client():
     if "GOOGLE_API_KEY_1" not in st.secrets:
-        return None
+        st.error("Missing GOOGLE_API_KEY_1 in secrets.")
+        st.stop()
     return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
 
+client = get_client()
 
-client = get_gemini_client()
-if client is None:
-    st.error("❌ Missing GOOGLE_API_KEY_1 in Streamlit Secrets.")
-    st.stop()
+# ===============================
+# 1️⃣ UPLOAD REFERENCE SONG
+# ===============================
+st.header("🎧 Step 1: Upload Reference Song")
 
-# ==============================
-# Step 1: Choose feedback options
-# ==============================
-st.header("⚙️ Step 1: Choose Feedback Options")
-
-col1, col2 = st.columns(2)
-with col1:
-    feedback_lang = st.selectbox("🗣️ Choose feedback language", ["English", "Hindi"])
-
-with col2:
-    enable_audio_feedback = st.checkbox("🔊 Generate Audio Feedback (optional)", value=False)
-
-voice_choice = st.selectbox("🎤 Choose AI voice (for TTS)", ["Kore", "Ava", "Wave"], index=0)
-
-# ==============================
-# Step 2: Upload Reference Song
-# ==============================
-st.header("🎧 Step 2: Upload Reference Song")
-ref_file = st.file_uploader("Upload a reference song (mp3 or wav)", type=["mp3", "wav"])
-
-lyrics_text = ""
+ref_file = st.file_uploader("Upload a song (mp3 or wav)", type=["mp3", "wav"])
 ref_tmp_path = None
 
 if ref_file:
-    with st.spinner("📝 Extracting Lyrics"):
-        ref_tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-        with open(ref_tmp_path, "wb") as f:
-            f.write(ref_file.read())
+    ref_tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+    with open(ref_tmp_path, "wb") as f:
+        f.write(ref_file.read())
+
+    # Extract lyrics only once
+    if "lyrics_text" not in st.session_state:
+        st.session_state["lyrics_text"] = ""
+        with st.spinner("🎶 Extracting lyrics..."):
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-pro",
+                    contents=[
+                        {
+                            "role": "user",
+                            "parts": [
+                                {"text": "Extract full lyrics from this song and return only the lyrics text."},
+                                {
+                                    "inline_data": {
+                                        "mime_type": "audio/wav",
+                                        "data": open(ref_tmp_path, "rb").read(),
+                                    }
+                                },
+                            ],
+                        }
+                    ],
+                )
+                st.session_state["lyrics_text"] = response.candidates[0].content.parts[0].text.strip()
+            except Exception as e:
+                st.warning(f"Lyrics extraction failed: {e}")
+
+    st.audio(ref_tmp_path, format="audio/wav")
+    st.subheader("📜 Lyrics (Sing Along)")
+
+    lyrics_text = st.session_state["lyrics_text"]
+    if lyrics_text:
+        # Build karaoke with timed highlighting
+        audio = AudioSegment.from_file(ref_tmp_path)
+        duration_sec = audio.duration_seconds
+        lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
+        n_lines = len(lines)
+        timestamps = [round(i * (duration_sec / n_lines), 2) for i in range(n_lines)]
+
+        lines_html = "".join(
+            [f'<p class="lyric-line" data-time="{timestamps[i]}">{lines[i]}</p>' for i in range(n_lines)]
+        )
+
+        karaoke_html = f"""
+        <div>
+            <audio id="karaokePlayer" controls style="width:100%;">
+                <source src="data:audio/wav;base64,{base64.b64encode(open(ref_tmp_path,'rb').read()).decode()}" type="audio/wav">
+            </audio>
+            <div id="lyrics-box" style="height:350px;overflow-y:auto;border:1px solid #ccc;
+                padding:10px;font-size:1.1rem;line-height:1.6;margin-top:10px;">
+                {lines_html}
+            </div>
+        </div>
+        <script>
+        const audio = document.getElementById('karaokePlayer');
+        const lines = Array.from(document.querySelectorAll('.lyric-line'));
+        const times = lines.map(l => parseFloat(l.dataset.time));
+        let active = 0;
+        function highlight(time) {{
+            for (let i=0;i<lines.length;i++) {{
+                if (time >= times[i] && (i===lines.length-1 || time < times[i+1])) {{
+                    if (active!==i) {{
+                        lines.forEach(l=>l.style.color='#444');
+                        lines[i].style.color='#ff4081';
+                        lines[i].scrollIntoView({{behavior:'smooth', block:'center'}});
+                        active=i;
+                    }}
+                    break;
+                }}
+            }}
+        }}
+        audio.addEventListener('timeupdate',()=>highlight(audio.currentTime));
+        audio.addEventListener('seeked',()=>highlight(audio.currentTime));
+        </script>
+        """
+        html(karaoke_html, height=420)
+    else:
+        st.info("Lyrics not available.")
+
+
+# ===============================
+# 2️⃣ RECORD USER SINGING
+# ===============================
+st.header("🎤 Step 2: Record Your Singing")
+recorded_audio = st.audio_input("🎙️ Record your singing")
+
+recorded_path = None
+if recorded_audio:
+    recorded_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
+    with open(recorded_path, "wb") as f:
+        f.write(recorded_audio.getvalue())
+    st.success("✅ Recorded successfully!")
+
+# ===============================
+# 3️⃣ SIDE-BY-SIDE PLAYERS
+# ===============================
+if ref_tmp_path and recorded_path:
+    st.header("🎧 Step 3: Compare Recordings")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.audio(ref_tmp_path)
+        st.caption("Reference Song")
+
+    with col2:
+        st.audio(recorded_path)
+        st.caption("Your Recording")
+
+    # Energy comparison
+    st.subheader("📊 Energy Comparison")
+    ref_energy = load_audio_energy(ref_tmp_path)
+    user_energy = load_audio_energy(recorded_path)
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(ref_energy, label="Reference", linewidth=2)
+    ax.plot(user_energy, label="Your Singing", linewidth=2)
+    ax.legend()
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Normalized Energy")
+    ax.set_title("Energy Contour Comparison")
+    st.pyplot(fig)
+
+    # ===============================
+    # 4️⃣ VOCAL FEEDBACK
+    # ===============================
+    st.header("🎶 AI Vocal Feedback")
+    with st.spinner("Analyzing vocals..."):
         try:
+            feedback_prompt = (
+                "You are a kind vocal coach. Compare user's recording to the reference song. "
+                "Give short feedback about pitch, rhythm, and tone."
+            )
             response = client.models.generate_content(
                 model="gemini-2.5-pro",
                 contents=[
                     {
                         "role": "user",
                         "parts": [
-                            {"text": "Extract the complete lyrics from this song and return only the text."},
+                            {"text": feedback_prompt},
                             {
                                 "inline_data": {
                                     "mime_type": "audio/wav",
                                     "data": open(ref_tmp_path, "rb").read(),
                                 }
                             },
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/wav",
+                                    "data": open(recorded_path, "rb").read(),
+                                }
+                            },
                         ],
                     }
                 ],
             )
-            lyrics_text = response.candidates[0].content.parts[0].text.strip()
-        except Exception:
-            lyrics_text = "Lyrics could not be extracted."
-
-# ==============================
-# Step 3: Record Singing + Lyrics
-# ==============================
-st.header("🎤 Step 3: Record Your Singing")
-
-if ref_tmp_path and lyrics_text:
-    st.subheader("📜 Lyrics (Sing Along)")
-
-    col_audio, col_lyrics = st.columns([1, 1.5])
-    with col_audio:
-        st.caption("🎧 Reference Song")
-        st.audio(ref_tmp_path, format="audio/wav")  # ✅ only one audio player
-
-    with col_lyrics:
-        try:
-            audio = AudioSegment.from_file(ref_tmp_path)
-            duration_sec = audio.duration_seconds
-        except Exception:
-            duration_sec = 60
-
-        lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
-        if len(lines) > 0:
-            n_lines = len(lines)
-            timestamps = [round(i * (duration_sec / n_lines), 2) for i in range(n_lines)]
-            lines_html = "".join(
-                [f'<p class="lyric-line" data-time="{timestamps[i]}">{lines[i]}</p>' for i in range(n_lines)]
-            )
-
-            karaoke_html = f"""
-            <div>
-                <audio id="karaokePlayer" controls style="width:100%;">
-                    <source src="data:audio/wav;base64,{base64.b64encode(open(ref_tmp_path,"rb").read()).decode()}" type="audio/wav">
-                    Your browser does not support the audio element.
-                </audio>
-                <div id="lyrics-box" style="height:350px;overflow-y:auto;border:1px solid #ccc;
-                    padding:10px;font-size:1.1rem;line-height:1.6;margin-top:10px;">
-                    {lines_html}
-                </div>
-            </div>
-            <script>
-            const audio = document.getElementById('karaokePlayer');
-            const lines = Array.from(document.querySelectorAll('.lyric-line'));
-            const times = lines.map(l => parseFloat(l.dataset.time));
-            let active = 0;
-            function highlight(time) {{
-                for (let i=0;i<lines.length;i++) {{
-                    if (time >= times[i] && (i===lines.length-1 || time < times[i+1])) {{
-                        if (active!==i) {{
-                            lines.forEach(l=>l.style.color='#444');
-                            lines[i].style.color='#ff4081';
-                            lines[i].scrollIntoView({{behavior:'smooth', block:'center'}});
-                            active=i;
-                        }}
-                        break;
-                    }}
-                }}
-            }}
-            audio.addEventListener('timeupdate',()=>highlight(audio.currentTime));
-            audio.addEventListener('seeked',()=>highlight(audio.currentTime));
-            </script>
-            """
-            html(karaoke_html, height=420)
-        else:
-            st.info("Lyrics not found or could not be extracted.")
-
-# Record user voice
-recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
-
-recorded_file_path = None
-if recorded_audio_native:
-    recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-    with open(recorded_file_path, "wb") as f:
-        f.write(recorded_audio_native.getvalue())
-    st.success("✅ Recording captured!")
-
-# ==============================
-# Step 4: Analyze and Get Feedback
-# ==============================
-if ref_tmp_path and recorded_file_path:
-    st.subheader("📊 Comparing Energy Contours")
-
-    with st.spinner("🔎 Computing energy contours..."):
-        ref_energy = load_audio_energy(ref_tmp_path)
-        user_energy = load_audio_energy(recorded_file_path)
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(ref_energy, label="Reference Song", linewidth=2)
-    ax.plot(user_energy, label="Your Singing", linewidth=2)
-    ax.legend()
-    ax.set_title("Energy Contour Comparison")
-    ax.set_xlabel("Frame")
-    ax.set_ylabel("Normalized Energy")
-    st.pyplot(fig)
-
-    # Side-by-side players
-    st.markdown("**🎧 Listen to both recordings:**")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.audio(ref_tmp_path)
-        st.caption("Reference Song")
-    with c2:
-        st.audio(recorded_file_path)
-        st.caption("Your Recording")
-
-    st.subheader("🎶 AI Vocal Feedback")
-
-    lang_instruction = (
-        "Provide feedback in English."
-        if feedback_lang == "English"
-        else "Provide feedback in Hindi using a natural, encouraging tone."
-    )
-
-    prompt = (
-        f"You are a professional vocal coach. Compare the user's singing to the reference song "
-        f"and give supportive feedback about pitch, rhythm, tone, and expression. {lang_instruction}"
-    )
-
-    with st.spinner("🎧 Analyzing vocals with Gemini..."):
-        response = client.models.generate_content(
-            model="gemini-2.5-pro",
-            contents=[
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/wav",
-                                "data": open(ref_tmp_path, "rb").read(),
-                            }
-                        },
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/wav",
-                                "data": open(recorded_file_path, "rb").read(),
-                            }
-                        },
-                    ],
-                }
-            ],
-        )
-
-    st.success("✅ Feedback Ready!")
-    try:
-        feedback_text = response.candidates[0].content.parts[0].text
-    except Exception:
-        feedback_text = "(No feedback returned.)"
-
-    st.write(feedback_text)
-
-    if enable_audio_feedback:
-        st.subheader("🔊 Listen to AI Feedback")
-        try:
-            with st.spinner("🎙️ Generating spoken feedback..."):
-                tts_response = client.models.generate_content(
-                    model="gemini-2.5-flash-preview-tts",
-                    contents=f"Speak this feedback in a warm, encouraging tone: {feedback_text}",
-                    config=types.GenerateContentConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=voice_choice
-                                )
-                            )
-                        )
-                    ),
-                )
-                audio_part = tts_response.candidates[0].content.parts[0]
-                audio_data = audio_part.inline_data.data
-                tts_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
-                with open(tts_path, "wb") as f:
-                    f.write(audio_data)
-            st.audio(tts_path, format="audio/wav")
-            st.success("✅ Audio feedback generated!")
-
-            with open(tts_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
-                href = f'<a href="data:audio/wav;base64,{b64}" download="AI_Vocal_Feedback.wav">🎵 Download AI Feedback Audio</a>'
-                st.markdown(href, unsafe_allow_html=True)
+            feedback_text = response.candidates[0].content.parts[0].text
+            st.success("✅ Feedback ready!")
+            st.write(feedback_text)
         except Exception as e:
-            st.warning(f"⚠️ Audio feedback unavailable. ({e})")
-else:
-    st.info("Please upload a reference song and record your singing above.")
+            st.warning(f"Feedback generation failed: {e}")
