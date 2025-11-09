@@ -27,7 +27,7 @@ kaleido>=0.2.1
 
 streamlit-audiorecorder
 audioread
-google-genai
+
 soundfile
 
 
