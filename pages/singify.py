@@ -60,8 +60,8 @@ if 'current_voice' not in st.session_state:
     st.session_state.current_voice = None
 
 # Sidebar
-singing_style = st.sidebar.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
-voice_option = st.sidebar.selectbox("Voice", ["Kore", "Charon", "Fenrir", "Aoede"])
+singing_style = st.selectbox("Singing Style", ["Pop", "Ballad", "Rap", "Soft"])
+voice_option = st.selectbox("Voice", ["Kore", "Charon", "Fenrir", "Aoede"])
 
 audio_bytes = None
 tmp_path = None
