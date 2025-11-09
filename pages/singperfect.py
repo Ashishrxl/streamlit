@@ -56,7 +56,7 @@ def get_client():
     if "GOOGLE_API_KEY_1" not in st.secrets:
         st.error("Missing GOOGLE_API_KEY_1 in secrets.")
         st.stop()
-    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
+    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 client = get_client()
 
