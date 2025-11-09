@@ -170,7 +170,7 @@ if recorded_audio_native:
     recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
     with open(recorded_file_path, "wb") as f:
         f.write(recorded_audio_native.getvalue())
-    st.audio(recorded_file_path, format="audio/wav")
+   # st.audio(recorded_file_path, format="audio/wav")
     st.success("✅ Recording captured!")
 
 # ==============================
