@@ -149,7 +149,7 @@ if ref_file and not st.session_state.lyrics_text:
 # Show uploaded song + lyrics (once)
 if st.session_state.ref_tmp_path and st.session_state.lyrics_text:
     st.subheader("📜 Lyrics (Sing Along)")
-    st.audio(st.session_state.ref_tmp_path, format="audio/wav")
+    # st.audio(st.session_state.ref_tmp_path, format="audio/wav")
 
     lines = [line.strip() for line in st.session_state.lyrics_text.split("\n") if line.strip()]
     try:
