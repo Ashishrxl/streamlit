@@ -99,9 +99,9 @@ def load_audio_energy(path):
 # ==============================
 @st.cache_resource
 def get_gemini_client():
-    if "GOOGLE_API_KEY_1" not in st.secrets:
+    if "GOOGLE_API_KEY_2" not in st.secrets:
         return None
-    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
+    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_2"])
 
 client = get_gemini_client()
 if client is None:
@@ -261,11 +261,11 @@ with tab2:
     st.header("🎤 Live Coaching (Gemini Realtime)")
     st.markdown("Stream your voice live and get instant spoken feedback — now with session recording!")
 
-    if "GOOGLE_API_KEY_1" not in st.secrets:
+    if "GOOGLE_API_KEY_2" not in st.secrets:
         st.error("❌ Missing GOOGLE_API_KEY.")
         st.stop()
 
-    API_KEY = st.secrets["GOOGLE_API_KEY_1"]
+    API_KEY = st.secrets["GOOGLE_API_KEY_2"]
     REALTIME_URL = (
         "wss://generativelanguage.googleapis.com/ws/"
         "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
