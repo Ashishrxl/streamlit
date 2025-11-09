@@ -93,13 +93,13 @@ def load_audio_energy(path):
 # ==============================
 @st.cache_resource
 def get_gemini_client():
-    if "GOOGLE_API_KEY_1" not in st.secrets:
+    if "GOOGLE_API_KEY" not in st.secrets:
         return None
-    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY_1"])
+    return genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
 client = get_gemini_client()
 if client is None:
-    st.error("❌ Missing GOOGLE_API_KEY_1 in secrets.")
+    st.error("❌ Missing GOOGLE_API_KEY in secrets.")
     st.stop()
 
 # ==============================
