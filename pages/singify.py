@@ -45,6 +45,14 @@ st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify")
 st.caption("Record or upload a line → Transcribe....")
 
+# --- API Key selection ---
+api_keys = {
+    "Key 1": st.secrets["KEY_1"],
+    "Key 2": st.secrets["KEY_2"], "Key 3": st.secrets["KEY_3"], "Key 4": st.secrets["KEY_4"], "Key 5": st.secrets["KEY_5"], "Key 6": st.secrets["KEY_6"], "Key 7": st.secrets["KEY_7"], "Key 8": st.secrets["KEY_8"], "Key 9": st.secrets["KEY_9"], "Key 10": st.secrets["KEY_10"], "Key 11": st.secrets["KEY_11"]
+}
+selected_key_name = st.selectbox("Select API Key", list(api_keys.keys()))
+api_key = api_keys[selected_key_name]
+
 # Initialize session state
 if 'transcript' not in st.session_state:
     st.session_state.transcript = None
@@ -254,7 +262,7 @@ async def synthesize_speech(text_prompt, voice_name="Kore"):
     """
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
     headers = {
-        "x-goog-api-key": st.secrets['GOOGLE_API_KEY'],
+        "x-goog-api-key": api_key,
         "Content-Type": "application/json"
     }
 
