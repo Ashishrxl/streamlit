@@ -53,9 +53,10 @@ TTS_MODEL = "gemini-2.5-flash-preview-tts"
 # IMAGE_MODELS = ["gemini-2.5-flash-image-preview", "gemini-2.0-flash-preview-image-generation, "gemini-2.0-flash-exp-image-generation"]
 
 IMAGE_MODELS = [ "gemini-2.0-flash-preview-image-generation"]
+# --- API Key selection ---
 api_keys = {
-    "Key 1": st.secrets["GOOGLE_API_KEY_1"],
-    "Key 2": st.secrets["GOOGLE_API_KEY_2"]
+    "Key 1": st.secrets["KEY_1"],
+    "Key 2": st.secrets["KEY_2"], "Key 3": st.secrets["KEY_3"], "Key 4": st.secrets["KEY_4"], "Key 5": st.secrets["KEY_5"], "Key 6": st.secrets["KEY_6"], "Key 7": st.secrets["KEY_7"], "Key 8": st.secrets["KEY_8"], "Key 9": st.secrets["KEY_9"], "Key 10": st.secrets["KEY_10"], "Key 11": st.secrets["KEY_11"]
 }
 selected_key_name = st.selectbox("Select API Key", list(api_keys.keys()))
 api_key = api_keys[selected_key_name]
