@@ -214,10 +214,7 @@ def main():
     with st.expander("⚙️ Settings", expanded=False):
         st.header("Configuration")
         # --- API Key selection ---
-        api_keys = {
-    "Key 1": st.secrets["KEY_1"],
-    "Key 2": st.secrets["KEY_2"], "Key 3": st.secrets["KEY_3"], "Key 4": st.secrets["KEY_4"], "Key 5": st.secrets["KEY_5"], "Key 6": st.secrets["KEY_6"], "Key 7": st.secrets["KEY_7"], "Key 8": st.secrets["KEY_8"], "Key 9": st.secrets["KEY_9"], "Key 10": st.secrets["KEY_10"], "Key 11": st.secrets["KEY_11"]
-}
+        api_keys = { "Key 1": st.secrets["KEY_1"], "Key 2": st.secrets["KEY_2"], "Key 3": st.secrets["KEY_3"], "Key 4": st.secrets["KEY_4"], "Key 5": st.secrets["KEY_5"], "Key 6": st.secrets["KEY_6"], "Key 7": st.secrets["KEY_7"], "Key 8": st.secrets["KEY_8"], "Key 9": st.secrets["KEY_9"], "Key 10": st.secrets["KEY_10"], "Key 11": st.secrets["KEY_11"]}
         selected_key_name = st.selectbox("Select API Key", list(api_keys.keys()))
         api_key = api_keys[selected_key_name]
 
