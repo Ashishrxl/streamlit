@@ -40,8 +40,6 @@ footer {visibility:hidden;}
     padding:0.75rem;
     font-size:1.1rem;
 }
-.lyric-line {color:#444;margin:4px 0;}
-.active-line {color:#ff4081;font-weight:600;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,32 +102,6 @@ if client is None:
     st.stop()
 
 # ==============================
-# Helpers for lyrics translation
-# ==============================
-@st.cache_data(show_spinner=False)
-def translate_lyrics_to_hindi(english_text):
-    """Use Gemini to translate lyrics into Hindi. Cached to avoid repeated calls."""
-    try:
-        prompt = (
-            "Translate the following song lyrics into natural, singable Hindi. Preserve line breaks "
-            "and keep lines roughly the same length so they can be used for karaoke highlighting. "
-            "Return only the translated lyrics."
-        )
-        response = client.models.generate_content(
-            model="gemini-2.5-pro",
-            contents=[
-                {"role": "user", "parts": [
-                    {"text": prompt},
-                    {"text": english_text}
-                ]}
-            ],
-        )
-        translated = response.candidates[0].content.parts[0].text.strip()
-        return translated
-    except Exception:
-        return None
-
-# ==============================
 # Step 1: Feedback options
 # ==============================
 st.header("⚙️ Step 1: Choose Feedback Options")
@@ -147,11 +119,8 @@ voice_choice = st.selectbox("🎤 Choose AI voice", ["Kore", "Ava", "Wave"], ind
 st.header("🎧 Step 2: Upload Reference Song")
 ref_file = st.file_uploader("Upload a song (mp3 or wav)", type=["mp3", "wav"])
 
-# session state defaults
 if "lyrics_text" not in st.session_state:
     st.session_state.lyrics_text = ""
-if "lyrics_translated" not in st.session_state:
-    st.session_state.lyrics_translated = None
 if "ref_tmp_path" not in st.session_state:
     st.session_state.ref_tmp_path = None
 
@@ -175,188 +144,120 @@ if ref_file and not st.session_state.lyrics_text:
         except Exception:
             st.session_state.lyrics_text = "Lyrics could not be extracted."
 
-# If lyrics exist and user selected Hindi, ensure translation is stored
-if st.session_state.lyrics_text and feedback_lang == "Hindi" and st.session_state.lyrics_translated is None:
-    with st.spinner("🔁 Translating lyrics to Hindi..."):
-        translated = translate_lyrics_to_hindi(st.session_state.lyrics_text)
-        if translated:
-            st.session_state.lyrics_translated = translated
-        else:
-            st.session_state.lyrics_translated = ""  # mark as attempted but failed
-
-# Show uploaded song + karaoke lyrics in chosen language
 if st.session_state.ref_tmp_path and st.session_state.lyrics_text:
     st.subheader("📜 Lyrics (Sing Along)")
-    if feedback_lang == "Hindi" and st.session_state.lyrics_translated:
-        display_lyrics = st.session_state.lyrics_translated
-    else:
-        display_lyrics = st.session_state.lyrics_text
-
-    lines = [line.strip() for line in display_lyrics.split("\n") if line.strip()]
+    lines = [line.strip() for line in st.session_state.lyrics_text.split("\n") if line.strip()]
     try:
         audio = AudioSegment.from_file(st.session_state.ref_tmp_path)
         duration = audio.duration_seconds
     except Exception:
-        duration = 60.0
+        duration = 60
     timestamps = [round(i * (duration / len(lines)), 2) for i in range(len(lines))]
-
     lines_html = "".join([f'<p class="lyric-line" data-time="{timestamps[i]}">{lines[i]}</p>' for i in range(len(lines))])
+    audio_b64 = base64.b64encode(open(st.session_state.ref_tmp_path, "rb").read()).decode()
     karaoke_html = f"""
     <div>
       <audio id="karaokePlayer" controls style="width:100%;">
-        <source src="data:audio/wav;base64,{base64.b64encode(open(st.session_state.ref_tmp_path,'rb').read()).decode()}" type="audio/wav">
+        <source src="data:audio/wav;base64,{audio_b64}" type="audio/wav">
       </audio>
       <div id="lyrics-box" style="height:350px;overflow-y:auto;border:1px solid #ccc;
         padding:10px;font-size:1.1rem;line-height:1.6;margin-top:10px;">{lines_html}</div>
     </div>
     <script>
-    (function(){{
-      const audio=document.getElementById('karaokePlayer');
-      const lines=Array.from(document.querySelectorAll('.lyric-line'));
-      const times=lines.map(l=>parseFloat(l.dataset.time));
-      let active=0;
-      function highlight(time){{
-          for(let i=0;i<lines.length;i++){{
-              if(time>=times[i]&&(i===lines.length-1||time<times[i+1])){{
-                  if(active!==i){{
-                      lines.forEach(l=>l.classList.remove('active-line'));
-                      lines[i].classList.add('active-line');
-                      lines[i].scrollIntoView({{behavior:'smooth',block:'center'}});
-                      active=i;
-                  }}
-                  break;
-              }}
-          }}
-      }}
-      audio.addEventListener('timeupdate',()=>highlight(audio.currentTime));
-    }})();
+    const audio=document.getElementById('karaokePlayer');
+    const lines=Array.from(document.querySelectorAll('.lyric-line'));
+    const times=lines.map(l=>parseFloat(l.dataset.time));
+    let active=0;
+    function highlight(time){{
+        for(let i=0;i<lines.length;i++){{
+            if(time>=times[i]&&(i===lines.length-1||time<times[i+1])){{
+                if(active!==i){{
+                    lines.forEach(l=>l.style.color='#444');
+                    lines[i].style.color='#ff4081';
+                    lines[i].scrollIntoView({{behavior:'smooth',block:'center'}});
+                    active=i;
+                }}
+                break;
+            }}
+        }}
+    }}
+    audio.addEventListener('timeupdate',()=>highlight(audio.currentTime));
     </script>
     """
     html(karaoke_html, height=420)
 
 # ==============================
-# Step 3: Record user singing (autotuned karaoke)
+# Step 3: Record user singing (with autotuned karaoke)
 # ==============================
 st.header("🎤 Step 3: Record Your Singing")
 
 autotune_path = None
-
 if st.session_state.ref_tmp_path:
     st.subheader("🎶 Practice with Autotuned Reference")
     with st.spinner("🎚️ Generating autotuned practice track..."):
         try:
+            # Use audio-capable model for output
             response = client.models.generate_content(
-                model="gemini-2.5-pro",
+                model="gemini-2.5-flash",
                 contents=[
                     {"role": "user", "parts": [
                         {"text": (
-                            "Create a pitch-corrected and slightly autotuned version of this song "
-                            "to make it suitable for karaoke-style singing practice. Return only the processed audio."
+                            "Generate a karaoke practice version of this song by lightly adjusting pitch "
+                            "and timing so vocals are centered and clear, but keep the audio natural. "
+                            "Return only the processed audio output."
                         )},
-                        {"inline_data": {"mime_type": "audio/wav", "data": open(st.session_state.ref_tmp_path, "rb").read()}}
-                    ]},
+                        {"inline_data": {
+                            "mime_type": "audio/wav",
+                            "data": open(st.session_state.ref_tmp_path, "rb").read()
+                        }},
+                    ]}
                 ],
                 config=types.GenerateContentConfig(response_modalities=["AUDIO"])
             )
-
-            auto_audio_part = response.candidates[0].content.parts[0]
-            auto_audio_data = auto_audio_part.inline_data.data
+            audio_part = response.candidates[0].content.parts[0]
             autotune_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
             with open(autotune_path, "wb") as f:
-                f.write(auto_audio_data)
-
-            # choose which lyrics to show for autotuned karaoke (respect feedback_lang)
-            if feedback_lang == "Hindi" and st.session_state.lyrics_translated:
-                display_lyrics_auto = st.session_state.lyrics_translated
-            else:
-                display_lyrics_auto = st.session_state.lyrics_text
-
-            lines_auto = [line.strip() for line in display_lyrics_auto.split("\n") if line.strip()]
-            try:
-                audio_ref = AudioSegment.from_file(autotune_path)
-                duration_auto = audio_ref.duration_seconds
-            except Exception:
-                duration_auto = duration  # fallback to original duration
-
-            timestamps_auto = [round(i * (duration_auto / len(lines_auto)), 2) for i in range(len(lines_auto))]
-
-            audio_base64 = base64.b64encode(open(autotune_path, "rb").read()).decode()
-            lyrics_html = "".join([f'<p class="lyric-line" data-time="{timestamps_auto[i]}">{lines_auto[i]}</p>' for i in range(len(lines_auto))])
-            karaoke_auto_html = f"""
-            <div>
-              <audio id="autotuneTrack" controls style="width:100%;">
-                <source src="data:audio/wav;base64,{audio_base64}" type="audio/wav">
-              </audio>
-              <div id="lyrics-box-auto" style="height:350px;overflow-y:auto;border:1px solid #ccc;
-                padding:10px;font-size:1.1rem;line-height:1.6;margin-top:10px;">{lyrics_html}</div>
-            </div>
-            <script>
-            (function(){{
-              const auto=document.getElementById('autotuneTrack');
-              const linesAuto=Array.from(document.querySelectorAll('#lyrics-box-auto .lyric-line'));
-              const timesAuto=linesAuto.map(l=>parseFloat(l.dataset.time));
-              let activeAuto=0;
-              function highlightAuto(time){{
-                  for(let i=0;i<linesAuto.length;i++){{
-                      if(time>=timesAuto[i]&&(i===linesAuto.length-1||time<timesAuto[i+1])){{
-                          if(activeAuto!==i){{
-                              linesAuto.forEach(l=>l.classList.remove('active-line'));
-                              linesAuto[i].classList.add('active-line');
-                              linesAuto[i].scrollIntoView({{behavior:'smooth',block:'center'}});
-                              activeAuto=i;
-                          }}
-                          break;
-                      }}
-                  }}
-              }}
-              auto.addEventListener('timeupdate',()=>highlightAuto(auto.currentTime));
-            }})();
-            </script>
-            """
-            html(karaoke_auto_html, height=420)
-            st.caption("🎵 Autotuned karaoke track — will auto-play when you start recording!")
-
+                f.write(audio_part.inline_data.data)
         except Exception as e:
-            st.warning(f"⚠️ Could not generate autotuned audio: {e}")
-else:
-    st.info("Please upload a reference song first to generate the autotuned version.")
+            st.warning(f"⚠️ Autotune generation failed ({e}); using original song instead.")
+            autotune_path = st.session_state.ref_tmp_path
 
-# Auto-play autotuned song when recording starts
-if autotune_path:
-    html("""
+    # Autoplay + lyrics sync
+    audio_base64 = base64.b64encode(open(autotune_path, "rb").read()).decode()
+    html(f"""
+    <div style="margin-top:1rem;">
+      <audio id="autotuneTrack" controls style="width:100%;">
+        <source src="data:audio/wav;base64,{audio_base64}" type="audio/wav">
+      </audio>
+      <p style="color:#555;font-size:0.9rem;">🎵 This is your autotuned practice track — it will play automatically when you start recording.</p>
+    </div>
     <script>
-    (function(){
-      const recorder = window.parent.document.querySelector('audio[data-testid="stAudioInput"]');
-      const track = document.getElementById('autotuneTrack');
-      if (recorder && track) {
-          recorder.addEventListener('play', () => {
-              try {
-                  track.currentTime = 0;
-                  track.play();
-              } catch(e) {
-                  console.warn('autoplay failed', e);
-              }
-          });
-      }
-    })();
+    const recorder = window.parent.document.querySelector('audio[data-testid="stAudioInput"]');
+    const track = document.getElementById('autotuneTrack');
+    if (recorder && track) {{
+        recorder.addEventListener('play', () => {{
+            track.currentTime = 0;
+            track.play();
+        }});
+    }}
     </script>
-    """, height=0)
+    """, height=140)
+else:
+    st.info("Please upload a reference song first.")
 
 recorded_audio_native = st.audio_input("Click below to start recording 🎤", key="recorder")
-
 recorded_file_path = None
 if recorded_audio_native:
     recorded_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".wav").name
     with open(recorded_file_path, "wb") as f:
         f.write(recorded_audio_native.getvalue())
-    st.success("✅ Recording captured! Now proceed to analysis below.")
+    st.success("✅ Recording captured! Proceed to analysis below.")
 
 # ==============================
 # Step 4: Compare + Feedback
 # ==============================
 if st.session_state.ref_tmp_path and recorded_file_path:
     st.subheader("🎶 Reference vs Your Singing")
-
     col_a, col_b = st.columns(2)
     with col_a:
         st.audio(st.session_state.ref_tmp_path)
@@ -368,7 +269,6 @@ if st.session_state.ref_tmp_path and recorded_file_path:
     with st.spinner("🔍 Analyzing energy patterns..."):
         ref_energy = load_audio_energy(st.session_state.ref_tmp_path)
         user_energy = load_audio_energy(recorded_file_path)
-
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(ref_energy, label="Reference", linewidth=2)
     ax.plot(user_energy, label="You", linewidth=2)
@@ -377,39 +277,31 @@ if st.session_state.ref_tmp_path and recorded_file_path:
     st.pyplot(fig)
 
     st.subheader("💬 AI Vocal Feedback")
-
-    lang_instruction = (
-        "Provide feedback in English."
-        if feedback_lang == "English"
-        else "Provide feedback in Hindi using a natural tone."
-    )
-
+    lang_instruction = "Provide feedback in English." if feedback_lang == "English" else "Provide feedback in Hindi using a natural tone."
     prompt = f"You are a professional vocal coach. Compare the user's singing to the reference and give supportive feedback about pitch, rhythm, tone, and expression. {lang_instruction}"
 
     with st.spinner("🎧 Generating feedback..."):
-        response = client.models.generate_content(
-            model="gemini-2.5-pro",
-            contents=[
-                {"role": "user", "parts": [
-                    {"text": prompt},
-                    {"inline_data": {"mime_type": "audio/wav", "data": open(st.session_state.ref_tmp_path, "rb").read()}},
-                    {"inline_data": {"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}},
-                ]}
-            ]
-        )
-
-    try:
-        feedback_text = response.candidates[0].content.parts[0].text
-    except Exception:
-        feedback_text = "No feedback generated."
-
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-pro",
+                contents=[
+                    {"role": "user", "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": "audio/wav", "data": open(st.session_state.ref_tmp_path, "rb").read()}},
+                        {"inline_data": {"mime_type": "audio/wav", "data": open(recorded_file_path, "rb").read()}},
+                    ]}
+                ]
+            )
+            feedback_text = response.candidates[0].content.parts[0].text
+        except Exception as e:
+            feedback_text = f"No feedback generated. ({e})"
     st.write(feedback_text)
 
     if enable_audio_feedback:
         with st.spinner("🔊 Generating spoken feedback..."):
             try:
                 tts = client.models.generate_content(
-                    model="gemini-2.5-flash-preview-tts",
+                    model="gemini-2.5-flash",
                     contents=f"Speak this feedback warmly: {feedback_text}",
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
