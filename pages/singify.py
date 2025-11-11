@@ -9,6 +9,7 @@ import requests
 import wave
 import numpy as np
 
+# NOTE: google.genai also exposes types; we'll import inside the helper to avoid import errors on environments missing it
 from streamlit.components.v1 import html
 html(
   """
@@ -30,16 +31,12 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
-
-/* The following specifically targets and hides all child elements of the header's right side,
-   while preserving the header itself and, by extension, the sidebar toggle button. */
 header > div:nth-child(2) {
     display: none;
 }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify")
@@ -71,61 +68,104 @@ def convert_to_wav_bytes(file_bytes):
         return None
 
 # -------------------------
-# Helper: Corrected Gemini TTS using official API (defined early so UI can call it)
+# Helper: Synthesize speech (sync) using official genai client
 # -------------------------
-async def synthesize_speech(text_prompt, voice_name="Kore"):
+def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.5-flash-preview-tts"):
     """
-    Correct Gemini TTS API call using official documentation structure
-    Returns raw PCM bytes (base64-decoded) — same as your original expectation.
+    Use google.genai client to generate TTS audio for `text_prompt`.
+    Returns raw PCM bytes (usually int16 little-endian PCM, sample rate 24000).
+    This function is synchronous so it can be called from both sync and async contexts (use run_in_executor in async flows).
     """
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
-    headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
-    }
+    client = genai.Client()  # uses API key via environment or other config; we rely on x-goog-api-key selection earlier for REST fallback
 
-    data = {
-        "contents": [{
-            "parts": [{
-                "text": text_prompt
-            }]
-        }],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {
-                        "voiceName": voice_name
+    # Import types from google.genai to construct config in the officially supported shape
+    try:
+        from google.genai import types
+    except Exception:
+        # If types not available, fall back to manual REST call (best-effort)
+        # We'll try the REST endpoint as a fallback, similar to earlier approach.
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+        data = {
+            "contents": [{"parts": [{"text": text_prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {
+                            "voiceName": voice_name
+                        }
                     }
                 }
-            }
+            },
+            "model": model_name
         }
-    }
+        resp = requests.post(url, headers=headers, json=data)
+        resp.raise_for_status()
+        resp_json = resp.json()
+        # path per docs: candidates[0].content.parts[0].inlineData.data
+        # value may be base64 string or raw PCM array depending on endpoint; handle both
+        try:
+            data_field = resp_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+        except KeyError:
+            # try alternate casing
+            data_field = resp_json["candidates"][0]["content"][0]["parts"][0]["inlineData"]["data"]
 
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(
-        None, lambda: requests.post(url, headers=headers, json=data)
+        # If data_field is base64 string:
+        if isinstance(data_field, str):
+            try:
+                return base64.b64decode(data_field)
+            except Exception:
+                # maybe it's already binary represented as list - fallback
+                return bytes(data_field)
+        else:
+            # assume binary
+            return data_field
+
+    # If we have types available, call the client properly (recommended)
+    response = client.models.generate_content(
+        model=model_name,
+        # either a simple string or the structured parts as docs show
+        contents=[{"parts": [{"text": text_prompt}]}],
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=voice_name
+                    )
+                )
+            ),
+        )
     )
-    response.raise_for_status()
 
-    response_json = response.json()
-    # path as in your original code
-    audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+    # The genai client typically returns PCM bytes already decoded in `data` (not base64)
+    # but we handle both cases defensively.
+    try:
+        data_field = response.candidates[0].content.parts[0].inline_data.data
+    except Exception:
+        # try camelCase path if the library uses that form
+        try:
+            data_field = response.candidates[0].content.parts[0].inlineData.data
+        except Exception as e:
+            raise RuntimeError(f"Unexpected response structure from TTS model: {e}")
 
-    if audio_base64 is None:
-        raise ValueError("No audio returned.")
-
-    return base64.b64decode(audio_base64)
+    if isinstance(data_field, str):
+        # base64
+        return base64.b64decode(data_field)
+    else:
+        # likely already bytes
+        return data_field
 
 # -------------------------
 # Helper: Convert PCM to WAV
 # -------------------------
 def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
-    """Convert raw PCM data to WAV format"""
+    """Convert raw PCM data (bytes) to WAV format bytes"""
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, 'wb') as wav_file:
         wav_file.setnchannels(channels)
-        wav_file.setsampwidth(sample_width) 
+        wav_file.setsampwidth(sample_width)
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm_data)
     return wav_buffer.getvalue()
@@ -271,7 +311,6 @@ with tab3:
     st.markdown("**Upload a text or document file, or enter text manually**")
 
     text_input_method = st.radio("Choose input method:", ["✍️ Enter Text", "📄 Upload File"])
-
     input_text = ""
 
     if text_input_method == "✍️ Enter Text":
@@ -304,11 +343,11 @@ with tab3:
         if st.button("🎶 Convert Text to Singify Audio", key="text_to_sing_button"):
             with st.spinner("🎤 Generating singing audio from text..."):
                 try:
-                    # Synthesize using the helper defined above
-                    pcm_data = asyncio.run(synthesize_speech(
+                    # generate PCM via synchronous helper (blocking) — acceptable inside spinner
+                    pcm_data = synthesize_speech_sync(
                         f"Sing this text in a {singing_style.lower()} style with {voice_option} voice: {input_text}",
                         voice_name=voice_option
-                    ))
+                    )
                     vocal_bytes = pcm_to_wav(pcm_data)
 
                     vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -421,7 +460,9 @@ async def transcribe_and_sing():
     with st.spinner(f"🎵 Generating singing voice in {singing_style} style..."):
         tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {st.session_state.transcript}"
         try:
-            pcm_data = await synthesize_speech(tts_prompt, voice_name=voice_option)
+            # run the synchronous synth function in a thread to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            pcm_data = await loop.run_in_executor(None, lambda: synthesize_speech_sync(tts_prompt, voice_name=voice_option))
             vocal_bytes = pcm_to_wav(pcm_data)
 
             # Save vocal and store in session state
