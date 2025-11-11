@@ -9,7 +9,6 @@ import requests
 import wave
 import numpy as np
 
-# UI tweak to hide external links
 from streamlit.components.v1 import html
 html(
   """
@@ -38,6 +37,7 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify")
 st.caption("Record or upload a line → Transcribe....")
@@ -51,12 +51,17 @@ selected_key_name = st.selectbox("Select Key", list(api_keys.keys()))
 api_key = api_keys[selected_key_name]
 
 # -------------------------
+# Constants & token estimation
+# -------------------------
+TOKEN_LIMIT = 8192  # model limit from error
+# rough heuristic: 1 token ~ 4 characters (approx)
+def estimate_tokens(text: str) -> int:
+    return max(1, int(len(text) / 4))
+
+# -------------------------
 # Helper: Convert audio to WAV bytes
 # -------------------------
 def convert_to_wav_bytes(file_bytes):
-    """
-    Convert MP3/M4A/WAV audio bytes to WAV bytes using soundfile
-    """
     try:
         with io.BytesIO(file_bytes) as f:
             data, samplerate = sf.read(f, always_2d=True)
@@ -68,22 +73,62 @@ def convert_to_wav_bytes(file_bytes):
         return None
 
 # -------------------------
-# Helper: Synthesize speech (sync) using official genai client
+# Helper: Summarize long text (sync)
+# -------------------------
+def summarize_text_sync(text, target_tokens=2000, model="gemini-2.5"):
+    """
+    Summarize `text` down to ~target_tokens (heuristic). Returns the summary string.
+    Falls back to truncation if summarization fails.
+    """
+    client = genai.Client(api_key=api_key)
+    approx_tokens = estimate_tokens(text)
+    if approx_tokens <= target_tokens:
+        return text  # already small enough
+
+    prompt = (
+        "Summarize the following text into a concise version that preserves meaning and lyrical content. "
+        f"Keep the summary short, focused, and suitable for singing. Target approximately {target_tokens} tokens or fewer. "
+        "If the text contains repeated sections, condense repetitions while preserving overall structure.\n\n"
+        "TEXT:\n"
+    )
+
+    try:
+        resp = client.models.generate_content(
+            model=model,
+            contents=[{"parts":[{"text": prompt + text}]}],
+            # no heavy config; relying on model defaults
+        )
+        summary = resp.text.strip()
+        if not summary:
+            raise RuntimeError("Empty summary received")
+        # final safety: if still too large, truncate
+        if estimate_tokens(summary) > target_tokens:
+            # truncate summary to target approximate characters
+            char_limit = target_tokens * 4
+            summary = summary[:char_limit]
+        return summary
+    except Exception as e:
+        # fallback: truncate the original text to target_tokens
+        char_limit = target_tokens * 4
+        truncated = text[:char_limit]
+        st.warning(f"⚠️ Summarization failed, using truncated text ({str(e)})")
+        return truncated
+
+# -------------------------
+# Helper: Synthesize speech (sync) using official genai client or REST fallback
 # -------------------------
 def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.5-flash-preview-tts"):
     """
     Use google.genai client to generate TTS audio for `text_prompt`.
-    Returns raw PCM bytes (usually int16 little-endian PCM, sample rate 24000).
-    This function is synchronous so it can be called from both sync and async contexts (use run_in_executor in async flows).
+    Returns raw PCM bytes.
     """
-    # create client with api_key provided by the user (fixes missing-key error)
     client = genai.Client(api_key=api_key)
 
-    # Import types from google.genai to construct config in the officially supported shape
+    # Try using genai types if available to pass proper config
     try:
-        from google.genai import types
+        from google.genai import types  # type: ignore
     except Exception:
-        # Fallback to REST if types aren't available
+        # fallback to REST
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
         data = {
@@ -103,10 +148,11 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
         resp = requests.post(url, headers=headers, json=data)
         resp.raise_for_status()
         resp_json = resp.json()
-        # path per docs: candidates[0].content.parts[0].inlineData.data
+        # defensive extraction
         try:
             data_field = resp_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
-        except KeyError:
+        except Exception:
+            # alternative path
             data_field = resp_json["candidates"][0]["content"][0]["parts"][0]["inlineData"]["data"]
 
         if isinstance(data_field, str):
@@ -114,23 +160,21 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
         else:
             return bytes(data_field)
 
-    # If we have types available, call the client properly (recommended)
+    # If types are available use the client call with config
     response = client.models.generate_content(
         model=model_name,
-        contents=[{"parts": [{"text": text_prompt}]}],
+        contents=[{"parts":[{"text": text_prompt}]}],
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=voice_name
-                    )
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
                 )
-            ),
+            )
         )
     )
 
-    # Defensive parsing of response
+    # defensive parsing
     try:
         data_field = response.candidates[0].content.parts[0].inline_data.data
     except Exception:
@@ -148,7 +192,6 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
 # Helper: Convert PCM to WAV
 # -------------------------
 def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
-    """Convert raw PCM data (bytes) to WAV format bytes"""
     wav_buffer = io.BytesIO()
     with wave.open(wav_buffer, 'wb') as wav_file:
         wav_file.setnchannels(channels)
@@ -185,7 +228,6 @@ tmp_path = None
 # -------------------------
 st.subheader("📤 Choose Audio Input Method")
 
-# Create tabs for different input methods (including the new text/doc tab)
 tab1, tab2, tab3 = st.tabs(["📁 Upload Audio File", "🎙️ Record Audio", "📝 Upload Text or Document"])
 
 with tab1:
@@ -213,10 +255,7 @@ with tab1:
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
 
-            # Store original path in session state
             st.session_state.original_path = tmp_path
-
-            # Show audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
             st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz | Channels: {data.shape[1]}")
@@ -224,26 +263,17 @@ with tab1:
 
 with tab2:
     st.markdown("")
-
-    # Option 1: Native Streamlit Audio Input (Recommended)
-    st.markdown("")
     recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
     if recorded_audio_native is not None:
-        st.success("✅ Audio recorded successfully with native recorder!")
-
-        # Read the audio bytes
+        st.success("✅ Audio recorded successfully!")
         audio_bytes = recorded_audio_native.read()
         recorded_audio_native.seek(0)
-
-        # Save to tmp file
         tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp_path = tmp_file.name
         with open(tmp_path, "wb") as f:
             f.write(audio_bytes)
-
         st.session_state.original_path = tmp_path
-
         try:
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
@@ -254,13 +284,8 @@ with tab2:
             st.audio(recorded_audio_native, format="audio/wav")
 
     st.markdown("---")
-
-    # Option 2: Enhanced recorder from streamlit-audio-recorder package
-    st.markdown("")
-
     try:
         from streamlit_audio_recorder import audio_recorder
-
         recorded_audio_enhanced = audio_recorder(
             text="Click to record",
             recording_color="#e8b62c",
@@ -269,18 +294,14 @@ with tab2:
             icon_size="2x",
             key="enhanced_recorder"
         )
-
         if recorded_audio_enhanced is not None:
             st.success("✅ Audio recorded successfully with enhanced recorder!")
             audio_bytes = recorded_audio_enhanced
-
             tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp_path = tmp_file.name
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
-
             st.session_state.original_path = tmp_path
-
             try:
                 data, samplerate = sf.read(tmp_path, always_2d=True)
                 duration = len(data) / samplerate
@@ -289,14 +310,11 @@ with tab2:
             except Exception as e:
                 st.warning(f"Could not read audio properties: {e}")
                 st.audio(recorded_audio_enhanced, format="audio/wav")
-
     except ImportError:
         st.warning("")
 
-
 with tab3:
     st.markdown("**Upload a text or document file, or enter text manually**")
-
     text_input_method = st.radio("Choose input method:", ["✍️ Enter Text", "📄 Upload File"])
     input_text = ""
 
@@ -328,35 +346,35 @@ with tab3:
     if input_text:
         st.text_area("📝 Extracted Text", input_text, height=150)
         if st.button("🎶 Convert Text to Singify Audio", key="text_to_sing_button"):
+            # check token size and summarize if needed
+            estimated = estimate_tokens(input_text)
+            if estimated > TOKEN_LIMIT:
+                with st.spinner("✂️ Text is very long — summarizing before synthesis..."):
+                    input_text_short = summarize_text_sync(input_text, target_tokens=min(2000, TOKEN_LIMIT//2))
+                st.info("🔎 Text was summarized to fit model limits. Preview shown below.")
+                st.text_area("📝 Summarized Text (used for synthesis)", input_text_short, height=150)
+            else:
+                input_text_short = input_text
+
             with st.spinner("🎤 Generating singing audio from text..."):
                 try:
-                    # generate PCM via synchronous helper (blocking) — acceptable inside spinner
                     pcm_data = synthesize_speech_sync(
-                        f"Sing this text in a {singing_style.lower()} style with {voice_option} voice: {input_text}",
+                        f"Sing this text in a {singing_style.lower()} style with {voice_option} voice: {input_text_short}",
                         voice_name=voice_option
                     )
                     vocal_bytes = pcm_to_wav(pcm_data)
-
                     vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
                     vocal_path = vocal_file.name
                     with open(vocal_path, "wb") as f:
                         f.write(vocal_bytes)
-
                     st.session_state.vocal_path = vocal_path
-                    st.session_state.transcript = input_text
+                    st.session_state.transcript = input_text_short
                     st.session_state.generation_complete = True
                     st.session_state.current_style = singing_style
                     st.session_state.current_voice = voice_option
-
                     st.success("✅ Singify generation complete!")
                     st.audio(vocal_path, format="audio/wav")
-
-                    st.download_button(
-                        "📥 Download Singified Audio",
-                        vocal_bytes,
-                        file_name="singified_text.wav",
-                        mime="audio/wav"
-                    )
+                    st.download_button("📥 Download Singified Audio", vocal_bytes, file_name="singified_text.wav", mime="audio/wav")
                 except Exception as e:
                     st.error(f"❌ Failed to generate singing voice: {e}")
 
@@ -370,7 +388,6 @@ with col1:
     if st.button("🗑️ Clear Audio"):
         audio_bytes = None
         tmp_path = None
-        # Clear session state
         st.session_state.transcript = None
         st.session_state.vocal_path = None
         st.session_state.original_path = None
@@ -387,15 +404,7 @@ with col2:
                 data, samplerate = sf.read(path_to_check, always_2d=True)
                 duration = len(data) / samplerate
                 file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
-
-                st.info(f"""
-                **Audio Information:**
-                - Duration: {duration:.2f} seconds
-                - Sample Rate: {samplerate} Hz
-                - Channels: {data.shape[1]}
-                - File Size: {file_size:.2f} MB
-                - Format: WAV
-                """)
+                st.info(f"**Audio Information:**\n- Duration: {duration:.2f}s\n- Sample Rate: {samplerate} Hz\n- Channels: {data.shape[1]}\n- File Size: {file_size:.2f} MB\n- Format: WAV")
             except Exception as e:
                 st.error(f"Error reading audio info: {e}")
 
@@ -412,21 +421,17 @@ with col3:
 # Step 2 & 3: Transcribe & TTS with spinner (no progress bar)
 # -------------------------
 async def transcribe_and_sing():
-    # create client with api_key so transcription call works
     client = genai.Client(api_key=api_key)
 
-    # Use tmp_path or stored original_path
     audio_path = tmp_path if tmp_path else st.session_state.original_path
 
     if not audio_path:
         st.error("No audio file available")
         return
 
-    # Read audio for processing
     with open(audio_path, "rb") as f:
         current_audio_bytes = f.read()
 
-    # --- Transcription ---
     with st.spinner("🔤 Transcribing..."):
         try:
             resp = client.models.generate_content(
@@ -439,32 +444,35 @@ async def transcribe_and_sing():
                 ]
             )
             transcript = resp.text.strip()
-            st.session_state.transcript = transcript  # Store in session state
+            st.session_state.transcript = transcript
         except Exception as e:
             st.error(f"❌ Transcription failed: {e}")
             return
 
-    # --- TTS with natural language prompt ---
+    # Before TTS: ensure transcript fits token limits; summarize if necessary
+    estimated = estimate_tokens(st.session_state.transcript)
+    if estimated > TOKEN_LIMIT:
+        with st.spinner("✂️ Transcript is very long — summarizing before synthesis..."):
+            transcript_short = summarize_text_sync(st.session_state.transcript, target_tokens=min(2000, TOKEN_LIMIT//2))
+        st.info("🔎 Transcript was summarized to fit model limits.")
+        st.text_area("📝 Summarized Transcript (used for synthesis)", transcript_short, height=150)
+    else:
+        transcript_short = st.session_state.transcript
+
     with st.spinner(f"🎵 Generating singing voice in {singing_style} style..."):
-        tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {st.session_state.transcript}"
+        tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {transcript_short}"
         try:
-            # run the synchronous synth function in a thread to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             pcm_data = await loop.run_in_executor(None, lambda: synthesize_speech_sync(tts_prompt, voice_name=voice_option))
             vocal_bytes = pcm_to_wav(pcm_data)
-
-            # Save vocal and store in session state
             vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             vocal_path = vocal_file.name
             with open(vocal_path, "wb") as f:
                 f.write(vocal_bytes)
-
-            # Store results in session state
             st.session_state.vocal_path = vocal_path
             st.session_state.generation_complete = True
             st.session_state.current_style = singing_style
             st.session_state.current_voice = voice_option
-
             st.success("✅ Singing voice generation complete!")
         except Exception as e:
             st.error(f"❌ Generation failed: {e}")
@@ -474,7 +482,6 @@ async def transcribe_and_sing():
 # Display Results (Persistent)
 # -------------------------
 def display_results():
-    """Display results from session state"""
     if st.session_state.transcript:
         st.subheader("📝 Transcription Results")
         st.write(f"**Transcribed Text:** {st.session_state.transcript}")
@@ -482,31 +489,15 @@ def display_results():
     if st.session_state.generation_complete and st.session_state.vocal_path:
         st.subheader("🎶 Generated Singing Voice")
         st.success(f"🎤 Generated {st.session_state.current_style} style with {st.session_state.current_voice} voice!")
-
-        # Display audio player
         st.audio(st.session_state.vocal_path, format="audio/wav")
-
-        # Download buttons
         col1, col2 = st.columns(2)
         with col1:
             with open(st.session_state.vocal_path, "rb") as f:
-                st.download_button(
-                    "📥 Download New Version", 
-                    f.read(), 
-                    file_name=f"singified_{st.session_state.current_style.lower()}.wav", 
-                    mime="audio/wav",
-                    key="download_sung"
-                )
+                st.download_button("📥 Download New Version", f.read(), file_name=f"singified_{st.session_state.current_style.lower()}.wav", mime="audio/wav", key="download_sung")
         with col2:
             if st.session_state.original_path:
                 with open(st.session_state.original_path, "rb") as f:
-                    st.download_button(
-                        "📥 Download Old Version", 
-                        f.read(), 
-                        file_name="original_audio.wav", 
-                        mime="audio/wav",
-                        key="download_original"
-                    )
+                    st.download_button("📥 Download Old Version", f.read(), file_name="original_audio.wav", mime="audio/wav", key="download_original")
 
 # -------------------------
 # Main Process Button
@@ -522,7 +513,4 @@ if audio_bytes is not None or st.session_state.original_path:
 else:
     st.warning("⚠️ Please upload or record an audio file first!")
 
-# -------------------------
-# Always Display Results if Available
-# -------------------------
 display_results()
