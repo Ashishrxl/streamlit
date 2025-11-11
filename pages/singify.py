@@ -30,12 +30,16 @@ footer {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 a[href^="https://github.com"] {display: none !important;}
 a[href^="https://streamlit.io"] {display: none !important;}
+
+/* The following specifically targets and hides all child elements of the header's right side,
+   while preserving the header itself and, by extension, the sidebar toggle button. */
 header > div:nth-child(2) {
     display: none;
 }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 
 st.set_page_config(page_title="Singify 🎶", layout="centered")
 st.title("🎤 Singify")
@@ -49,7 +53,86 @@ api_keys = {
 selected_key_name = st.selectbox("Select Key", list(api_keys.keys()))
 api_key = api_keys[selected_key_name]
 
+# -------------------------
+# Helper: Convert audio to WAV bytes
+# -------------------------
+def convert_to_wav_bytes(file_bytes):
+    """
+    Convert MP3/M4A/WAV audio bytes to WAV bytes using soundfile
+    """
+    try:
+        with io.BytesIO(file_bytes) as f:
+            data, samplerate = sf.read(f, always_2d=True)
+        out_bytes = io.BytesIO()
+        sf.write(out_bytes, data, samplerate, format='WAV')
+        return out_bytes.getvalue()
+    except Exception as e:
+        st.error(f"Error converting audio: {e}")
+        return None
+
+# -------------------------
+# Helper: Corrected Gemini TTS using official API (defined early so UI can call it)
+# -------------------------
+async def synthesize_speech(text_prompt, voice_name="Kore"):
+    """
+    Correct Gemini TTS API call using official documentation structure
+    Returns raw PCM bytes (base64-decoded) — same as your original expectation.
+    """
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "contents": [{
+            "parts": [{
+                "text": text_prompt
+            }]
+        }],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": voice_name
+                    }
+                }
+            }
+        }
+    }
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None, lambda: requests.post(url, headers=headers, json=data)
+    )
+    response.raise_for_status()
+
+    response_json = response.json()
+    # path as in your original code
+    audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
+
+    if audio_base64 is None:
+        raise ValueError("No audio returned.")
+
+    return base64.b64decode(audio_base64)
+
+# -------------------------
+# Helper: Convert PCM to WAV
+# -------------------------
+def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
+    """Convert raw PCM data to WAV format"""
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width) 
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
+    return wav_buffer.getvalue()
+
+# -------------------------
 # Initialize session state
+# -------------------------
 if 'transcript' not in st.session_state:
     st.session_state.transcript = None
 if 'vocal_path' not in st.session_state:
@@ -71,25 +154,11 @@ audio_bytes = None
 tmp_path = None
 
 # -------------------------
-# Helper: Convert audio to WAV bytes
-# -------------------------
-def convert_to_wav_bytes(file_bytes):
-    try:
-        with io.BytesIO(file_bytes) as f:
-            data, samplerate = sf.read(f, always_2d=True)
-        out_bytes = io.BytesIO()
-        sf.write(out_bytes, data, samplerate, format='WAV')
-        return out_bytes.getvalue()
-    except Exception as e:
-        st.error(f"Error converting audio: {e}")
-        return None
-
-# -------------------------
 # Audio Input Options
 # -------------------------
 st.subheader("📤 Choose Audio Input Method")
 
-# Tabs: upload, record, and text input
+# Create tabs for different input methods (including the new text/doc tab)
 tab1, tab2, tab3 = st.tabs(["📁 Upload Audio File", "🎙️ Record Audio", "📝 Upload Text or Document"])
 
 with tab1:
@@ -117,7 +186,10 @@ with tab1:
             with open(tmp_path, "wb") as f:
                 f.write(audio_bytes)
 
+            # Store original path in session state
             st.session_state.original_path = tmp_path
+
+            # Show audio info
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
             st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz | Channels: {data.shape[1]}")
@@ -125,17 +197,26 @@ with tab1:
 
 with tab2:
     st.markdown("")
+
+    # Option 1: Native Streamlit Audio Input (Recommended)
+    st.markdown("")
     recorded_audio_native = st.audio_input("🎙️ Record your voice", key="native_recorder")
 
     if recorded_audio_native is not None:
-        st.success("✅ Audio recorded successfully!")
+        st.success("✅ Audio recorded successfully with native recorder!")
+
+        # Read the audio bytes
         audio_bytes = recorded_audio_native.read()
         recorded_audio_native.seek(0)
+
+        # Save to tmp file
         tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp_path = tmp_file.name
         with open(tmp_path, "wb") as f:
             f.write(audio_bytes)
+
         st.session_state.original_path = tmp_path
+
         try:
             data, samplerate = sf.read(tmp_path, always_2d=True)
             duration = len(data) / samplerate
@@ -145,15 +226,62 @@ with tab2:
             st.warning(f"Could not read audio properties: {e}")
             st.audio(recorded_audio_native, format="audio/wav")
 
+    st.markdown("---")
+
+    # Option 2: Enhanced recorder from streamlit-audio-recorder package
+    st.markdown("")
+
+    try:
+        from streamlit_audio_recorder import audio_recorder
+
+        recorded_audio_enhanced = audio_recorder(
+            text="Click to record",
+            recording_color="#e8b62c",
+            neutral_color="#6aa36f",
+            icon_name="microphone",
+            icon_size="2x",
+            key="enhanced_recorder"
+        )
+
+        if recorded_audio_enhanced is not None:
+            st.success("✅ Audio recorded successfully with enhanced recorder!")
+            audio_bytes = recorded_audio_enhanced
+
+            tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp_path = tmp_file.name
+            with open(tmp_path, "wb") as f:
+                f.write(audio_bytes)
+
+            st.session_state.original_path = tmp_path
+
+            try:
+                data, samplerate = sf.read(tmp_path, always_2d=True)
+                duration = len(data) / samplerate
+                st.info(f"🎵 Duration: {duration:.2f}s | Sample Rate: {samplerate} Hz")
+                st.audio(tmp_path, format="audio/wav")
+            except Exception as e:
+                st.warning(f"Could not read audio properties: {e}")
+                st.audio(recorded_audio_enhanced, format="audio/wav")
+
+    except ImportError:
+        st.warning("")
+
+
 with tab3:
     st.markdown("**Upload a text or document file, or enter text manually**")
+
     text_input_method = st.radio("Choose input method:", ["✍️ Enter Text", "📄 Upload File"])
+
     input_text = ""
 
     if text_input_method == "✍️ Enter Text":
         input_text = st.text_area("Enter lyrics or text to Singify", height=200, placeholder="Type something like: 'Hello world, it's a beautiful day!'")
     else:
-        uploaded_text_file = st.file_uploader("Upload a text or document file", type=["txt", "pdf", "docx"], help="Supported formats: TXT, PDF, DOCX")
+        uploaded_text_file = st.file_uploader(
+            "Upload a text or document file",
+            type=["txt", "pdf", "docx"],
+            help="Supported formats: TXT, PDF, DOCX"
+        )
         if uploaded_text_file:
             st.success(f"✅ Uploaded: {uploaded_text_file.name}")
             ext = uploaded_text_file.name.split(".")[-1].lower()
@@ -176,23 +304,33 @@ with tab3:
         if st.button("🎶 Convert Text to Singify Audio", key="text_to_sing_button"):
             with st.spinner("🎤 Generating singing audio from text..."):
                 try:
+                    # Synthesize using the helper defined above
                     pcm_data = asyncio.run(synthesize_speech(
                         f"Sing this text in a {singing_style.lower()} style with {voice_option} voice: {input_text}",
                         voice_name=voice_option
                     ))
                     vocal_bytes = pcm_to_wav(pcm_data)
+
                     vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
                     vocal_path = vocal_file.name
                     with open(vocal_path, "wb") as f:
                         f.write(vocal_bytes)
+
                     st.session_state.vocal_path = vocal_path
                     st.session_state.transcript = input_text
                     st.session_state.generation_complete = True
                     st.session_state.current_style = singing_style
                     st.session_state.current_voice = voice_option
+
                     st.success("✅ Singify generation complete!")
                     st.audio(vocal_path, format="audio/wav")
-                    st.download_button("📥 Download Singified Audio", vocal_bytes, file_name="singified_text.wav", mime="audio/wav")
+
+                    st.download_button(
+                        "📥 Download Singified Audio",
+                        vocal_bytes,
+                        file_name="singified_text.wav",
+                        mime="audio/wav"
+                    )
                 except Exception as e:
                     st.error(f"❌ Failed to generate singing voice: {e}")
 
@@ -206,6 +344,7 @@ with col1:
     if st.button("🗑️ Clear Audio"):
         audio_bytes = None
         tmp_path = None
+        # Clear session state
         st.session_state.transcript = None
         st.session_state.vocal_path = None
         st.session_state.original_path = None
@@ -222,7 +361,15 @@ with col2:
                 data, samplerate = sf.read(path_to_check, always_2d=True)
                 duration = len(data) / samplerate
                 file_size = len(audio_bytes) / 1024 / 1024 if audio_bytes else 0
-                st.info(f"**Audio Information:**\n- Duration: {duration:.2f}s\n- Sample Rate: {samplerate} Hz\n- Channels: {data.shape[1]}\n- File Size: {file_size:.2f} MB\n- Format: WAV")
+
+                st.info(f"""
+                **Audio Information:**
+                - Duration: {duration:.2f} seconds
+                - Sample Rate: {samplerate} Hz
+                - Channels: {data.shape[1]}
+                - File Size: {file_size:.2f} MB
+                - Format: WAV
+                """)
             except Exception as e:
                 st.error(f"Error reading audio info: {e}")
 
@@ -236,69 +383,23 @@ with col3:
         st.rerun()
 
 # -------------------------
-# Helper: Gemini TTS
+# Step 2 & 3: Transcribe & TTS with spinner (no progress bar)
 # -------------------------
-async def synthesize_speech(text_prompt, voice_name="Kore"):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
-    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    data = {
-        "contents": [{"parts": [{"text": text_prompt}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice_name}}}
-        }
-    }
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, lambda: requests.post(url, headers=headers, json=data))
-    response.raise_for_status()
-    response_json = response.json()
-    audio_base64 = response_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
-    if audio_base64 is None:
-        raise ValueError("No audio returned.")
-    return base64.b64decode(audio_base64)
-
-def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
-    wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, 'wb') as wav_file:
-        wav_file.setnchannels(channels)
-        wav_file.setsampwidth(sample_width)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(pcm_data)
-    return wav_buffer.getvalue()
-
-# -------------------------
-# Display Results
-# -------------------------
-def display_results():
-    if st.session_state.transcript:
-        st.subheader("📝 Transcription Results")
-        st.write(f"**Transcribed Text:** {st.session_state.transcript}")
-    if st.session_state.generation_complete and st.session_state.vocal_path:
-        st.subheader("🎶 Generated Singing Voice")
-        st.success(f"🎤 Generated {st.session_state.current_style} style with {st.session_state.current_voice} voice!")
-        st.audio(st.session_state.vocal_path, format="audio/wav")
-        col1, col2 = st.columns(2)
-        with col1:
-            with open(st.session_state.vocal_path, "rb") as f:
-                st.download_button("📥 Download New Version", f.read(), file_name=f"singified_{st.session_state.current_style.lower()}.wav", mime="audio/wav", key="download_sung")
-        with col2:
-            if st.session_state.original_path:
-                with open(st.session_state.original_path, "rb") as f:
-                    st.download_button("📥 Download Old Version", f.read(), file_name="original_audio.wav", mime="audio/wav", key="download_original")
-
-# -------------------------
-# Main Button
-# -------------------------
-st.subheader("🚀 Generate Singing Voice")
-
 async def transcribe_and_sing():
     client = genai.Client()
+
+    # Use tmp_path or stored original_path
     audio_path = tmp_path if tmp_path else st.session_state.original_path
+
     if not audio_path:
         st.error("No audio file available")
         return
+
+    # Read audio for processing
     with open(audio_path, "rb") as f:
         current_audio_bytes = f.read()
+
+    # --- Transcription ---
     with st.spinner("🔤 Transcribing..."):
         try:
             resp = client.models.generate_content(
@@ -311,26 +412,77 @@ async def transcribe_and_sing():
                 ]
             )
             transcript = resp.text.strip()
-            st.session_state.transcript = transcript
+            st.session_state.transcript = transcript  # Store in session state
         except Exception as e:
             st.error(f"❌ Transcription failed: {e}")
             return
+
+    # --- TTS with natural language prompt ---
     with st.spinner(f"🎵 Generating singing voice in {singing_style} style..."):
         tts_prompt = f"Sing these words in a {singing_style.lower()} style with emotion and musical expression: {st.session_state.transcript}"
         try:
             pcm_data = await synthesize_speech(tts_prompt, voice_name=voice_option)
             vocal_bytes = pcm_to_wav(pcm_data)
+
+            # Save vocal and store in session state
             vocal_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             vocal_path = vocal_file.name
             with open(vocal_path, "wb") as f:
                 f.write(vocal_bytes)
+
+            # Store results in session state
             st.session_state.vocal_path = vocal_path
             st.session_state.generation_complete = True
             st.session_state.current_style = singing_style
             st.session_state.current_voice = voice_option
+
             st.success("✅ Singing voice generation complete!")
         except Exception as e:
             st.error(f"❌ Generation failed: {e}")
+            return
+
+# -------------------------
+# Display Results (Persistent)
+# -------------------------
+def display_results():
+    """Display results from session state"""
+    if st.session_state.transcript:
+        st.subheader("📝 Transcription Results")
+        st.write(f"**Transcribed Text:** {st.session_state.transcript}")
+
+    if st.session_state.generation_complete and st.session_state.vocal_path:
+        st.subheader("🎶 Generated Singing Voice")
+        st.success(f"🎤 Generated {st.session_state.current_style} style with {st.session_state.current_voice} voice!")
+
+        # Display audio player
+        st.audio(st.session_state.vocal_path, format="audio/wav")
+
+        # Download buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            with open(st.session_state.vocal_path, "rb") as f:
+                st.download_button(
+                    "📥 Download New Version", 
+                    f.read(), 
+                    file_name=f"singified_{st.session_state.current_style.lower()}.wav", 
+                    mime="audio/wav",
+                    key="download_sung"
+                )
+        with col2:
+            if st.session_state.original_path:
+                with open(st.session_state.original_path, "rb") as f:
+                    st.download_button(
+                        "📥 Download Old Version", 
+                        f.read(), 
+                        file_name="original_audio.wav", 
+                        mime="audio/wav",
+                        key="download_original"
+                    )
+
+# -------------------------
+# Main Process Button
+# -------------------------
+st.subheader("🚀 Generate Singing Voice")
 
 if audio_bytes is not None or st.session_state.original_path:
     if not st.session_state.generation_complete:
@@ -341,4 +493,7 @@ if audio_bytes is not None or st.session_state.original_path:
 else:
     st.warning("⚠️ Please upload or record an audio file first!")
 
+# -------------------------
+# Always Display Results if Available
+# -------------------------
 display_results()
