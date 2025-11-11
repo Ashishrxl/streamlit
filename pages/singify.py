@@ -75,7 +75,10 @@ def convert_to_wav_bytes(file_bytes):
 # -------------------------
 # Helper: Summarize long text (sync)
 # -------------------------
-def summarize_text_sync(text, target_tokens=2000, model="gemini-2.5"):
+# -------------------------
+# Helper: Summarize long text (sync)
+# -------------------------
+def summarize_text_sync(text, target_tokens=2000, model="models/gemini-2.5-pro-preview-05-06"):
     """
     Summarize `text` down to ~target_tokens (heuristic). Returns the summary string.
     Falls back to truncation if summarization fails.
@@ -95,25 +98,21 @@ def summarize_text_sync(text, target_tokens=2000, model="gemini-2.5"):
     try:
         resp = client.models.generate_content(
             model=model,
-            contents=[{"parts":[{"text": prompt + text}]}],
-            # no heavy config; relying on model defaults
+            contents=[{"parts": [{"text": prompt + text}]}],
         )
         summary = resp.text.strip()
         if not summary:
             raise RuntimeError("Empty summary received")
         # final safety: if still too large, truncate
         if estimate_tokens(summary) > target_tokens:
-            # truncate summary to target approximate characters
             char_limit = target_tokens * 4
             summary = summary[:char_limit]
         return summary
     except Exception as e:
-        # fallback: truncate the original text to target_tokens
         char_limit = target_tokens * 4
         truncated = text[:char_limit]
         st.warning(f"⚠️ Summarization failed, using truncated text ({str(e)})")
         return truncated
-
 # -------------------------
 # Helper: Synthesize speech (sync) using official genai client or REST fallback
 # -------------------------
