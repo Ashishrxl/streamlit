@@ -455,17 +455,3 @@ else:
 # -------------------------
 display_results()
 
-# -------------------------
-# Instructions
-# -------------------------
-st.subheader("📋 How to Use")
-st.markdown("""
-1. **Upload** an audio file or **record** your voice using either recording option
-2. Choose your preferred **singing style** and **voice** from the sidebar
-3. Click **"Transcribe & Sing"** to process
-4. Download your **sung version** and **original audio**
-5. Use **"Generate New"** to create different versions
-
-**Supported Formats:** WAV, MP3, M4A, OGG, FLAC  
-**Max File Size:** 200MB  
-**Best Results:** Clear speech, minimal background noise""")
