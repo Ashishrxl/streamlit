@@ -9,7 +9,7 @@ import requests
 import wave
 import numpy as np
 
-# NOTE: google.genai also exposes types; we'll import inside the helper to avoid import errors on environments missing it
+# UI tweak to hide external links
 from streamlit.components.v1 import html
 html(
   """
@@ -76,14 +76,14 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
     Returns raw PCM bytes (usually int16 little-endian PCM, sample rate 24000).
     This function is synchronous so it can be called from both sync and async contexts (use run_in_executor in async flows).
     """
-    client = genai.Client()  # uses API key via environment or other config; we rely on x-goog-api-key selection earlier for REST fallback
+    # create client with api_key provided by the user (fixes missing-key error)
+    client = genai.Client(api_key=api_key)
 
     # Import types from google.genai to construct config in the officially supported shape
     try:
         from google.genai import types
     except Exception:
-        # If types not available, fall back to manual REST call (best-effort)
-        # We'll try the REST endpoint as a fallback, similar to earlier approach.
+        # Fallback to REST if types aren't available
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
         data = {
@@ -104,28 +104,19 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
         resp.raise_for_status()
         resp_json = resp.json()
         # path per docs: candidates[0].content.parts[0].inlineData.data
-        # value may be base64 string or raw PCM array depending on endpoint; handle both
         try:
             data_field = resp_json["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
         except KeyError:
-            # try alternate casing
             data_field = resp_json["candidates"][0]["content"][0]["parts"][0]["inlineData"]["data"]
 
-        # If data_field is base64 string:
         if isinstance(data_field, str):
-            try:
-                return base64.b64decode(data_field)
-            except Exception:
-                # maybe it's already binary represented as list - fallback
-                return bytes(data_field)
+            return base64.b64decode(data_field)
         else:
-            # assume binary
-            return data_field
+            return bytes(data_field)
 
     # If we have types available, call the client properly (recommended)
     response = client.models.generate_content(
         model=model_name,
-        # either a simple string or the structured parts as docs show
         contents=[{"parts": [{"text": text_prompt}]}],
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
@@ -139,22 +130,18 @@ def synthesize_speech_sync(text_prompt, voice_name="Kore", model_name="gemini-2.
         )
     )
 
-    # The genai client typically returns PCM bytes already decoded in `data` (not base64)
-    # but we handle both cases defensively.
+    # Defensive parsing of response
     try:
         data_field = response.candidates[0].content.parts[0].inline_data.data
     except Exception:
-        # try camelCase path if the library uses that form
         try:
             data_field = response.candidates[0].content.parts[0].inlineData.data
         except Exception as e:
             raise RuntimeError(f"Unexpected response structure from TTS model: {e}")
 
     if isinstance(data_field, str):
-        # base64
         return base64.b64decode(data_field)
     else:
-        # likely already bytes
         return data_field
 
 # -------------------------
@@ -425,7 +412,8 @@ with col3:
 # Step 2 & 3: Transcribe & TTS with spinner (no progress bar)
 # -------------------------
 async def transcribe_and_sing():
-    client = genai.Client()
+    # create client with api_key so transcription call works
+    client = genai.Client(api_key=api_key)
 
     # Use tmp_path or stored original_path
     audio_path = tmp_path if tmp_path else st.session_state.original_path
