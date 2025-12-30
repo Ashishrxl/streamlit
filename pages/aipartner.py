@@ -177,5 +177,3 @@ CONTENT:
     st.write(quiz.text)
 
 st.divider()
-
-st.caption("🚀 Built with Gemini + Streamlit (Free Tier Friendly)")
