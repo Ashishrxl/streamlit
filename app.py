@@ -73,6 +73,8 @@ st.link_button("Go to AIPODCAST", "https://ashishraxaul.streamlit.app/aipodcast"
 
 st.link_button("Go to SINGPERFECT", "https://ashishraxaul.streamlit.app/singperfect")
 
+st.link_button("Go to AIPARTNER", "https://ashishraxaul.streamlit.app/aipartner")
+
 st.link_button("Go to MODEL LISTS", "https://ashishraxaul.streamlit.app/list_models")
 
 # ✅ Sidebar content
