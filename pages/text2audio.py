@@ -72,7 +72,9 @@ header > div:nth-child(2) { display: none; }
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+textmodel = "gemini-2.5-flash-lite"
 
+ttsmodel = "gemini-2.5-flash-preview-tts"
 
 # Initialize session state
 if 'audio_generated' not in st.session_state:
@@ -141,7 +143,7 @@ TEXT:
 {text}
 SUMMARY:"""
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model= textmodel,
             contents=prompt
         )
         return response.text
@@ -156,7 +158,7 @@ def generate_audio_tts(text, api_key, voice_name='Kore', speaking_style=''):
         prompt = f"{speaking_style}: {text}" if speaking_style else text
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-tts",
+            model= ttsmodel,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
@@ -217,8 +219,6 @@ def main():
         api_keys = { "Key 1": st.secrets["KEY_1"], "Key 2": st.secrets["KEY_2"], "Key 3": st.secrets["KEY_3"], "Key 4": st.secrets["KEY_4"], "Key 5": st.secrets["KEY_5"], "Key 6": st.secrets["KEY_6"], "Key 7": st.secrets["KEY_7"], "Key 8": st.secrets["KEY_8"], "Key 9": st.secrets["KEY_9"], "Key 10": st.secrets["KEY_10"], "Key 11": st.secrets["KEY_11"]}
         selected_key_name = st.selectbox("Select Key", list(api_keys.keys()))
         api_key = api_keys[selected_key_name]
-
-
         st.markdown("---")
         st.subheader("🎵 Voice Options")
         voice_options = {
