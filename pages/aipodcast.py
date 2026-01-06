@@ -40,6 +40,10 @@ header > div:nth-child(2) {
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+ttsmodel = "gemini-2.5-flash-preview-tts"
+
+textmodel = "gemini-2.5-flash-lite"
+
 # --- API Key selection ---
 api_keys = {
     "Key 1": st.secrets["KEY_1"],
@@ -73,7 +77,7 @@ def generate_script(topic: str) -> str:
     Keep it conversational and natural.
     """
     resp = client.models.generate_content(
-        model="gemini-2.5-pro",
+        model= textmodel,
         contents=prompt
     )
     return resp.text
@@ -110,7 +114,7 @@ def generate_audio(script_text: str, voice_name: str = "Kore", language: str = "
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash-preview-tts",
+        model= ttsmodel,
         contents=contents,
         config=config
     )
