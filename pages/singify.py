@@ -318,7 +318,7 @@ def pcm_to_wav(pcm_data, channels=1, sample_rate=24000, sample_width=2):
 # Step 2 & 3: Transcribe & TTS with progress
 # -------------------------
 async def transcribe_and_sing():
-    client = genai.Client()
+    client = genai.Client(api_key=api_key)
 
     progress_text = st.empty()
     progress_bar = st.progress(0)
