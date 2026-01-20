@@ -13,7 +13,7 @@ st.set_page_config(
 GOOGLE_API_KEY = st.secrets["KEY_1"]
 genai.configure(api_key=GOOGLE_API_KEY)
 
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 # -------------------- SESSION STATE --------------------
 if "learning_plan" not in st.session_state:
