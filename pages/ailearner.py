@@ -1,22 +1,20 @@
 import streamlit as st
 import google.generativeai as genai
 import requests
-import os
 import json
 from streamlit.components.v1 import html
 
 # ================= HIDE STREAMLIT UI =================
-html(
-    """
-    <script>
-    try {
-      const sel = window.top.document.querySelectorAll('[href*="streamlit.io"], [href*="streamlit.app"]');
-      sel.forEach(e => e.style.display='none');
-    } catch(e) {}
-    </script>
-    """,
-    height=0
-)
+html("""
+<script>
+try {
+  const sel = window.top.document.querySelectorAll(
+    '[href*="streamlit.io"], [href*="streamlit.app"]'
+  );
+  sel.forEach(e => e.style.display='none');
+} catch(e) {}
+</script>
+""", height=0)
 
 st.markdown("""
 <style>
@@ -24,8 +22,6 @@ st.markdown("""
 footer {visibility: hidden;}
 [data-testid="stStatusWidget"] {display: none;}
 [data-testid="stToolbar"] {display: none;}
-a[href^="https://github.com"] {display: none !important;}
-a[href^="https://streamlit.io"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,14 +41,9 @@ genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 # ================= SESSION STATE =================
-if "learning_plan" not in st.session_state:
-    st.session_state.learning_plan = ""
-
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-if "resource_decision" not in st.session_state:
-    st.session_state.resource_decision = {}
+st.session_state.setdefault("learning_plan", "")
+st.session_state.setdefault("history", [])
+st.session_state.setdefault("resource_decision", {})
 
 # ================= API HELPERS =================
 def search_youtube(query, max_results=5):
@@ -65,18 +56,20 @@ def search_youtube(query, max_results=5):
         "type": "video",
         "relevanceLanguage": "en"
     }
-    r = requests.get(url, params=params)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        return [
+            (i["snippet"]["title"], f"https://www.youtube.com/watch?v={i['id']['videoId']}")
+            for i in r.json().get("items", [])
+        ]
+    except Exception:
         return []
-    return [
-        (i["snippet"]["title"], f"https://www.youtube.com/watch?v={i['id']['videoId']}")
-        for i in r.json().get("items", [])
-    ]
 
 
 def search_github(query, max_results=5):
     url = "https://api.github.com/search/repositories"
-    headers = {}
+    headers = {"Accept": "application/vnd.github+json"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"token {GITHUB_TOKEN}"
 
@@ -87,31 +80,39 @@ def search_github(query, max_results=5):
         "per_page": max_results
     }
 
-    r = requests.get(url, headers=headers, params=params)
-    if r.status_code != 200:
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
         return []
 
-    return [
-        (i["full_name"], i["html_url"], i.get("description", "No description"))
-        for i in r.json().get("items", [])
-    ]
+    if "items" not in data or not isinstance(data["items"], list):
+        return []
+
+    repos = []
+    for item in data["items"]:
+        if isinstance(item, dict) and "html_url" in item:
+            repos.append({
+                "name": item.get("full_name", "Unknown"),
+                "url": item["html_url"],
+                "description": item.get("description") or "No description available"
+            })
+
+    return repos
 
 
-# ================= AI INTELLIGENCE =================
+# ================= AI LOGIC =================
 def decide_resources(goal, style):
-    """
-    Gemini decides which resource types are useful.
-    """
     prompt = f"""
 You are an education strategist.
 
 Goal: {goal}
 Learning style: {', '.join(style)}
 
-Decide which resources are useful.
-Respond ONLY in valid JSON.
+Decide required resources.
+Return ONLY valid JSON:
 
-Schema:
 {{
   "use_github": true/false,
   "use_case_studies": true/false,
@@ -123,7 +124,6 @@ Schema:
         response = model.generate_content(prompt)
         return json.loads(response.text)
     except Exception:
-        # Safe fallback
         return {
             "use_github": "Hands-on Projects" in style,
             "use_case_studies": True,
@@ -136,51 +136,21 @@ def generate_learning_plan(context):
     prompt = f"""
 You are an expert learning coach.
 
-Create a personalized learning plan including:
+Create a personalized learning plan with:
 - Weekly roadmap
 - Daily tasks (30–90 minutes)
 - Topics to search on YouTube
-- Practice or project ideas (if applicable)
+- Practice or projects if relevant
 
 Context:
 {context}
 
-Format clearly using markdown.
+Use markdown formatting.
 """
     return model.generate_content(prompt).text
 
 
-def generate_case_studies(goal):
-    prompt = f"""
-Suggest 5 real-world case studies or scenarios to learn:
-{goal}
-
-Each should include:
-- Situation
-- Task
-- Reflection question
-"""
-    return model.generate_content(prompt).text
-
-
-def generate_practice_exercises(goal):
-    prompt = f"""
-Create 5 practical exercises (no coding required unless necessary) for:
-{goal}
-"""
-    return model.generate_content(prompt).text
-
-
-def generate_reading_guide(goal):
-    prompt = f"""
-Create a structured reading guide for:
-{goal}
-
-Include:
-- Key concepts
-- What to focus on
-- Common mistakes
-"""
+def simple_llm(prompt):
     return model.generate_content(prompt).text
 
 
@@ -190,7 +160,7 @@ st.caption("Gemini • YouTube • Adaptive Resources")
 
 st.divider()
 
-# ================= USER INPUT =================
+# ================= FORM =================
 with st.form("onboarding"):
     goal = st.text_input("🎯 Learning Goal", placeholder="Become a backend developer")
     level = st.selectbox("📊 Current Level", ["Beginner", "Intermediate", "Advanced"])
@@ -204,17 +174,17 @@ with st.form("onboarding"):
 
     submitted = st.form_submit_button("🚀 Generate Learning Plan")
 
-# ================= PLAN GENERATION =================
+# ================= GENERATION =================
 if submitted and goal:
     context = f"""
 Goal: {goal}
 Level: {level}
-Time per day: {time_per_day}
+Time per day: {time_per_day} minutes
 Duration: {duration}
-Style: {', '.join(style)}
+Learning style: {', '.join(style)}
 """
 
-    with st.spinner("🧠 Generating plan..."):
+    with st.spinner("🧠 Generating learning plan..."):
         st.session_state.learning_plan = generate_learning_plan(context)
         st.session_state.resource_decision = decide_resources(goal, style)
         st.session_state.history.append(st.session_state.learning_plan)
@@ -226,37 +196,50 @@ if st.session_state.learning_plan:
 
     st.divider()
 
-    # ================= YOUTUBE =================
+    # ---------- YouTube ----------
     st.subheader("📺 Recommended YouTube Videos")
-    for title, link in search_youtube(goal):
-        st.markdown(f"- [{title}]({link})")
+    videos = search_youtube(goal)
+    if videos:
+        for title, link in videos:
+            st.markdown(f"- [{title}]({link})")
+    else:
+        st.info("No YouTube videos found.")
 
-    # ================= GITHUB (SMART) =================
+    st.markdown("---")
+
+    # ---------- GitHub (SAFE) ----------
     if st.session_state.resource_decision.get("use_github"):
-        st.subheader("💻 Recommended GitHub Projects")
-        for name, link, desc in search_github(goal):
-            st.markdown(f"- **[{name}]({link})** — {desc}")
+        repos = search_github(goal)
+        if repos:
+            st.subheader("💻 Recommended GitHub Projects")
+            for repo in repos:
+                st.markdown(
+                    f"- **[{repo['name']}]({repo['url']})**  \n"
+                    f"  _{repo['description']}_"
+                )
+        else:
+            st.info("ℹ️ No suitable GitHub repositories found.")
 
-    # ================= CASE STUDIES =================
+    # ---------- Case Studies ----------
     if st.session_state.resource_decision.get("use_case_studies"):
         st.subheader("📚 Case Studies")
-        st.markdown(generate_case_studies(goal))
+        st.markdown(simple_llm(f"Provide 3 short case studies for learning {goal}."))
 
-    # ================= PRACTICE =================
+    # ---------- Practice ----------
     if st.session_state.resource_decision.get("use_practice"):
         st.subheader("🧪 Practice Exercises")
-        st.markdown(generate_practice_exercises(goal))
+        st.markdown(simple_llm(f"Create 5 practice exercises for {goal}."))
 
-    # ================= READING =================
+    # ---------- Reading ----------
     if st.session_state.resource_decision.get("use_reading_guides"):
         st.subheader("📖 Reading Guide")
-        st.markdown(generate_reading_guide(goal))
+        st.markdown(simple_llm(f"Create a structured reading guide for {goal}."))
 
     st.divider()
 
 # ================= HISTORY =================
 with st.expander("🗂️ Learning Plan History"):
-    for i, v in enumerate(st.session_state.history):
+    for i, version in enumerate(st.session_state.history):
         st.markdown(f"### Version {i+1}")
-        st.markdown(v)
+        st.markdown(version)
         st.divider()
