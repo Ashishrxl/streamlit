@@ -33,7 +33,7 @@ st.set_page_config(
 )
 
 # ================= API KEYS =================
-GOOGLE_API_KEY = st.secrets["KEY_1"]
+GOOGLE_API_KEY = st.secrets["KEY_2"]
 YOUTUBE_API_KEY = st.secrets["youtube"]
 GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None)
 
