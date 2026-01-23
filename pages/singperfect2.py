@@ -53,7 +53,7 @@ api_keys = {
 selected_key_name = st.selectbox("Select Key", list(api_keys.keys()))
 api_key = api_keys[selected_key_name]
 
-
+stt = "gemini-2.5-flash-lite"
 
 # ==============================
 # Utility functions
@@ -140,7 +140,7 @@ if ref_file and not st.session_state.lyrics_text:
         st.session_state.ref_tmp_path = tmp_path
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-pro",
+                model= stt,
                 contents=[
                     {"role": "user", "parts": [
                         {"text": "Extract the complete lyrics from this song and return only the text."},
@@ -291,7 +291,7 @@ if st.session_state.ref_tmp_path and recorded_file_path:
     with st.spinner("🎧 Generating feedback..."):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-pro",
+                model= stt,
                 contents=[
                     {"role": "user", "parts": [
                         {"text": prompt},
