@@ -48,7 +48,7 @@ header > div:nth-child(2) {
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 GEMMA_MODEL = "gemma-3-12b-it"
-TTS_MODEL = "gemini-2.5-flash-preview-tts"
+TTS_MODEL = "gemini-2.5-flash-tts"
 
 # IMAGE_MODELS = ["gemini-2.5-flash-image-preview", "gemini-2.0-flash-preview-image-generation, "gemini-2.0-flash-exp-image-generation"]
 
