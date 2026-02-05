@@ -21,12 +21,6 @@ disable_footer_click = """
 """
 st.markdown(disable_footer_click, unsafe_allow_html=True)
 
-st.set_page_config(
-    page_title="My App",
-    page_icon="🌐",
-    initial_sidebar_state="expanded"
-)
-
 
 # --- CSS: Hide all unwanted items but KEEP sidebar toggle ---
 hide_streamlit_style = """
@@ -46,6 +40,13 @@ header > div:nth-child(2) {
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+
+st.set_page_config(
+    page_title="My App",
+    page_icon="🌐",
+    initial_sidebar_state="expanded"
+)
 
 # ---- Home Page ----
 st.title("🌐 Welcome to My App")
