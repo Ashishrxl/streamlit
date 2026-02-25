@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from utils import init_gemini, get_embedding, extract_pdf_text
+
 
 from streamlit.components.v1 import html
 
@@ -44,6 +44,27 @@ st.set_page_config(
     page_title="🎓 AI Study Partner",
     layout="wide"
 )
+
+def init_gemini():
+    genai.configure(api_key=st.secrets["KEY_11"])
+    return genai
+
+
+def get_embedding(genai, text):
+    response = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=text
+    )
+    return response["embedding"]
+
+
+def extract_pdf_text(file):
+    reader = PdfReader(file)
+    text = ""
+    for page in reader.pages:
+        if page.extract_text():
+            text += page.extract_text() + "\n"
+    return text
 
 genai = init_gemini()
 model = genai.GenerativeModel("models/gemini-2.5-flash")
