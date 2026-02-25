@@ -10,7 +10,7 @@ def init_gemini():
 
 def get_embedding(genai, text):
     response = genai.embed_content(
-        model="models/text-embedding-004",
+        model="models/gemini-embedding-001",
         content=text
     )
     return response["embedding"]
