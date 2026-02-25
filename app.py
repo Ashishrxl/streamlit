@@ -65,6 +65,8 @@ st.link_button("Go to SINGIFY", "https://exploreai.streamlit.app/singify")
 
 st.link_button("Go to TEXT2AUDIO", "https://exploreai.streamlit.app/text2audio")
 
+st.link_button("Go to AILEARNER", "https://exploreai.streamlit.app/ailearner")
+
 
 
 st.link_button("Go to AIPODCAST", "https://exploreai.streamlit.app/aipodcast")
