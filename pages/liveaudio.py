@@ -59,7 +59,7 @@ except Exception:
     st.error("Missing 'google_api_key' in Streamlit secrets. Add it to .streamlit/secrets.toml.")
     st.stop()
 
-model = st.selectbox("Select Model", ["gemini-2.5-flash-native-audio-latest", "gemini-live-2.5-flash-preview"])
+model = st.selectbox("Select Model", ["gemini-2.5-flash-native-audio-latest", "gemini-2.5-flash-native-audio-preview-09-2025", "gemini-2.5-flash-native-audio-preview-12-2025"])
 src_lang = st.selectbox("Source Language", ["Hindi (hi)", "English (en)"])
 tgt_lang = st.selectbox("Target Language", ["English (en)", "Hindi (hi)"])
 
