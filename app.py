@@ -71,7 +71,7 @@ st.link_button("Go to AIPODCAST", "https://exploreai.streamlit.app/aipodcast")
 
 st.link_button("Go to SINGPERFECT", "https://exploreai.streamlit.app/singperfect")
 
-st.link_button("Go to AIPARTNER", "https://ashishraxaul.streamlit.app/aipartner")
+st.link_button("Go to AIPARTNER", "https://exploreai.streamlit.app/aipartner")
 
 st.link_button("Go to MODEL LISTS", "https://ashishraxaul.streamlit.app/list_models")
 
