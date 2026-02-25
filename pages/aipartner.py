@@ -1,5 +1,7 @@
 import streamlit as st
 import numpy as np
+import google.generativeai as genai
+from pypdf import PdfReader
 
 
 from streamlit.components.v1 import html
