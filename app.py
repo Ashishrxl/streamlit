@@ -57,22 +57,19 @@ st.title("🌐 Welcome to My App")
 
 st.link_button("Go to CSVVISUALISATION", "https://csvvisualisation.streamlit.app")
 
-st.link_button("Go to AUDIOSTORY", "https://ashishraxaul.streamlit.app/audiostory")
-
-# st.link_button("Go to AUDIOSTORY2", "https://ashishraxaul.streamlit.app/audiostory2")
-
-# st.link_button("Go to AUDIOSTORY3", "https://ashishraxaul.streamlit.app/audiostory3")
-
-
-st.link_button("Go to SINGIFY", "https://ashishraxaul.streamlit.app/singify")
-
-st.link_button("Go to TEXT2AUDIO", "https://ashishraxaul.streamlit.app/text2audio")
+st.link_button("Go to AUDIOSTORY", "https://exploreai.streamlit.app/audiostory")
 
 
 
-st.link_button("Go to AIPODCAST", "https://ashishraxaul.streamlit.app/aipodcast")
+st.link_button("Go to SINGIFY", "https://exploreai.streamlit.app/singify")
 
-st.link_button("Go to SINGPERFECT", "https://ashishraxaul.streamlit.app/singperfect")
+st.link_button("Go to TEXT2AUDIO", "https://exploreai.streamlit.app/text2audio")
+
+
+
+st.link_button("Go to AIPODCAST", "https://exploreai.streamlit.app/aipodcast")
+
+st.link_button("Go to SINGPERFECT", "https://exploreai.streamlit.app/singperfect")
 
 st.link_button("Go to AIPARTNER", "https://ashishraxaul.streamlit.app/aipartner")
 
