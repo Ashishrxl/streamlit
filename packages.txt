@@ -1,7 +1,7 @@
 build-essential
-libasound-dev
+libasound2-dev
 portaudio19-dev
-python3-pyaudio
 ffmpeg
-libmagic1
 libsndfile1
+libmagic-mgc
+libmagic1
